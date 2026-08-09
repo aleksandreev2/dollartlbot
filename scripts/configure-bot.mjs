@@ -4,6 +4,7 @@ const vars = loadLocalVars();
 const token = vars.TELEGRAM_BOT_TOKEN;
 const webhookUrl = vars.WEBHOOK_URL;
 const webhookSecret = vars.TELEGRAM_WEBHOOK_SECRET;
+const adminTelegramId = vars.ADMIN_TELEGRAM_ID;
 
 if (!token || !webhookUrl || !webhookSecret) {
   console.error('Required: TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET in .dev.vars, plus WEBHOOK_URL in the environment.');
@@ -30,14 +31,25 @@ const api = async (method, body) => {
 
 const commands = [
   { command: 'start', description: 'Open the main menu' },
-  { command: 'rules', description: 'View submission rules' },
+  { command: 'queue', description: 'View the translation queue' },
+  { command: 'requests', description: 'View your submitted novels' },
   { command: 'limit', description: 'Check your monthly request limit' },
+  { command: 'guide', description: 'How requests and the queue work' },
+  { command: 'rules', description: 'View submission rules' },
   { command: 'language', description: 'Change bot language' },
   { command: 'cancel', description: 'Cancel the current submission' },
   { command: 'id', description: 'Show your Telegram ID' },
 ];
 
 await api('setMyCommands', { commands });
+
+if (adminTelegramId && /^\d+$/.test(adminTelegramId) && adminTelegramId !== '0') {
+  await api('setMyCommands', {
+    scope: { type: 'chat', chat_id: Number(adminTelegramId) },
+    commands: [...commands, { command: 'admin', description: 'Open Dollar TL admin panel' }],
+  });
+}
+
 await api('setWebhook', {
   url: `${webhookUrl.replace(/\/$/, '')}/webhook`,
   secret_token: webhookSecret,
