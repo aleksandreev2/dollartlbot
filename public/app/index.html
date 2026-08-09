@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fcfbf8">
+  <title>Dollar TL</title>
+  <link rel="stylesheet" href="/app/app.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div id="app" class="app-shell" aria-busy="true">
+    <header class="topbar">
+      <button class="brand" type="button" data-nav="home" aria-label="Dollar TL home">
+        <img class="brand-mark" src="/app/logo.png" alt="">
+        <span class="brand-copy">
+          <strong>Dollar TL</strong>
+          <small>TELEGRAM MINI APP</small>
+        </span>
+      </button>
+      <button class="icon-button notification-button" id="notificationButton" type="button" aria-label="Notifications">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+        <span class="notification-dot" aria-hidden="true"></span>
+      </button>
+    </header>
+
+    <div id="previewBanner" class="preview-banner" hidden>
+      Preview mode — open from Telegram to load your real Dollar TL data.
+    </div>
+
+    <main id="viewRoot" class="view-root" tabindex="-1">
+      <section class="page loading-page" aria-label="Loading">
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-card tall"></div>
+        <div class="skeleton skeleton-button"></div>
+        <div class="skeleton skeleton-card"></div>
+      </section>
+    </main>
+
+    <nav id="bottomNav" class="bottom-nav" aria-label="Primary navigation"></nav>
+    <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <div id="sheetRoot"></div>
+  </div>
+
+  <input id="novelFilePicker" type="file" accept=".txt,.epub,text/plain,application/epub+zip" hidden>
+  <script type="module" src="/app/app.js"></script>
+</body>
+</html>
