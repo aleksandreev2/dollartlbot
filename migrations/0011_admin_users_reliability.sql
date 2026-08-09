@@ -40,6 +40,15 @@ FROM submissions
 WHERE cover_key IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM cover_versions cv WHERE cv.submission_id = submissions.id AND cv.r2_key = submissions.cover_key);
 
+CREATE TRIGGER IF NOT EXISTS trg_submission_cover_history
+AFTER UPDATE OF cover_key ON submissions
+WHEN NEW.cover_key IS NOT NULL AND (OLD.cover_key IS NULL OR NEW.cover_key <> OLD.cover_key)
+BEGIN
+  INSERT INTO cover_versions (submission_id,r2_key,mime_type,source,created_at)
+  SELECT NEW.id,NEW.cover_key,NEW.cover_mime,COALESCE(NEW.cover_source,'admin'),COALESCE(NEW.cover_updated_at,NEW.updated_at)
+  WHERE NOT EXISTS (SELECT 1 FROM cover_versions WHERE submission_id=NEW.id AND r2_key=NEW.cover_key);
+END;
+
 ALTER TABLE publication_assets ADD COLUMN delivery_status TEXT NOT NULL DEFAULT 'pending'
   CHECK (delivery_status IN ('pending','sent','failed'));
 ALTER TABLE publication_assets ADD COLUMN delivered_message_id INTEGER;
@@ -56,4 +65,15 @@ ALTER TABLE publications ADD COLUMN bot_comment_status TEXT NOT NULL DEFAULT 'pe
 ALTER TABLE publications ADD COLUMN bot_comment_message_id INTEGER;
 ALTER TABLE publications ADD COLUMN bot_comment_error TEXT;
 
+UPDATE publication_assets SET delivery_status='sent' WHERE telegram_file_id IS NOT NULL;
 UPDATE publications SET bot_comment_status='disabled' WHERE add_bot_comment=0;
+UPDATE publications SET bot_comment_status='sent'
+WHERE add_bot_comment=1 AND EXISTS (
+  SELECT 1 FROM publication_logs l WHERE l.publication_id=publications.id AND l.event='bot_comment_sent'
+);
+UPDATE publications SET comments_check_status='not_required'
+WHERE add_bot_comment=0 AND NOT EXISTS (SELECT 1 FROM publication_assets a WHERE a.publication_id=publications.id);
+UPDATE publications SET comments_check_status='complete'
+WHERE discussion_message_id IS NOT NULL
+  AND (add_bot_comment=0 OR bot_comment_status='sent')
+  AND NOT EXISTS (SELECT 1 FROM publication_assets a WHERE a.publication_id=publications.id AND a.delivery_status<>'sent');
