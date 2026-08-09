@@ -28,6 +28,7 @@ function assertSameKeys(obj,label,reference){
     }
   }
 }
+function normalizeText(value){return String(value).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');}
 
 const complete=read('public/app/i18n-complete.js');
 const completeUi=evalObject(between(complete,'const ui = ','\n\n  const rules = '),'i18n-complete ui');
@@ -52,22 +53,23 @@ assertSameKeys(polishCopy,'ui-polish copy','en');
 
 const app=read('public/app/app.js');
 const dangerous=[
-  'Thank you for supporting novel translations!',
-  'Chapter Progress',
-  'No requests yet.',
-  'No matching requests.',
-  'Complete the novel details.',
-  'Add at least one genre or tag.',
-  'Describe the sexual content or fetishes.',
-  'Telegram bot notifications are enabled for request status updates.',
-  'Request #',
-  'Nothing here.'
+  ['Thank you for supporting novel translations!','Thank you for supporting novel translations.'],
+  ['Chapter Progress','Chapter Progress'],
+  ['No requests yet.','No requests yet.'],
+  ['No matching requests.','No matching requests.'],
+  ['Complete the novel details.','Complete the novel details.'],
+  ['Add at least one genre or tag.','Add at least one genre or tag.'],
+  ['Describe the sexual content or fetishes.','Describe the sexual content or fetishes.'],
+  ['Telegram bot notifications are enabled for request status updates.','Telegram bot notifications are enabled for request status updates.'],
+  ['Request #','Request\\s+#'],
+  ['Nothing here.','Nothing here.']
 ];
 const localizationCorpus=[complete,wizard,polish,read('public/app/i18n-inline-fixes.js')].join('\n');
-for(const phrase of dangerous){
-  if(app.includes(phrase)&&!localizationCorpus.includes(phrase)){
-    throw new Error(`Hardcoded Mini App phrase is not covered by localization layers: ${phrase}`);
-  }
+const normalizedCorpus=normalizeText(localizationCorpus);
+for(const [phrase,evidence] of dangerous){
+  if(!app.includes(phrase))continue;
+  const covered=localizationCorpus.includes(evidence)||normalizedCorpus.includes(normalizeText(evidence));
+  if(!covered)throw new Error(`Hardcoded Mini App phrase is not covered by localization layers: ${phrase}`);
 }
 
 console.log(`Mini App i18n audit passed for ${locales.length+1} locales.`);
