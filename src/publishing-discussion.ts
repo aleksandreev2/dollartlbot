@@ -38,10 +38,19 @@ async function sendPayload(publication:Publication,replyTo:number,discussionId:s
     }catch(error){await addLog(env,publication.id,'error','comment_file_failed',`Ошибка отправки файла ${asset.file_name}.`,String(error));}
   }
   if(publication.add_bot_comment){
-    const username=(await setting(env,'bot_username'))||'dollartlbot',url=`https://t.me/${username}?start=submit`;
+    const username=(await setting(env,'bot_username'))||'dollartlbot';
+    const botUrl=`https://t.me/${username}?start=submit`;
+    const donationUrl=await setting(env,'donation_url');
+    const buttons=[{text:'Suggest a Novel',url:botUrl}];
+    if(donationUrl)buttons.push({text:'Donate',url:donationUrl});
+    const donateLine=donationUrl?`\n\n<b>Support Dollar TL:</b> <a href="${escapeHtml(donationUrl)}">Donate</a>.`:'';
     try{
-      await telegram.sendMessage(discussionId,`<b>Need another translation?</b>\nSuggest a novel through <a href="${escapeHtml(url)}">Dollar TL Bot</a>.`,{reply_to_message_id:replyTo,reply_markup:{inline_keyboard:[[{text:'Suggest a Novel',url}]]}});
-      await addLog(env,publication.id,'success','bot_comment_sent','Рекламный комментарий Dollar TL Bot отправлен под постом.');
+      await telegram.sendMessage(
+        discussionId,
+        `<b>Need another translation?</b>\nSuggest a novel through <a href="${escapeHtml(botUrl)}">Dollar TL Bot</a>.${donateLine}`,
+        {reply_to_message_id:replyTo,reply_markup:{inline_keyboard:[buttons]}},
+      );
+      await addLog(env,publication.id,'success','bot_comment_sent','Рекламный комментарий Dollar TL Bot с CTA-кнопками отправлен под постом.');
     }catch(error){await addLog(env,publication.id,'error','bot_comment_failed','Не удалось отправить рекламный комментарий.',String(error));}
   }
 }
