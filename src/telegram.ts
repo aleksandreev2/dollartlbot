@@ -127,6 +127,25 @@ export class TelegramClient {
     });
   }
 
+  editMessageText(
+    chatId: number | string,
+    messageId: number,
+    text: string,
+    options: {
+      reply_markup?: InlineKeyboardMarkup;
+      disable_web_page_preview?: boolean;
+    } = {},
+  ): Promise<TelegramMessage | boolean> {
+    return this.call<TelegramMessage | boolean>('editMessageText', {
+      chat_id: normalizeChatId(chatId),
+      message_id: messageId,
+      text: normalizeHtml(text),
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: options.disable_web_page_preview ?? true },
+      ...(options.reply_markup ? { reply_markup: options.reply_markup } : {}),
+    });
+  }
+
   sendDocument(
     chatId: number | string,
     fileId: string,
