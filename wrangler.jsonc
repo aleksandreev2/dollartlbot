@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "dollartlbot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "BOOSTY_SUBSCRIPTION_URL": "https://boosty.to/domnekromanta/purchase/4041120?ssource=DIRECT&share=subscription_link"
+  },
+  "secrets": {
+    "required": [
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_WEBHOOK_SECRET",
+      "ADMIN_TELEGRAM_ID",
+      "BOOSTY_GROUP_ID"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dollartlbot-db"
+    }
+  ]
+}
