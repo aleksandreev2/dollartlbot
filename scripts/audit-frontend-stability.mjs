@@ -11,6 +11,7 @@ function forbid(source, needle, label) {
 }
 
 const presenter = read('public/app/novel-presenter.js');
+const i18nCore = read('public/app/i18n-core.js');
 const homeJs = read('public/app/home-v2.js');
 const homeCss = read('public/app/home-v2.css');
 const index = read('public/app/index.html');
@@ -21,13 +22,23 @@ need(presenter, 'normalizeListMeta', 'novel presenter language normalization');
 need(presenter, 'replaceArrows', 'novel presenter language arrows');
 need(presenter, "data-lucide', 'circle-arrow-right'", 'novel presenter Lucide arrow');
 forbid(presenter, 'hatscripts.github.io', 'novel presenter Circle Flags');
+
+need(i18nCore, "'/api/app/bootstrap'", 'i18n core bootstrap locale authority');
+need(i18nCore, "'/api/app/language'", 'i18n core language API authority');
+need(i18nCore, 'window.__DTL_LOCALE__', 'i18n core locale state');
+need(i18nCore, 'patchInlineCopy', 'i18n core inline copy normalization');
+need(i18nCore, 'dtl:localechange', 'i18n core locale event');
+
 forbid(homeJs, 'decorateFlags', 'home-v2');
 forbid(homeJs, 'dtl-country-flag', 'home-v2');
 forbid(homeCss, '.dtl-country-flag', 'home-v2 CSS');
 need(homeCss, '@media (max-width:899px)', 'compact Telegram Desktop layout');
 need(homeCss, '.page .simple-list{display:block!important', 'compact My Requests layout');
+need(index, 'i18n-core.js?v=20260810-i18ncore1', 'cache-busted i18n core');
 need(index, 'novel-presenter.js?v=20260810-presenter1', 'cache-busted novel presenter');
 need(index, 'home-v2.js?v=20260810-stableflags1', 'cache-busted home runtime');
+forbid(index, 'locale-sync.js', 'Mini App runtime');
+forbid(index, 'i18n-inline-fixes.js', 'Mini App runtime');
 forbid(index, 'language-flags-bridge.js', 'Mini App runtime');
 forbid(index, 'arrow-upgrade.js', 'Mini App runtime');
 forbid(index, 'language-display-fix.js', 'Mini App runtime');
@@ -35,6 +46,8 @@ forbid(index, 'content-normalizer.js', 'Mini App runtime');
 forbid(index, 'card-upgrade.js', 'Mini App runtime');
 
 for (const removed of [
+  'public/app/locale-sync.js',
+  'public/app/i18n-inline-fixes.js',
   'public/app/language-display-fix.js',
   'public/app/content-normalizer.js',
   'public/app/card-upgrade.js',
