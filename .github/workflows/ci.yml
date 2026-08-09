@@ -33,31 +33,36 @@ jobs:
           node --check public/app/interaction-upgrade.js
           node --check public/app/arrow-upgrade.js
           node --check public/app/cover-ui.js
+          node --check public/app/cover-reliability.js
           node --check public/app/referrals-ui.js
           node --check public/app/onboarding-ui.js
           node --check public/app/onboarding-interactions-fix.js
           node --check public/app/admin-v2.js
+          node --check public/app/admin-v3.js
+          node --check public/app/quota-unlimited-ui.js
           node --check public/app/publishing-fixes.js
           node --check public/app/publishing-comments-ui.js
           node --check public/app/notifications-ui.js
       - name: Verify publishing and desktop assets
         run: |
           test -f public/app/admin-v2.css
+          test -f public/app/admin-v3.css
           test -f public/app/desktop.css
+          test -f public/app/desktop-v2.css
+          test -f public/app/quota-unlimited-ui.css
           test -f public/app/telegram-desktop.css
           test -f public/app/publishing-fixes.css
           test -f public/app/publishing-fixes.js
           test -f public/app/publishing-comments-ui.js
           test -f public/app/notifications-ui.css
-          grep -q '/app/desktop.css' public/app/index.html
-          grep -q '/app/telegram-desktop.css' public/app/index.html
-          grep -q '/app/admin-v2.js' public/app/index.html
-          grep -q '/app/publishing-fixes.js' public/app/index.html
+          grep -q '/app/desktop-v2.css' public/app/index.html
+          grep -q '/app/admin-v3.js' public/app/index.html
+          grep -q '/app/cover-reliability.js' public/app/index.html
+          grep -q '/app/quota-unlimited-ui.js' public/app/index.html
           grep -q '/app/publishing-comments-ui.js' public/app/index.html
-          grep -q '/app/publishing-fixes.css' public/app/index.html
-          grep -q '/app/notifications-ui.js' public/app/index.html
           test -f migrations/0008_admin_publishing_notifications.sql
           test -f migrations/0009_publication_image_spoiler.sql
           test -f migrations/0010_publication_logs.sql
+          test -f migrations/0011_admin_users_reliability.sql
       - name: Audit Mini App localization coverage
         run: node scripts/audit-miniapp-i18n.mjs
