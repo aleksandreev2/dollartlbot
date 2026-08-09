@@ -99,24 +99,50 @@ export interface InlineKeyboardMarkup {
   inline_keyboard: InlineKeyboardButton[][];
 }
 
+type TelegramResponseParameters = {
+  retry_after?: number;
+  migrate_to_chat_id?: number;
+};
+
 interface TelegramApiEnvelope<T> {
   ok: boolean;
   result?: T;
   description?: string;
   error_code?: number;
+  parameters?: TelegramResponseParameters;
 }
 
 export class TelegramApiError extends Error {
   readonly method: string;
   readonly code?: number;
+  readonly httpStatus?: number;
+  readonly retryAfter?: number;
 
-  constructor(method: string, description: string, code?: number) {
+  constructor(
+    method: string,
+    description: string,
+    code?: number,
+    options: { httpStatus?: number; retryAfter?: number } = {},
+  ) {
     super(`Telegram ${method} failed: ${description}`);
     this.name = 'TelegramApiError';
     this.method = method;
     this.code = code;
+    this.httpStatus = options.httpStatus;
+    this.retryAfter = options.retryAfter;
   }
 }
+
+const JSON_REQUEST_TIMEOUT_MS = 20_000;
+const UPLOAD_REQUEST_TIMEOUT_MS = 120_000;
+const MAX_INLINE_RATE_LIMIT_RETRIES = 1;
+const MAX_INLINE_RETRY_AFTER_SECONDS = 5;
+const SAFE_SERVER_RETRY_METHODS = new Set([
+  'getChatMember',
+  'editMessageText',
+  'editMessageReplyMarkup',
+  'answerCallbackQuery',
+]);
 
 function normalizeHtml(text: string): string {
   return text.replace(/&(?!lt;|gt;|amp;|quot;|#\d+;)/g, '&amp;');
@@ -146,22 +172,52 @@ export class TelegramClient {
   }
 
   async call<T>(method: string, payload: Record<string, unknown>): Promise<T> {
-    const response = await fetch(`${this.baseUrl}/${method}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const url = `${this.baseUrl}/${method}`;
+    const bodyText = JSON.stringify(payload);
+    const retryServerErrors = SAFE_SERVER_RETRY_METHODS.has(method);
+    let rateLimitRetries = 0;
+    let serverRetries = 0;
 
-    const body = (await response.json()) as TelegramApiEnvelope<T>;
-    if (!response.ok || !body.ok || body.result === undefined) {
-      throw new TelegramApiError(
-        method,
-        body.description ?? `HTTP ${response.status}`,
-        body.error_code ?? response.status,
-      );
+    for (;;) {
+      let response: Response;
+      try {
+        response = await fetchWithTimeout(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: bodyText,
+        }, JSON_REQUEST_TIMEOUT_MS);
+      } catch (error) {
+        if (retryServerErrors && serverRetries < 1) {
+          serverRetries += 1;
+          await sleep(250);
+          continue;
+        }
+        throw transportError(method, error);
+      }
+
+      const body = await readTelegramEnvelope<T>(response);
+      if (response.ok && body.ok && body.result !== undefined) return body.result;
+
+      const retryAfter = positiveInteger(body.parameters?.retry_after);
+      if (
+        (response.status === 429 || body.error_code === 429)
+        && retryAfter !== undefined
+        && retryAfter <= MAX_INLINE_RETRY_AFTER_SECONDS
+        && rateLimitRetries < MAX_INLINE_RATE_LIMIT_RETRIES
+      ) {
+        rateLimitRetries += 1;
+        await sleep(retryAfter * 1000);
+        continue;
+      }
+
+      if (response.status >= 500 && retryServerErrors && serverRetries < 1) {
+        serverRetries += 1;
+        await sleep(250);
+        continue;
+      }
+
+      throw telegramApiError(method, response, body);
     }
-
-    return body.result;
   }
 
   sendMessage(chatId: number | string, text: string, options: SendOptions = {}): Promise<TelegramMessage> {
@@ -234,26 +290,54 @@ export class TelegramClient {
     caption?: string,
     options: SendOptions = {},
   ): Promise<T> {
-    const form = new FormData();
-    form.set('chat_id', String(normalizeChatId(chatId)));
-    form.set(fieldName, file, file.name || (fieldName === 'photo' ? 'image.jpg' : 'document.bin'));
-    if (caption) {
-      form.set('caption', normalizeHtml(caption));
-      form.set('parse_mode', 'HTML');
-    }
-    if (options.disable_notification) form.set('disable_notification', 'true');
-    if (method === 'sendPhoto' && options.has_spoiler) form.set('has_spoiler', 'true');
-    if (options.reply_to_message_id) {
-      form.set('reply_parameters', JSON.stringify({ message_id: options.reply_to_message_id }));
-    }
-    if (options.reply_markup) form.set('reply_markup', JSON.stringify(options.reply_markup));
+    let rateLimitRetries = 0;
 
-    const response = await fetch(`${this.baseUrl}/${method}`, { method: 'POST', body: form });
-    const body = (await response.json()) as TelegramApiEnvelope<T>;
-    if (!response.ok || !body.ok || body.result === undefined) {
-      throw new TelegramApiError(method, body.description ?? `HTTP ${response.status}`, body.error_code ?? response.status);
+    for (;;) {
+      const form = new FormData();
+      form.set('chat_id', String(normalizeChatId(chatId)));
+      form.set(fieldName, file, file.name || (fieldName === 'photo' ? 'image.jpg' : 'document.bin'));
+      if (caption) {
+        form.set('caption', normalizeHtml(caption));
+        form.set('parse_mode', 'HTML');
+      }
+      if (options.disable_notification) form.set('disable_notification', 'true');
+      if (method === 'sendPhoto' && options.has_spoiler) form.set('has_spoiler', 'true');
+      if (options.reply_to_message_id) {
+        form.set('reply_parameters', JSON.stringify({ message_id: options.reply_to_message_id }));
+      }
+      if (options.reply_markup) form.set('reply_markup', JSON.stringify(options.reply_markup));
+
+      let response: Response;
+      try {
+        response = await fetchWithTimeout(
+          `${this.baseUrl}/${method}`,
+          { method: 'POST', body: form },
+          UPLOAD_REQUEST_TIMEOUT_MS,
+        );
+      } catch (error) {
+        // Upload/send methods are not safely idempotent after an ambiguous network
+        // failure. Let the caller resume from persisted state instead of risking a
+        // duplicate Telegram message by retrying blindly here.
+        throw transportError(method, error);
+      }
+
+      const body = await readTelegramEnvelope<T>(response);
+      if (response.ok && body.ok && body.result !== undefined) return body.result;
+
+      const retryAfter = positiveInteger(body.parameters?.retry_after);
+      if (
+        (response.status === 429 || body.error_code === 429)
+        && retryAfter !== undefined
+        && retryAfter <= MAX_INLINE_RETRY_AFTER_SECONDS
+        && rateLimitRetries < MAX_INLINE_RATE_LIMIT_RETRIES
+      ) {
+        rateLimitRetries += 1;
+        await sleep(retryAfter * 1000);
+        continue;
+      }
+
+      throw telegramApiError(method, response, body);
     }
-    return body.result;
   }
 
   answerCallbackQuery(callbackQueryId: string, text?: string): Promise<boolean> {
@@ -288,6 +372,61 @@ export class TelegramClient {
       ...(name ? { name: name.slice(0, 32) } : {}),
     });
   }
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function readTelegramEnvelope<T>(response: Response): Promise<TelegramApiEnvelope<T>> {
+  const text = await response.text();
+  if (!text) return { ok: false, description: `HTTP ${response.status}` };
+  try {
+    return JSON.parse(text) as TelegramApiEnvelope<T>;
+  } catch {
+    return { ok: false, description: `HTTP ${response.status}: ${text.slice(0, 300)}` };
+  }
+}
+
+function telegramApiError<T>(
+  method: string,
+  response: Response,
+  body: TelegramApiEnvelope<T>,
+): TelegramApiError {
+  return new TelegramApiError(
+    method,
+    body.description ?? `HTTP ${response.status}`,
+    body.error_code ?? response.status,
+    {
+      httpStatus: response.status,
+      retryAfter: positiveInteger(body.parameters?.retry_after),
+    },
+  );
+}
+
+function transportError(method: string, error: unknown): TelegramApiError {
+  const timedOut = error instanceof DOMException && error.name === 'AbortError';
+  const description = timedOut
+    ? 'request timed out'
+    : error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : String(error);
+  return new TelegramApiError(method, description);
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function escapeHtml(value: unknown): string {
