@@ -83,3 +83,8 @@ export const MAX_TITLE = 300;
 export const MAX_SHORT = 120;
 export const MAX_SOURCE = 500;
 export const MAX_LONG = 450;
+
+export const FREE_MONTHLY_REQUEST_LIMIT = 1;
+export const SUBSCRIBER_MONTHLY_REQUEST_LIMIT = 5;
+export const FREE_MAX_CHAPTERS = 200;
+export const ABSOLUTE_MAX_CHAPTERS = 250;
