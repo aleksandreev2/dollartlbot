@@ -1,5 +1,6 @@
 (() => {
   const FLAG_BASE = 'https://hatscripts.github.io/circle-flags/flags';
+  const regionalFlags = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
   const countryByLanguage = {
     ko:'kr', ja:'jp', zh:'cn', en:'gb', ru:'ru', es:'es', pt:'pt', id:'id', vi:'vn', fr:'fr', de:'de', hi:'in', fil:'ph'
   };
@@ -20,7 +21,9 @@
   };
 
   function codeFromNode(scope) {
-    const canonical = scope?.querySelector?.('.canonical-language[data-language-code]');
+    const canonical = scope?.matches?.('.canonical-language[data-language-code]')
+      ? scope
+      : scope?.querySelector?.('.canonical-language[data-language-code]');
     if (canonical?.dataset.languageCode) return canonical.dataset.languageCode;
     const text = scope?.textContent || '';
     for (const [code, re] of Object.entries(languagePatterns)) if (re.test(text)) return code;
@@ -42,15 +45,43 @@
     return img;
   }
 
+  function stripEmojiFlags(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) node.nodeValue = String(node.nodeValue || '').replace(regionalFlags, '').replace(/^\s+/, '');
+  }
+
+  function applyCircleFlag(container, code) {
+    if (!container || !code) return;
+    const host = container.matches?.('.localized-language')
+      ? container
+      : container.querySelector?.('.localized-language') || container;
+    if (host.querySelector?.('.circle-language-flag')) return;
+    const img = flagImg(code);
+    if (!img) return;
+    host.querySelectorAll?.('svg,.lucide,.dtl-country-flag').forEach(x => x.remove());
+    stripEmojiFlags(host);
+    host.classList?.add('localized-language', 'canonical-language');
+    host.dataset.languageCode = code;
+    host.prepend(img);
+    host.dataset.circleFlagReady = '1';
+  }
+
   function enhanceLanguageFlags(root=document) {
     root.querySelectorAll('.canonical-language[data-language-code]').forEach(el => {
-      if (el.querySelector('.circle-language-flag')) return;
-      const code = el.dataset.languageCode;
-      const img = flagImg(code);
-      if (!img) return;
-      el.querySelectorAll('svg,.lucide').forEach(x => x.remove());
-      el.prepend(img);
-      el.dataset.circleFlagReady = '1';
+      applyCircleFlag(el, el.dataset.languageCode);
+    });
+
+    // The active translation row is rebuilt by several legacy polish layers.
+    // Normalize every language cell at the end so both source and target use
+    // the approved Circle Flags artwork, never emoji or hand-drawn CSS flags.
+    root.querySelectorAll('.novel-meta > span').forEach(span => {
+      const code = span.dataset.languageCode
+        || span.querySelector?.('[data-language-code]')?.dataset.languageCode
+        || codeFromNode(span);
+      if (!code) return;
+      applyCircleFlag(span, code);
     });
   }
 
