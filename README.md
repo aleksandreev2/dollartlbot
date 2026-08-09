@@ -14,6 +14,7 @@ A small Telegram bot for collecting novel translation requests directly into the
 - Raw files are not downloaded or stored on Cloudflare. The bot stores the Telegram `file_id` and re-sends the existing Telegram file to the owner.
 - Rejected requests can optionally have their monthly slot returned.
 - The owner can accept, reject, reject + return slot, or send a message to the requester from inline buttons.
+- A Cloudflare Cron Trigger retries any admin summary/file that failed to reach Telegram because of a temporary delivery error.
 
 ## Submission flow
 
@@ -37,6 +38,7 @@ A monthly slot is consumed only after **Confirm & Submit** succeeds.
 - Telegram Bot API webhook
 - Cloudflare Workers
 - Cloudflare D1
+- Cloudflare Cron Trigger for delivery retries
 - TypeScript
 - No runtime npm dependencies
 
@@ -64,6 +66,8 @@ TELEGRAM_WEBHOOK_SECRET="a_long_random_secret"
 ADMIN_TELEGRAM_ID="0"
 BOOSTY_GROUP_ID="0"
 ```
+
+Use only letters, numbers, `_` and `-` in `TELEGRAM_WEBHOOK_SECRET`, matching Telegram's webhook secret-token rules.
 
 `BOOSTY_SUBSCRIPTION_URL` is public configuration and already lives in `wrangler.jsonc`.
 
@@ -169,6 +173,8 @@ The bot counts submitted requests from the current UTC calendar month. Usage is 
 - Boosty status is checked when starting a submission and again before final submission.
 - Final submission uses one conditional SQL insert so concurrent confirmations cannot exceed the user's current 1/5 request limit.
 
-## Request delivery
+## Request delivery and retry
 
 Completed requests are sent only to `ADMIN_TELEGRAM_ID` in private Telegram messages. The summary contains the submitter, plan, title, language, chapter count, source, tags, sexual/fetish disclosures, sensitive-content disclosures, and notes. The raw file is re-sent using its Telegram `file_id`; the Worker does not download or store the novel file itself.
+
+D1 separately records whether the admin summary and raw file have been delivered. The Worker tries immediately after submission. A Cron Trigger runs every 10 minutes and retries up to 20 incomplete deliveries per run, sending only whichever part is still marked as missing. The same scheduled maintenance also removes old webhook de-duplication records after seven days.
