@@ -53,7 +53,7 @@ if (adminTelegramId && /^\d+$/.test(adminTelegramId) && adminTelegramId !== '0')
 await api('setWebhook', {
   url: `${webhookUrl.replace(/\/$/, '')}/webhook`,
   secret_token: webhookSecret,
-  allowed_updates: ['message', 'callback_query'],
+  allowed_updates: ['message', 'callback_query', 'chat_member'],
   drop_pending_updates: false,
 });
 
