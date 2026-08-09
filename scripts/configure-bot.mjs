@@ -10,6 +10,11 @@ if (!token || !webhookUrl || !webhookSecret) {
   process.exit(1);
 }
 
+if (!/^[A-Za-z0-9_-]{1,256}$/.test(webhookSecret)) {
+  console.error('TELEGRAM_WEBHOOK_SECRET must be 1-256 characters using only A-Z, a-z, 0-9, _ and -.');
+  process.exit(1);
+}
+
 const api = async (method, body) => {
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
