@@ -1,9 +1,11 @@
 import { SUPPORTED_LANGUAGES, normalizeLocale, t, type Locale } from './i18n/index';
 import {
   MAX_LONG,
+  MAX_REASONABLE_CHAPTERS,
   MAX_SHORT,
   MAX_SOURCE,
   MAX_TITLE,
+  REGULAR_MAX_CHAPTERS,
   type FormStep,
   type SubmissionDraft,
 } from './domain';
@@ -226,13 +228,13 @@ async function handleFormMessage(
         return;
       }
       const chapterCount = Number(text);
-      if (!Number.isSafeInteger(chapterCount) || chapterCount < 1 || chapterCount > 10_000_000) {
+      if (!Number.isSafeInteger(chapterCount) || chapterCount < 1 || chapterCount > MAX_REASONABLE_CHAPTERS) {
         await telegram.sendMessage(userId, t(locale, 'invalidChapterCount'));
         return;
       }
 
       const subscription = await getSubscriptionState(userId, env, telegram);
-      if (!subscription.subscriber && chapterCount > 200) {
+      if (!subscription.subscriber && chapterCount > REGULAR_MAX_CHAPTERS) {
         const keyboard: InlineKeyboardMarkup = {
           inline_keyboard: [
             [{ text: t(locale, 'subscribe'), url: env.BOOSTY_SUBSCRIPTION_URL }],
