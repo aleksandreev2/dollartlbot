@@ -88,7 +88,8 @@ assertSameKeys(merged,'Final Telegram bot dictionaries');
 for(const locale of allLocales)for(const [key,value] of Object.entries(merged[locale]))if(typeof value!=='string'||!value.trim())throw new Error(`Final Telegram bot dictionaries/${locale}: empty value for ${key}`);
 
 const app=read('public/app/app.js');
-const corpus=[complete,wizard,polish,read('public/app/i18n-inline-fixes.js'),runtime,referrals,onboarding,notifications,quota].join('\n');
+const i18nCore=read('public/app/i18n-core.js');
+const corpus=[complete,wizard,polish,i18nCore,runtime,referrals,onboarding,notifications,quota].join('\n');
 const normalizedCorpus=normalizeText(corpus);
 const literalHardcoded=['Thank you for supporting novel translations!','Chapter Progress','No requests yet.','No matching requests.','Nothing here.','Complete the novel details.','Add at least one genre or tag.','Describe the sexual content or fetishes.','Request #','Edit','Could not read EPUB structure.','Bad EPUB entry','EPUB compression is not supported on this device.','just now'];
 for(const phrase of literalHardcoded){if(!app.includes(phrase))continue;if(!corpus.includes(phrase)&&!normalizedCorpus.includes(normalizeText(phrase)))throw new Error(`Hardcoded Mini App phrase is not covered by localization layers: ${phrase}`);}
@@ -101,10 +102,9 @@ const semanticPatches=[
 for(const [phrase,evidence] of semanticPatches)if(app.includes(phrase)&&!corpus.includes(evidence))throw new Error(`Hardcoded Mini App phrase has no semantic localization patch: ${phrase}`);
 for(const tag of ['Fantasy','Romance','Adventure','Academy','Isekai','Reincarnation','Magic','Strong MC','Harem','Slice of Life','Time Travel','System','Villainess','Slow Burn'])for(const locale of allLocales)if(!runtimeTags[locale]?.[tag])throw new Error(`Popular tag ${tag}: missing ${locale} label`);
 
-const localeSync=read('public/app/locale-sync.js');
-for(const required of ["'/api/app/bootstrap'","'/api/app/language'",'window.__DTL_LOCALE__','dtl:localechange'])if(!localeSync.includes(required))throw new Error(`locale-sync is missing authoritative switching hook: ${required}`);
+for(const required of ["'/api/app/bootstrap'","'/api/app/language'",'window.__DTL_LOCALE__','dtl:localechange','patchInlineCopy'])if(!i18nCore.includes(required))throw new Error(`i18n-core is missing authoritative switching/inline hook: ${required}`);
 const index=read('public/app/index.html');
-for(const asset of ['/app/i18n-runtime-v2.js','/app/language-switch.css'])if(!index.includes(asset))throw new Error(`index.html does not load ${asset}`);
-if(index.includes('/app/language-display-fix.js'))throw new Error('Legacy language-display-fix.js must not be loaded: it conflicts with saved English locale.');
+for(const asset of ['/app/i18n-core.js','/app/i18n-runtime-v2.js','/app/language-switch.css'])if(!index.includes(asset))throw new Error(`index.html does not load ${asset}`);
+for(const legacy of ['/app/locale-sync.js','/app/i18n-inline-fixes.js','/app/language-display-fix.js'])if(index.includes(legacy))throw new Error(`Legacy i18n runtime must not be loaded: ${legacy}`);
 
 console.log(`Localization audit passed for ${allLocales.length} locales across Mini App, feature pages, API errors and final classic-bot dictionaries.`);
