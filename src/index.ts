@@ -1,4 +1,5 @@
 import { errorText, safeSecretEqual } from './db';
+import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
@@ -62,11 +63,16 @@ export default {
     }
   },
 
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
     await retryPendingAdminDeliveries(env, telegram);
 
-    const cutoff = new Date(Date.now() - PROCESSED_UPDATE_RETENTION_MS).toISOString();
+    const scheduledAt = new Date(controller.scheduledTime);
+    if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
+      await runDailyEngagement(env, telegram, scheduledAt);
+    }
+
+    const cutoff = new Date(controller.scheduledTime - PROCESSED_UPDATE_RETENTION_MS).toISOString();
     await env.DB.prepare('DELETE FROM processed_updates WHERE created_at < ?').bind(cutoff).run();
   },
 } satisfies ExportedHandler<Env>;
