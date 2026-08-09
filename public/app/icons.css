@@ -99,6 +99,13 @@
   vertical-align: -3px;
 }
 
+/* Novel language metadata already has a country flag for the source language.
+   Do not let locale-polish add a second globe icon before language labels. */
+.novel-meta .localized-language > .lucide,
+.novel-meta .localized-language > svg {
+  display: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .nav-icon .lucide { transition: none; }
 }
