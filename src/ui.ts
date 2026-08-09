@@ -1,11 +1,10 @@
 import { SUPPORTED_LANGUAGES, t, type Locale } from './i18n/index';
-import { getSession, monthlySubmissionCount, parseDraft, saveSession } from './db';
+import { monthlySubmissionCount } from './db';
 import { getSubscriptionState } from './subscription';
 import { escapeHtml, type InlineKeyboardMarkup, type TelegramClient } from './telegram';
 import {
-  ABSOLUTE_MAX_CHAPTERS,
-  FREE_MAX_CHAPTERS,
   FREE_MONTHLY_REQUEST_LIMIT,
+  REGULAR_MAX_CHAPTERS,
   SUBSCRIBER_MONTHLY_REQUEST_LIMIT,
   type FormStep,
   type SubmissionDraft,
@@ -86,8 +85,10 @@ export async function sendMainMenu(
     const limit = subscription.subscriber
       ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
       : FREE_MONTHLY_REQUEST_LIMIT;
-    const maxChapters = subscription.subscriber ? ABSOLUTE_MAX_CHAPTERS : FREE_MAX_CHAPTERS;
     const remaining = Math.max(0, limit - count);
+    const chapterLimit = subscription.subscriber
+      ? t(locale, 'subscriberChapterLimitValue')
+      : String(REGULAR_MAX_CHAPTERS);
 
     const lines = [
       t(locale, 'menuTitle'),
@@ -95,11 +96,13 @@ export async function sendMainMenu(
       `<b>${t(locale, 'statusLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
       `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${count}/${limit}`,
       `<b>${t(locale, 'remainingLabel')}:</b> ${remaining}`,
-      `<b>${t(locale, 'chapterLimitLabel')}:</b> ${maxChapters}`,
+      `<b>${t(locale, 'chapterLimitLabel')}:</b> ${chapterLimit}`,
     ];
 
     if (!subscription.subscriber) {
       lines.push(
+        '',
+        t(locale, 'hardChapterLimit'),
         '',
         t(locale, 'freeUpgradeHint'),
         `<a href="${escapeHtml(env.BOOSTY_SUBSCRIPTION_URL)}">${t(locale, 'subscribe')}</a>`,
@@ -107,7 +110,6 @@ export async function sendMainMenu(
       rows.push([{ text: t(locale, 'upgradeButton'), url: env.BOOSTY_SUBSCRIPTION_URL }]);
     }
 
-    lines.push('', t(locale, 'hardChapterLimit'));
     if (subscription.verificationError) lines.push('', t(locale, 'verificationUnavailable'));
     text = lines.join('\n');
   }
@@ -178,22 +180,7 @@ export async function sendStep(
     case 'chapter_count':
       await telegram.sendMessage(chatId, t(locale, 'askChapterCount'));
       return;
-    case 'publication_status': {
-      const env = telegram.env;
-      if (env) {
-        const session = await getSession(env, chatId);
-        if (session) {
-          const draft = parseDraft(session.data);
-          if ((draft.chapter_count ?? 0) > ABSOLUTE_MAX_CHAPTERS) {
-            delete draft.chapter_count;
-            await saveSession(env, chatId, 'chapter_count', draft);
-            await telegram.sendMessage(chatId, t(locale, 'hardChapterLimit'));
-            await telegram.sendMessage(chatId, t(locale, 'askChapterCount'));
-            return;
-          }
-        }
-      }
-
+    case 'publication_status':
       await telegram.sendMessage(chatId, t(locale, 'askStatus'), {
         reply_markup: {
           inline_keyboard: [
@@ -206,7 +193,6 @@ export async function sendStep(
         },
       });
       return;
-    }
     case 'source_url':
       await telegram.sendMessage(chatId, t(locale, 'askSource'), {
         reply_markup: {
@@ -252,18 +238,6 @@ export async function sendConfirmation(
   draft: SubmissionDraft,
   telegram: TelegramClient,
 ): Promise<void> {
-  if ((draft.chapter_count ?? 0) > ABSOLUTE_MAX_CHAPTERS) {
-    await telegram.sendMessage(chatId, t(locale, 'hardChapterLimit'), {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: t(locale, 'restart'), callback_data: 'form:restart' }],
-          [{ text: t(locale, 'cancel'), callback_data: 'form:cancel' }],
-        ],
-      },
-    });
-    return;
-  }
-
   const status = draft.publication_status === 'completed' ? t(locale, 'completed') : t(locale, 'ongoing');
   const source = draft.source_url ? escapeHtml(draft.source_url) : '—';
   const notes = draft.notes ? escapeHtml(draft.notes) : '—';
@@ -316,7 +290,9 @@ export async function sendLimit(
     : FREE_MONTHLY_REQUEST_LIMIT;
   const remaining = Math.max(0, limit - count);
   const resetDate = nextMonthDate(locale);
-  const maxChapters = subscription.subscriber ? ABSOLUTE_MAX_CHAPTERS : FREE_MAX_CHAPTERS;
+  const chapterLimit = subscription.subscriber
+    ? t(locale, 'subscriberChapterLimitValue')
+    : String(REGULAR_MAX_CHAPTERS);
 
   const text = [
     t(locale, 'limitTitle'),
@@ -324,10 +300,9 @@ export async function sendLimit(
     `<b>${t(locale, 'statusLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
     `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${count} / ${limit}`,
     `<b>${t(locale, 'remainingLabel')}:</b> ${remaining}`,
-    `<b>${t(locale, 'chapterLimitLabel')}:</b> ${maxChapters}`,
+    `<b>${t(locale, 'chapterLimitLabel')}:</b> ${chapterLimit}`,
     `<b>${t(locale, 'resetLabel')}:</b> ${escapeHtml(resetDate)}`,
-    '',
-    t(locale, 'hardChapterLimit'),
+    !subscription.subscriber ? `\n${t(locale, 'hardChapterLimit')}` : '',
     subscription.verificationError ? `\n${t(locale, 'verificationUnavailable')}` : '',
   ].join('\n');
 
