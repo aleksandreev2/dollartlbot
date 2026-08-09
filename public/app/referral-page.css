@@ -23,6 +23,8 @@
 .referral-quota-copy strong { display:block;margin-top:3px;color:var(--gold-strong);font:700 17px/1.1 var(--serif); }
 .referral-page-quota .referral-quota-base { font-size:23px; }
 .referral-page-quota .referral-quota-new { font-size:31px; }
+.referral-quota-current { color:var(--text);font:700 29px/1 var(--serif);letter-spacing:-.02em; }
+.referral-quota-card.no-bonus .referral-quota-copy strong { color:var(--text-soft); }
 .referral-page-quota .referral-quota-new.quota-bump { animation:referral-quota-bump 620ms cubic-bezier(.2,.8,.3,1); }
 @keyframes referral-quota-bump { 0%{transform:translateY(8px) scale(.8);opacity:.25}55%{transform:translateY(-6px) scale(1.13);opacity:1}100%{transform:translateY(-3px) scale(1)} }
 .referral-page-stats { margin-top:14px; }
@@ -46,9 +48,6 @@
 .referral-page .referral-progress-list { margin-top:18px; }
 .referral-empty { margin-top:18px;padding:18px;border:1px dashed #ded7ca;border-radius:18px;color:var(--text-faint);display:flex;align-items:center;gap:11px;font-size:11px;line-height:1.4;background:rgba(255,255,255,.55); }
 .referral-empty svg { width:23px;height:23px;color:#c58a31;flex:0 0 auto; }
-.referral-page-note { margin-top:18px;padding:12px 13px;border-radius:16px;background:#f8f6f1;display:flex;gap:10px;align-items:flex-start;color:var(--text-soft);font-size:10px;line-height:1.45; }
-.referral-page-note svg { width:17px;height:17px;color:#b17a29;flex:0 0 auto; }
-.referral-page-note small { display:block;margin-top:3px;color:var(--text-faint);font-size:9px; }
 @media (max-width:390px) {
   .referral-page-head h1 { font-size:26px; }
   .referral-page-hero { padding:17px; }
