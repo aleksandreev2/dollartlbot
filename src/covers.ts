@@ -12,6 +12,8 @@ type ZipEntry = {
   localOffset: number;
 };
 
+type CoverVersion = { r2_key:string; mime_type:string|null; source:'epub'|'admin'; created_at:string };
+
 export type ExtractedCover = {
   bytes: Uint8Array;
   mime: string;
@@ -29,12 +31,36 @@ export async function handleCoverRequest(request: Request, env: Env): Promise<Re
     ).bind(id).first<{ cover_key: string | null; cover_mime: string | null }>();
     if (!row?.cover_key) return new Response('Not found', { status: 404 });
 
-    const object = await env.COVERS.get(row.cover_key, { onlyIf: request.headers });
+    let key=row.cover_key;
+    let mime=row.cover_mime;
+    let object=await env.COVERS.get(key,{onlyIf:request.headers});
+
+    // A cover assigned in D1 must not visually disappear because one R2 object was
+    // lost. Keep a small immutable version history and self-heal to the newest
+    // version that is still physically present.
+    if(!object){
+      const versions=await env.DB.prepare(`
+        SELECT r2_key,mime_type,source,created_at
+        FROM cover_versions
+        WHERE submission_id=? AND r2_key<>?
+        ORDER BY id DESC LIMIT 8
+      `).bind(id,key).all<CoverVersion>();
+      for(const version of versions.results){
+        const candidate=await env.COVERS.get(version.r2_key,{onlyIf:request.headers});
+        if(!candidate)continue;
+        key=version.r2_key;mime=version.mime_type;object=candidate;
+        const now=new Date().toISOString();
+        await env.DB.prepare(`UPDATE submissions SET cover_key=?,cover_mime=?,cover_source=?,cover_updated_at=?,updated_at=? WHERE id=?`)
+          .bind(key,mime,version.source,now,now,id).run().catch(()=>undefined);
+        break;
+      }
+    }
+
     if (!object) return new Response('Not found', { status: 404 });
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     headers.set('etag', object.httpEtag);
-    headers.set('content-type', row.cover_mime || headers.get('content-type') || 'image/jpeg');
+    headers.set('content-type', mime || headers.get('content-type') || 'image/jpeg');
     headers.set('cache-control', 'public, max-age=300, stale-while-revalidate=86400');
     return new Response('body' in object ? object.body : undefined, {
       status: 'body' in object ? 200 : 304,
@@ -133,9 +159,6 @@ export async function storeSubmissionCover(
   cover: ExtractedCover,
   source: 'epub' | 'admin',
 ): Promise<void> {
-  const old = await env.DB.prepare('SELECT cover_key FROM submissions WHERE id = ?')
-    .bind(submissionId)
-    .first<{ cover_key: string | null }>();
   const key = `covers/${submissionId}/${crypto.randomUUID()}.${cover.extension}`;
   await env.COVERS.put(key, cover.bytes, {
     httpMetadata: {
@@ -152,22 +175,25 @@ export async function storeSubmissionCover(
     WHERE id = ?
   `).bind(key, source, cover.mime, now, now, submissionId).run();
 
-  if (old?.cover_key && old.cover_key !== key) {
-    await env.COVERS.delete(old.cover_key).catch(() => undefined);
-  }
+  // Deliberately keep previous immutable R2 objects. cover_versions is our tiny
+  // rollback/self-heal history. Explicit admin removal deletes the whole history.
 }
 
 export async function removeSubmissionCover(env: Env, submissionId: number): Promise<void> {
-  const row = await env.DB.prepare('SELECT cover_key FROM submissions WHERE id = ?')
-    .bind(submissionId)
-    .first<{ cover_key: string | null }>();
+  const keys=new Set<string>();
+  const row=await env.DB.prepare('SELECT cover_key FROM submissions WHERE id=?').bind(submissionId).first<{cover_key:string|null}>();
+  if(row?.cover_key)keys.add(row.cover_key);
+  const versions=await env.DB.prepare('SELECT r2_key FROM cover_versions WHERE submission_id=?').bind(submissionId).all<{r2_key:string}>().catch(()=>({results:[]} as any));
+  for(const version of versions.results||[])keys.add(version.r2_key);
+
   await env.DB.prepare(`
     UPDATE submissions
     SET cover_key = NULL, cover_source = NULL, cover_mime = NULL,
         cover_updated_at = NULL, updated_at = ?
     WHERE id = ?
   `).bind(new Date().toISOString(), submissionId).run();
-  if (row?.cover_key) await env.COVERS.delete(row.cover_key).catch(() => undefined);
+  await env.DB.prepare('DELETE FROM cover_versions WHERE submission_id=?').bind(submissionId).run().catch(()=>undefined);
+  if(keys.size)await env.COVERS.delete([...keys]).catch(()=>undefined);
 }
 
 function readZipDirectory(buffer: ArrayBuffer): ZipEntry[] {
