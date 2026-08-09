@@ -2,6 +2,10 @@ import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './min
 
 const MAX_ADMIN_COVER_BYTES = 8 * 1024 * 1024;
 const MAX_AUTO_EXTRACT_EPUB_BYTES = 20 * 1024 * 1024;
+const MAX_EPUB_METADATA_BYTES = 1024 * 1024;
+const MAX_EPUB_ZIP_ENTRIES = 5_000;
+const MAX_EPUB_ENTRY_NAME_BYTES = 4_096;
+const MAX_EPUB_COMPRESSION_RATIO = 100;
 const ALLOWED_COVER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 
 type ZipEntry = {
@@ -121,7 +125,7 @@ export async function maybeExtractEpubCover(file: File): Promise<ExtractedCover 
   const container = entries.find((entry) => entry.name.toLowerCase() === 'meta-inf/container.xml');
   let opfPath = '';
   if (container) {
-    const xml = await extractZipText(buffer, container);
+    const xml = await extractZipText(buffer, container, MAX_EPUB_METADATA_BYTES);
     opfPath = matchAttribute(xml, /<rootfile\b[^>]*\bfull-path\s*=\s*["']([^"']+)["']/i);
   }
   if (!opfPath) opfPath = entries.find((entry) => /\.opf$/i.test(entry.name))?.name ?? '';
@@ -129,7 +133,7 @@ export async function maybeExtractEpubCover(file: File): Promise<ExtractedCover 
 
   const opfEntry = findEntry(entries, opfPath);
   if (!opfEntry) return null;
-  const opf = await extractZipText(buffer, opfEntry);
+  const opf = await extractZipText(buffer, opfEntry, MAX_EPUB_METADATA_BYTES);
   const manifest = parseManifestItems(opf);
 
   let coverItem = manifest.find((item) => /(^|\s)cover-image(\s|$)/i.test(item.properties));
@@ -146,7 +150,7 @@ export async function maybeExtractEpubCover(file: File): Promise<ExtractedCover 
   const coverPath = resolveZipPath(opfPath, coverItem.href);
   const coverEntry = findEntry(entries, coverPath);
   if (!coverEntry || coverEntry.uncompressedSize > MAX_ADMIN_COVER_BYTES) return null;
-  const bytes = await extractZipBytes(buffer, coverEntry);
+  const bytes = await extractZipBytes(buffer, coverEntry, MAX_ADMIN_COVER_BYTES);
   const mime = normalizeImageMime(coverItem.mediaType, coverPath);
   if (!ALLOWED_COVER_TYPES.has(mime)) return null;
 
@@ -206,6 +210,7 @@ export async function removeSubmissionCover(env: Env, submissionId: number): Pro
 }
 
 function readZipDirectory(buffer: ArrayBuffer): ZipEntry[] {
+  if (buffer.byteLength < 22) return [];
   const view = new DataView(buffer);
   let eocd = -1;
   for (let i = Math.max(0, buffer.byteLength - 65_557); i <= buffer.byteLength - 22; i += 1) {
@@ -214,11 +219,17 @@ function readZipDirectory(buffer: ArrayBuffer): ZipEntry[] {
   if (eocd < 0) return [];
 
   const count = view.getUint16(eocd + 10, true);
+  if (count > MAX_EPUB_ZIP_ENTRIES) throw new Error('EPUB contains too many ZIP entries');
+
   let offset = view.getUint32(eocd + 16, true);
+  if (offset < 0 || offset > buffer.byteLength - 46) throw new Error('Invalid EPUB ZIP directory offset');
+
   const decoder = new TextDecoder();
   const entries: ZipEntry[] = [];
-  for (let n = 0; n < count && offset + 46 <= buffer.byteLength; n += 1) {
-    if (view.getUint32(offset, true) !== 0x02014b50) break;
+  for (let n = 0; n < count; n += 1) {
+    if (offset + 46 > buffer.byteLength || view.getUint32(offset, true) !== 0x02014b50) {
+      throw new Error('Invalid EPUB ZIP central directory');
+    }
     const method = view.getUint16(offset + 10, true);
     const compressedSize = view.getUint32(offset + 20, true);
     const uncompressedSize = view.getUint32(offset + 24, true);
@@ -226,28 +237,91 @@ function readZipDirectory(buffer: ArrayBuffer): ZipEntry[] {
     const extraLen = view.getUint16(offset + 30, true);
     const commentLen = view.getUint16(offset + 32, true);
     const localOffset = view.getUint32(offset + 42, true);
+    const nextOffset = offset + 46 + nameLen + extraLen + commentLen;
+
+    if (nameLen <= 0 || nameLen > MAX_EPUB_ENTRY_NAME_BYTES || nextOffset > buffer.byteLength) {
+      throw new Error('Invalid EPUB ZIP entry metadata');
+    }
+    if (localOffset > buffer.byteLength - 30) throw new Error('Invalid EPUB ZIP local entry offset');
+    assertSafeCompression(compressedSize, uncompressedSize);
+
     const name = decoder.decode(new Uint8Array(buffer, offset + 46, nameLen));
     entries.push({ name, method, compressedSize, uncompressedSize, localOffset });
-    offset += 46 + nameLen + extraLen + commentLen;
+    offset = nextOffset;
   }
   return entries;
 }
 
-async function extractZipText(buffer: ArrayBuffer, entry: ZipEntry): Promise<string> {
-  return new TextDecoder('utf-8').decode(await extractZipBytes(buffer, entry));
+async function extractZipText(buffer: ArrayBuffer, entry: ZipEntry, maxBytes: number): Promise<string> {
+  return new TextDecoder('utf-8').decode(await extractZipBytes(buffer, entry, maxBytes));
 }
 
-async function extractZipBytes(buffer: ArrayBuffer, entry: ZipEntry): Promise<Uint8Array> {
+async function extractZipBytes(buffer: ArrayBuffer, entry: ZipEntry, maxBytes: number): Promise<Uint8Array> {
+  if (entry.uncompressedSize > maxBytes) throw new Error('EPUB ZIP entry exceeds extraction limit');
+  assertSafeCompression(entry.compressedSize, entry.uncompressedSize);
+
+  if (entry.localOffset < 0 || entry.localOffset + 30 > buffer.byteLength) throw new Error('Bad ZIP entry');
   const view = new DataView(buffer);
   if (view.getUint32(entry.localOffset, true) !== 0x04034b50) throw new Error('Bad ZIP entry');
   const nameLen = view.getUint16(entry.localOffset + 26, true);
   const extraLen = view.getUint16(entry.localOffset + 28, true);
   const start = entry.localOffset + 30 + nameLen + extraLen;
+  const end = start + entry.compressedSize;
+  if (start < 0 || end < start || end > buffer.byteLength) throw new Error('Truncated ZIP entry');
+
   const bytes = new Uint8Array(buffer, start, entry.compressedSize);
-  if (entry.method === 0) return new Uint8Array(bytes);
+  if (entry.method === 0) {
+    if (bytes.byteLength > maxBytes || bytes.byteLength !== entry.uncompressedSize) throw new Error('Invalid stored ZIP entry size');
+    return new Uint8Array(bytes);
+  }
   if (entry.method !== 8 || typeof DecompressionStream === 'undefined') throw new Error('Unsupported ZIP compression');
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+
+  const stream = new Blob([bytes]).stream().pipeThrough(
+    new DecompressionStream('deflate-raw' as CompressionFormat),
+  );
+  const output = await readStreamLimited(stream, maxBytes);
+  if (output.byteLength !== entry.uncompressedSize) throw new Error('ZIP entry size mismatch');
+  return output;
+}
+
+function assertSafeCompression(compressedSize: number, uncompressedSize: number): void {
+  if (!Number.isSafeInteger(compressedSize) || !Number.isSafeInteger(uncompressedSize)) {
+    throw new Error('Invalid EPUB ZIP entry size');
+  }
+  if (compressedSize < 0 || uncompressedSize < 0) throw new Error('Invalid EPUB ZIP entry size');
+  if (uncompressedSize > 0 && compressedSize === 0) throw new Error('Suspicious EPUB ZIP compression');
+  if (compressedSize > 0 && uncompressedSize / compressedSize > MAX_EPUB_COMPRESSION_RATIO) {
+    throw new Error('EPUB ZIP compression ratio is too high');
+  }
+}
+
+async function readStreamLimited(stream: ReadableStream<Uint8Array>, maxBytes: number): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel('EPUB ZIP entry exceeds extraction limit').catch(() => undefined);
+        throw new Error('EPUB ZIP entry exceeds extraction limit');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
 }
 
 function parseManifestItems(opf: string): Array<{ id: string; href: string; mediaType: string; properties: string }> {
