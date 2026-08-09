@@ -7,6 +7,7 @@ import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
 import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
+import { handleHomeReleasesRequest } from './home-releases';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
@@ -36,6 +37,8 @@ export default {
     if (coverHealthResponse) return coverHealthResponse;
     const coverResponse = await handleCoverRequest(request, env);
     if (coverResponse) return coverResponse;
+    const releasesResponse = await handleHomeReleasesRequest(request, env);
+    if (releasesResponse) return releasesResponse;
 
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
