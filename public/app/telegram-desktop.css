@@ -1,0 +1,197 @@
+/* Telegram Desktop often opens Mini Apps in a narrow modal even on a large monitor.
+   Keep the phone layout comfortable, but compress vertical chrome for pointer-driven desktop WebViews. */
+
+html.dtl-telegram-desktop,
+html.dtl-telegram-desktop body {
+  min-height: var(--dtl-tg-stable-height, 100dvh);
+}
+
+html.dtl-compact-desktop:not(.admin-console-active) .app-shell {
+  width: 100%;
+  min-height: var(--dtl-tg-stable-height, 100dvh);
+  padding-bottom: calc(66px + var(--safe-bottom));
+}
+
+html.dtl-compact-desktop:not(.admin-console-active) .topbar {
+  min-height: 68px;
+  padding: 9px 16px 7px;
+  gap: 10px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+html.dtl-compact-desktop:not(.admin-console-active) .brand { gap: 8px; }
+html.dtl-compact-desktop:not(.admin-console-active) .brand-mark {
+  width: 43px;
+  height: 40px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .brand-copy strong {
+  font-size: 24px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .icon-button {
+  width: 40px;
+  height: 40px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .icon-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+html.dtl-compact-desktop:not(.admin-console-active) .view-root {
+  min-height: calc(var(--dtl-tg-stable-height, 100dvh) - 134px);
+}
+html.dtl-compact-desktop:not(.admin-console-active) .page {
+  padding: 3px 16px 18px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .page-heading {
+  margin: 2px 0 14px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) h1,
+html.dtl-compact-desktop:not(.admin-console-active) .display-title {
+  font-size: clamp(26px, 6.6vw, 31px);
+  line-height: 1.02;
+  margin-bottom: 5px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) h2,
+html.dtl-compact-desktop:not(.admin-console-active) .section-title {
+  font-size: 20px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .subtitle {
+  font-size: 12.5px;
+  line-height: 1.42;
+}
+
+html.dtl-compact-desktop:not(.admin-console-active) .premium-card {
+  padding: 13px;
+  border-radius: 20px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .premium-top {
+  grid-template-columns: 57px minmax(0, 1fr) 31px;
+  gap: 11px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .premium-emblem {
+  width: 57px;
+  height: 57px;
+  font-size: 24px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .premium-label {
+  font-size: 9.5px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .premium-name {
+  margin: 2px 0;
+  font-size: 21px;
+  line-height: 1.02;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .premium-note {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .plan-check {
+  width: 31px;
+  height: 31px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .usage-box {
+  margin-top: 11px;
+  padding: 10px 11px;
+  border-radius: 14px;
+  gap: 8px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .usage-item {
+  grid-template-columns: 31px minmax(0, 1fr);
+  gap: 8px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .usage-item .round-icon {
+  width: 31px;
+  height: 31px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .usage-label {
+  font-size: 8.5px;
+  line-height: 1.18;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .usage-value {
+  font-size: 18px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .usage-caption {
+  font-size: 9.5px;
+}
+
+html.dtl-compact-desktop:not(.admin-console-active) .cta-wrap {
+  margin-top: 12px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .primary-button,
+html.dtl-compact-desktop:not(.admin-console-active) .secondary-button,
+html.dtl-compact-desktop:not(.admin-console-active) .danger-button,
+html.dtl-compact-desktop:not(.admin-console-active) .success-button {
+  min-height: 48px;
+  border-radius: 14px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .primary-button {
+  font-size: 16px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .section {
+  margin-top: 20px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .section-header {
+  margin-bottom: 9px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .surface-card {
+  border-radius: 17px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .novel-card {
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .novel-cover {
+  width: 74px;
+  border-radius: 11px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .novel-cover.small {
+  width: 50px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .novel-title {
+  font-size: 18px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .list-row {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+html.dtl-compact-desktop:not(.admin-console-active) .bottom-nav {
+  width: 100%;
+  min-height: 62px;
+  padding-top: 5px;
+  padding-bottom: max(5px, var(--safe-bottom));
+}
+html.dtl-compact-desktop:not(.admin-console-active) .nav-item {
+  min-height: 52px;
+  padding: 3px 1px;
+  font-size: 8.5px;
+  gap: 2px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .nav-item::before {
+  top: -5px;
+}
+html.dtl-compact-desktop:not(.admin-console-active) .nav-icon,
+html.dtl-compact-desktop:not(.admin-console-active) .nav-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+/* Very short desktop modal: prioritize actual content over decoration. */
+@media (max-height: 760px) and (hover: hover) and (pointer: fine) {
+  html.dtl-compact-desktop:not(.admin-console-active) .topbar { min-height: 61px; padding-top: 6px; }
+  html.dtl-compact-desktop:not(.admin-console-active) .brand-mark { width: 38px; height: 36px; }
+  html.dtl-compact-desktop:not(.admin-console-active) .brand-copy strong { font-size: 22px; }
+  html.dtl-compact-desktop:not(.admin-console-active) .icon-button { width: 37px; height: 37px; }
+  html.dtl-compact-desktop:not(.admin-console-active) .page-heading { margin-bottom: 10px; }
+  html.dtl-compact-desktop:not(.admin-console-active) .premium-card { padding: 11px 12px; }
+  html.dtl-compact-desktop:not(.admin-console-active) .usage-box { margin-top: 8px; padding-top: 8px; padding-bottom: 8px; }
+  html.dtl-compact-desktop:not(.admin-console-active) .cta-wrap { margin-top: 9px; }
+}
+
+/* Once Telegram grants enough width, the regular desktop stylesheet takes over. */
+@media (min-width: 900px) {
+  html.dtl-telegram-desktop:not(.admin-console-active) .app-shell {
+    min-height: var(--dtl-tg-stable-height, 100dvh);
+  }
+}
