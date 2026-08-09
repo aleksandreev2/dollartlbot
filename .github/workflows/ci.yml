@@ -21,6 +21,7 @@ jobs:
         run: |
           node --check public/app/app.js
           node --check public/app/performance.js
+          node --check public/app/telegram-desktop.js
           node --check public/app/icons.js
           node --check public/app/locale-sync.js
           node --check public/app/ui-polish.js
@@ -37,11 +38,16 @@ jobs:
           node --check public/app/onboarding-interactions-fix.js
           node --check public/app/admin-v2.js
           node --check public/app/notifications-ui.js
-      - name: Verify publishing center assets
+      - name: Verify publishing and desktop assets
         run: |
           test -f public/app/admin-v2.css
           test -f public/app/desktop.css
+          test -f public/app/telegram-desktop.css
           test -f public/app/notifications-ui.css
+          grep -q '/app/desktop.css' public/app/index.html
+          grep -q '/app/telegram-desktop.css' public/app/index.html
+          grep -q '/app/admin-v2.js' public/app/index.html
+          grep -q '/app/notifications-ui.js' public/app/index.html
           test -f migrations/0008_admin_publishing_notifications.sql
       - name: Audit Mini App localization coverage
         run: node scripts/audit-miniapp-i18n.mjs
