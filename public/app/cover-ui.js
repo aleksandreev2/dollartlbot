@@ -1,7 +1,7 @@
 (() => {
   const tg = window.Telegram?.WebApp;
   let lastNovelId = null;
-  let coverRevision = Date.now();
+  let coverRevision = 0;
 
   const strings = {
     en:{cover:'Cover',replace:'Replace cover',remove:'Remove cover',auto:'Real cover or branded fallback',updated:'Cover updated',removed:'Cover removed',failed:'Could not update the cover'},
@@ -36,7 +36,7 @@
   }
 
   function coverUrl(id) {
-    return `/media/covers/${id}?v=${coverRevision}`;
+    return `/media/covers/${id}${coverRevision ? `?v=${coverRevision}` : ''}`;
   }
 
   function installRealCover(cover, id) {
@@ -101,6 +101,8 @@
     const preview = tools.querySelector('.admin-cover-preview');
     const previewImg = document.createElement('img');
     previewImg.alt = '';
+    previewImg.loading = 'lazy';
+    previewImg.decoding = 'async';
     previewImg.src = coverUrl(id);
     previewImg.addEventListener('error', () => previewImg.remove(), { once:true });
     preview.appendChild(previewImg);
@@ -179,6 +181,7 @@
     preview.innerHTML = '';
     const img = document.createElement('img');
     img.alt = '';
+    img.decoding = 'async';
     img.src = coverUrl(id);
     preview.appendChild(img);
   }
@@ -212,7 +215,7 @@
   }
 
   function escapeHtml(value='') {
-    return String(value).replace(/[&<>'"]/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+    return String(value).replace(/[&<>'\"]/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[ch]));
   }
 
   function patch(root = document) {
@@ -231,7 +234,8 @@
     if (raf) return;
     raf = requestAnimationFrame(() => { raf = 0; patch(document); });
   };
-  new MutationObserver(schedule).observe(document.documentElement, { childList:true, subtree:true });
+  const patchRoot = document.getElementById('viewRoot') || document.body;
+  new MutationObserver(schedule).observe(patchRoot, { childList:true, subtree:true });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once:true });
   else schedule();
 })();
