@@ -1,13 +1,28 @@
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
-import { getSubmission } from './db';
+import { errorText, getSubmission } from './db';
 import { normalizeLocale } from './i18n/index';
-import { escapeHtml, type TelegramClient } from './telegram';
+import { escapeHtml, TelegramApiError, type TelegramClient } from './telegram';
 
 const BROADCAST_BATCH = 25;
+const BROADCAST_MAX_ATTEMPTS = 5;
 const MINI_APP_PATH = '/app/';
 
 type PreferenceKey = 'notify_request_updates' | 'notify_releases' | 'notify_announcements' | 'notify_referrals';
 export type RequestNotificationKind = 'accepted' | 'rejected' | 'rejected_returned' | 'started' | 'completed' | 'progress';
+
+type BroadcastJob = {
+  id: number;
+  status: 'queued' | 'running';
+  title: string;
+  body: string;
+};
+
+type BroadcastRecipient = {
+  user_id: number;
+  attempts: number;
+  language: string;
+  notify_releases: number;
+};
 
 const OPEN_LABEL: Record<string, string> = {
   en:'Open Dollar TL', es:'Abrir Dollar TL', fil:'Buksan ang Dollar TL', hi:'Dollar TL खोलें', pt:'Abrir Dollar TL', id:'Buka Dollar TL', vi:'Mở Dollar TL', fr:'Ouvrir Dollar TL', de:'Dollar TL öffnen', ru:'Открыть Dollar TL',
@@ -57,8 +72,25 @@ export async function handleNotificationApiRequest(request: Request, env: Env): 
   return miniAppJsonError('not_found','Notification route not found.',404);
 }
 
-export async function createInAppNotification(env:Env,userId:number,type:string,title:string,body:string,actionUrl:string|null=MINI_APP_PATH):Promise<void>{
-  await env.DB.prepare(`INSERT INTO user_notifications (user_id,type,title,body,action_url,created_at) VALUES (?,?,?,?,?,?)`).bind(userId,type,title,body,actionUrl,new Date().toISOString()).run();
+export async function createInAppNotification(
+  env: Env,
+  userId: number,
+  type: string,
+  title: string,
+  body: string,
+  actionUrl: string | null = MINI_APP_PATH,
+  broadcastId: number | null = null,
+): Promise<void> {
+  if (broadcastId !== null) {
+    await env.DB.prepare(`
+      INSERT OR IGNORE INTO user_notifications (
+        user_id, type, title, body, action_url, broadcast_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(userId, type, title, body, actionUrl, broadcastId, new Date().toISOString()).run();
+    return;
+  }
+  await env.DB.prepare(`INSERT INTO user_notifications (user_id,type,title,body,action_url,created_at) VALUES (?,?,?,?,?,?)`)
+    .bind(userId,type,title,body,actionUrl,new Date().toISOString()).run();
 }
 
 export async function sendUserNotification(env:Env,telegram:TelegramClient,userId:number,locale:string,preference:PreferenceKey,type:string,title:string,body:string):Promise<void>{
@@ -83,17 +115,206 @@ export async function queueReleaseBroadcast(env:Env,publicationId:number,title:s
   const now=new Date().toISOString(); const result=await env.DB.prepare(`INSERT INTO broadcasts (publication_id,kind,status,title,body,created_at) VALUES (?,'release','queued',?,?,?)`).bind(publicationId,title,body,now).run(); return Number(result.meta.last_row_id);
 }
 
-export async function runBroadcastMaintenance(env:Env,telegram:TelegramClient,maxBatches=1):Promise<void>{
-  for(let i=0;i<maxBatches;i+=1){
-    const job=await env.DB.prepare(`SELECT id,status,title,body,cursor_user_id,sent_count,failed_count FROM broadcasts WHERE status IN ('queued','running') ORDER BY id ASC LIMIT 1`).first<{id:number;status:string;title:string;body:string;cursor_user_id:number;sent_count:number;failed_count:number}>(); if(!job)return;
-    const now=new Date().toISOString(); if(job.status==='queued')await env.DB.prepare("UPDATE broadcasts SET status='running',started_at=COALESCE(started_at,?) WHERE id=?").bind(now,job.id).run();
-    const users=await env.DB.prepare(`SELECT telegram_id,language FROM users WHERE telegram_id>? AND notify_releases=1 ORDER BY telegram_id ASC LIMIT ?`).bind(job.cursor_user_id,BROADCAST_BATCH).all<{telegram_id:number;language:string}>();
-    if(!users.results.length){await env.DB.prepare("UPDATE broadcasts SET status='completed',completed_at=? WHERE id=?").bind(now,job.id).run();continue;}
-    let sent=0,failed=0;
-    await Promise.all(users.results.map(async user=>{const lang=normalizeLocale(user.language),heading=RELEASE_TITLE[lang]||RELEASE_TITLE.en;await createInAppNotification(env,user.telegram_id,'release',heading,job.title,MINI_APP_PATH).catch(()=>undefined);try{const miniAppUrl=String((env as unknown as {MINI_APP_URL?:string}).MINI_APP_URL||'https://t.me/dollartlbot');await telegram.sendMessage(user.telegram_id,`<b>📚 ${escapeHtml(heading)}</b>\n\n<b>${escapeHtml(job.title)}</b>\n${escapeHtml(shorten(job.body,500))}`,{reply_markup:{inline_keyboard:[[{text:OPEN_LABEL[lang]||OPEN_LABEL.en,web_app:{url:miniAppUrl}}]]}});sent+=1;}catch{failed+=1;}}));
-    const cursor=users.results.at(-1)?.telegram_id??job.cursor_user_id;await env.DB.prepare(`UPDATE broadcasts SET cursor_user_id=?,sent_count=sent_count+?,failed_count=failed_count+? WHERE id=?`).bind(cursor,sent,failed,job.id).run();
-    if(users.results.length<BROADCAST_BATCH)await env.DB.prepare("UPDATE broadcasts SET status='completed',completed_at=? WHERE id=?").bind(new Date().toISOString(),job.id).run();
+export async function runBroadcastMaintenance(env: Env, telegram: TelegramClient, maxBatches = 1): Promise<void> {
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    const job = await env.DB.prepare(`
+      SELECT id, status, title, body
+      FROM broadcasts
+      WHERE status IN ('queued', 'running')
+      ORDER BY id ASC
+      LIMIT 1
+    `).first<BroadcastJob>();
+    if (!job) return;
+
+    const now = new Date().toISOString();
+    await ensureBroadcastRecipients(env, job, now);
+    await skipOptedOutRecipients(env, job.id, now);
+
+    const recipients = await env.DB.prepare(`
+      SELECT br.user_id, br.attempts, u.language, u.notify_releases
+      FROM broadcast_recipients br
+      JOIN users u ON u.telegram_id = br.user_id
+      WHERE br.broadcast_id = ?
+        AND br.status IN ('queued', 'retry')
+        AND br.next_attempt_at <= ?
+      ORDER BY br.user_id ASC
+      LIMIT ?
+    `).bind(job.id, now, BROADCAST_BATCH).all<BroadcastRecipient>();
+
+    if (!recipients.results.length) {
+      const pending = await refreshBroadcastTotals(env, job.id, now);
+      if (pending === 0) continue;
+      return;
+    }
+
+    for (const recipient of recipients.results) {
+      if (Number(recipient.notify_releases) !== 1) {
+        await markBroadcastRecipientSkipped(env, job.id, recipient.user_id);
+        continue;
+      }
+      await deliverBroadcastRecipient(env, telegram, job, recipient);
+    }
+
+    await refreshBroadcastTotals(env, job.id, new Date().toISOString());
   }
 }
 
-function bool(v:unknown):number{return v===true||v===1||v==='1'?1:0;}function shorten(v:string,max:number):string{return v.length<=max?v:`${v.slice(0,max-1)}…`;}async function readJson<T>(r:Request):Promise<T>{try{return await r.json() as T;}catch{return{} as T;}}
+async function ensureBroadcastRecipients(env: Env, job: BroadcastJob, now: string): Promise<void> {
+  let shouldSnapshot = job.status === 'queued';
+  if (!shouldSnapshot) {
+    const existing = await env.DB.prepare(`
+      SELECT 1 AS present
+      FROM broadcast_recipients
+      WHERE broadcast_id = ?
+      LIMIT 1
+    `).bind(job.id).first<{ present: number }>();
+    shouldSnapshot = !existing;
+  }
+
+  if (!shouldSnapshot) return;
+
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE broadcasts
+      SET status = 'running', started_at = COALESCE(started_at, ?)
+      WHERE id = ? AND status IN ('queued', 'running')
+    `).bind(now, job.id),
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO broadcast_recipients (
+        broadcast_id, user_id, status, attempts, next_attempt_at, created_at, updated_at
+      )
+      SELECT ?, telegram_id, 'queued', 0, ?, ?, ?
+      FROM users
+      WHERE notify_releases = 1
+    `).bind(job.id, now, now, now),
+  ]);
+}
+
+async function skipOptedOutRecipients(env: Env, broadcastId: number, now: string): Promise<void> {
+  await env.DB.prepare(`
+    UPDATE broadcast_recipients
+    SET status = 'skipped', updated_at = ?
+    WHERE broadcast_id = ?
+      AND status IN ('queued', 'retry')
+      AND EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.telegram_id = broadcast_recipients.user_id
+          AND u.notify_releases = 0
+      )
+  `).bind(now, broadcastId).run();
+}
+
+async function markBroadcastRecipientSkipped(env: Env, broadcastId: number, userId: number): Promise<void> {
+  await env.DB.prepare(`
+    UPDATE broadcast_recipients
+    SET status = 'skipped', updated_at = ?
+    WHERE broadcast_id = ? AND user_id = ? AND status IN ('queued', 'retry')
+  `).bind(new Date().toISOString(), broadcastId, userId).run();
+}
+
+async function deliverBroadcastRecipient(
+  env: Env,
+  telegram: TelegramClient,
+  job: BroadcastJob,
+  recipient: BroadcastRecipient,
+): Promise<void> {
+  const lang = normalizeLocale(recipient.language);
+  const heading = RELEASE_TITLE[lang] || RELEASE_TITLE.en;
+  const miniAppUrl = String((env as unknown as { MINI_APP_URL?: string }).MINI_APP_URL || 'https://t.me/dollartlbot');
+
+  await createInAppNotification(
+    env,
+    recipient.user_id,
+    'release',
+    heading,
+    job.title,
+    MINI_APP_PATH,
+    job.id,
+  );
+
+  try {
+    await telegram.sendMessage(
+      recipient.user_id,
+      `<b>📚 ${escapeHtml(heading)}</b>\n\n<b>${escapeHtml(job.title)}</b>\n${escapeHtml(shorten(job.body,500))}`,
+      {reply_markup:{inline_keyboard:[[{text:OPEN_LABEL[lang]||OPEN_LABEL.en,web_app:{url:miniAppUrl}}]]}},
+    );
+    await env.DB.prepare(`
+      UPDATE broadcast_recipients
+      SET status = 'sent', attempts = attempts + 1,
+          telegram_sent_at = ?, last_error = NULL, updated_at = ?
+      WHERE broadcast_id = ? AND user_id = ? AND status IN ('queued', 'retry')
+    `).bind(
+      new Date().toISOString(),
+      new Date().toISOString(),
+      job.id,
+      recipient.user_id,
+    ).run();
+  } catch (error) {
+    const attempts = Number(recipient.attempts ?? 0) + 1;
+    const retryable = isRetryableBroadcastError(error) && attempts < BROADCAST_MAX_ATTEMPTS;
+    const now = new Date();
+    const nextAttemptAt = retryable ? broadcastRetryAt(now, attempts, error) : now.toISOString();
+    await env.DB.prepare(`
+      UPDATE broadcast_recipients
+      SET status = ?, attempts = ?, next_attempt_at = ?, last_error = ?, updated_at = ?
+      WHERE broadcast_id = ? AND user_id = ? AND status IN ('queued', 'retry')
+    `).bind(
+      retryable ? 'retry' : 'failed',
+      attempts,
+      nextAttemptAt,
+      errorText(error).slice(0, 1000),
+      now.toISOString(),
+      job.id,
+      recipient.user_id,
+    ).run();
+  }
+}
+
+async function refreshBroadcastTotals(env: Env, broadcastId: number, now: string): Promise<number> {
+  const totals = await env.DB.prepare(`
+    SELECT
+      SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+      SUM(CASE WHEN status IN ('queued', 'retry') THEN 1 ELSE 0 END) AS pending
+    FROM broadcast_recipients
+    WHERE broadcast_id = ?
+  `).bind(broadcastId).first<{ sent: number | null; failed: number | null; pending: number | null }>();
+
+  const sent = Number(totals?.sent ?? 0);
+  const failed = Number(totals?.failed ?? 0);
+  const pending = Number(totals?.pending ?? 0);
+  await env.DB.prepare(`
+    UPDATE broadcasts
+    SET sent_count = ?, failed_count = ?, status = ?, completed_at = ?
+    WHERE id = ?
+  `).bind(
+    sent,
+    failed,
+    pending === 0 ? 'completed' : 'running',
+    pending === 0 ? now : null,
+    broadcastId,
+  ).run();
+  return pending;
+}
+
+function isRetryableBroadcastError(error: unknown): boolean {
+  if (!(error instanceof TelegramApiError)) return true;
+  if (error.retryAfter !== undefined || error.code === 429 || error.httpStatus === 429) return true;
+  if ((error.httpStatus ?? 0) >= 500 || (error.code ?? 0) >= 500) return true;
+  // No Telegram/HTTP code means a transport timeout/network failure. The delivery
+  // result is ambiguous, so retry only through the bounded recipient attempt state.
+  if (error.code === undefined && error.httpStatus === undefined) return true;
+  return false;
+}
+
+function broadcastRetryAt(now: Date, attempts: number, error: unknown): string {
+  const retryAfter = error instanceof TelegramApiError ? error.retryAfter : undefined;
+  const seconds = retryAfter !== undefined
+    ? Math.max(1, Math.min(3600, retryAfter))
+    : Math.min(3600, 60 * (2 ** Math.max(0, attempts - 1)));
+  return new Date(now.getTime() + seconds * 1000).toISOString();
+}
+
+function bool(v:unknown):number{return v===true||v===1||v==='1'?1:0;}
+function shorten(v:string,max:number):string{return v.length<=max?v:`${v.slice(0,max-1)}…`;}
+async function readJson<T>(r:Request):Promise<T>{try{return await r.json() as T;}catch{return{} as T;}}
