@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS submissions (
   plan TEXT NOT NULL CHECK (plan IN ('free', 'subscriber')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
   slot_returned INTEGER NOT NULL DEFAULT 0 CHECK (slot_returned IN (0, 1)),
+  admin_summary_sent INTEGER NOT NULL DEFAULT 0 CHECK (admin_summary_sent IN (0, 1)),
+  admin_file_sent INTEGER NOT NULL DEFAULT 0 CHECK (admin_file_sent IN (0, 1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(telegram_id) ON DELETE RESTRICT
@@ -44,6 +46,9 @@ CREATE TABLE IF NOT EXISTS submissions (
 
 CREATE INDEX IF NOT EXISTS idx_submissions_user_month
   ON submissions(user_id, month_key, slot_returned);
+
+CREATE INDEX IF NOT EXISTS idx_submissions_admin_delivery
+  ON submissions(admin_summary_sent, admin_file_sent, id);
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
   admin_user_id INTEGER PRIMARY KEY,
