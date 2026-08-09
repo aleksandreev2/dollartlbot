@@ -16,20 +16,21 @@ import { statusOverrideTranslations } from './status_override';
 import { qualityOverrideTranslations } from './quality_override';
 import { rulesQualityOverrideTranslations } from './rules_quality_override';
 import { interfacePolishTranslations } from './interface_polish';
+import { localeCleanupTranslations } from './locale_cleanup';
 
 export { SUPPORTED_LANGUAGES, type Locale } from './types';
 
 const dictionaries = {
-  en: { ...en, ...featureTranslations.en, ...policyTranslations.en, ...policyOverrideTranslations.en, ...statusOverrideTranslations.en, ...qualityOverrideTranslations.en, ...rulesQualityOverrideTranslations.en, ...interfacePolishTranslations.en },
-  es: { ...es, ...featureTranslations.es, ...policyTranslations.es, ...policyOverrideTranslations.es, ...statusOverrideTranslations.es, ...qualityOverrideTranslations.es, ...rulesQualityOverrideTranslations.es, ...interfacePolishTranslations.es },
-  fil: { ...fil, ...featureTranslations.fil, ...policyTranslations.fil, ...policyOverrideTranslations.fil, ...statusOverrideTranslations.fil, ...qualityOverrideTranslations.fil, ...rulesQualityOverrideTranslations.fil, ...interfacePolishTranslations.fil },
-  hi: { ...hi, ...featureTranslations.hi, ...policyTranslations.hi, ...policyOverrideTranslations.hi, ...statusOverrideTranslations.hi, ...qualityOverrideTranslations.hi, ...rulesQualityOverrideTranslations.hi, ...interfacePolishTranslations.hi },
-  pt: { ...pt, ...featureTranslations.pt, ...policyTranslations.pt, ...policyOverrideTranslations.pt, ...statusOverrideTranslations.pt, ...qualityOverrideTranslations.pt, ...rulesQualityOverrideTranslations.pt, ...interfacePolishTranslations.pt },
-  id: { ...id, ...featureTranslations.id, ...policyTranslations.id, ...policyOverrideTranslations.id, ...statusOverrideTranslations.id, ...qualityOverrideTranslations.id, ...rulesQualityOverrideTranslations.id, ...interfacePolishTranslations.id },
-  vi: { ...vi, ...featureTranslations.vi, ...policyTranslations.vi, ...policyOverrideTranslations.vi, ...statusOverrideTranslations.vi, ...qualityOverrideTranslations.vi, ...rulesQualityOverrideTranslations.vi, ...interfacePolishTranslations.vi },
-  fr: { ...fr, ...featureTranslations.fr, ...policyTranslations.fr, ...policyOverrideTranslations.fr, ...statusOverrideTranslations.fr, ...qualityOverrideTranslations.fr, ...rulesQualityOverrideTranslations.fr, ...interfacePolishTranslations.fr },
-  de: { ...de, ...featureTranslations.de, ...policyTranslations.de, ...policyOverrideTranslations.de, ...statusOverrideTranslations.de, ...qualityOverrideTranslations.de, ...rulesQualityOverrideTranslations.de, ...interfacePolishTranslations.de },
-  ru: { ...ru, ...featureTranslations.ru, ...policyTranslations.ru, ...policyOverrideTranslations.ru, ...statusOverrideTranslations.ru, ...qualityOverrideTranslations.ru, ...rulesQualityOverrideTranslations.ru, ...interfacePolishTranslations.ru },
+  en: { ...en, ...featureTranslations.en, ...policyTranslations.en, ...policyOverrideTranslations.en, ...statusOverrideTranslations.en, ...qualityOverrideTranslations.en, ...rulesQualityOverrideTranslations.en, ...interfacePolishTranslations.en, ...localeCleanupTranslations.en },
+  es: { ...es, ...featureTranslations.es, ...policyTranslations.es, ...policyOverrideTranslations.es, ...statusOverrideTranslations.es, ...qualityOverrideTranslations.es, ...rulesQualityOverrideTranslations.es, ...interfacePolishTranslations.es, ...localeCleanupTranslations.es },
+  fil: { ...fil, ...featureTranslations.fil, ...policyTranslations.fil, ...policyOverrideTranslations.fil, ...statusOverrideTranslations.fil, ...qualityOverrideTranslations.fil, ...rulesQualityOverrideTranslations.fil, ...interfacePolishTranslations.fil, ...localeCleanupTranslations.fil },
+  hi: { ...hi, ...featureTranslations.hi, ...policyTranslations.hi, ...policyOverrideTranslations.hi, ...statusOverrideTranslations.hi, ...qualityOverrideTranslations.hi, ...rulesQualityOverrideTranslations.hi, ...interfacePolishTranslations.hi, ...localeCleanupTranslations.hi },
+  pt: { ...pt, ...featureTranslations.pt, ...policyTranslations.pt, ...policyOverrideTranslations.pt, ...statusOverrideTranslations.pt, ...qualityOverrideTranslations.pt, ...rulesQualityOverrideTranslations.pt, ...interfacePolishTranslations.pt, ...localeCleanupTranslations.pt },
+  id: { ...id, ...featureTranslations.id, ...policyTranslations.id, ...policyOverrideTranslations.id, ...statusOverrideTranslations.id, ...qualityOverrideTranslations.id, ...rulesQualityOverrideTranslations.id, ...interfacePolishTranslations.id, ...localeCleanupTranslations.id },
+  vi: { ...vi, ...featureTranslations.vi, ...policyTranslations.vi, ...policyOverrideTranslations.vi, ...statusOverrideTranslations.vi, ...qualityOverrideTranslations.vi, ...rulesQualityOverrideTranslations.vi, ...interfacePolishTranslations.vi, ...localeCleanupTranslations.vi },
+  fr: { ...fr, ...featureTranslations.fr, ...policyTranslations.fr, ...policyOverrideTranslations.fr, ...statusOverrideTranslations.fr, ...qualityOverrideTranslations.fr, ...rulesQualityOverrideTranslations.fr, ...interfacePolishTranslations.fr, ...localeCleanupTranslations.fr },
+  de: { ...de, ...featureTranslations.de, ...policyTranslations.de, ...policyOverrideTranslations.de, ...statusOverrideTranslations.de, ...qualityOverrideTranslations.de, ...rulesQualityOverrideTranslations.de, ...interfacePolishTranslations.de, ...localeCleanupTranslations.de },
+  ru: { ...ru, ...featureTranslations.ru, ...policyTranslations.ru, ...policyOverrideTranslations.ru, ...statusOverrideTranslations.ru, ...qualityOverrideTranslations.ru, ...rulesQualityOverrideTranslations.ru, ...interfacePolishTranslations.ru, ...localeCleanupTranslations.ru },
 } as const;
 
 export type TranslationKey = keyof typeof dictionaries.en;
