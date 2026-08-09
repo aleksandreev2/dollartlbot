@@ -27,6 +27,8 @@ jobs:
         run: node scripts/audit-submission-intake.mjs
       - name: Audit Telegram transport reliability
         run: node scripts/audit-telegram-transport.mjs
+      - name: Audit broadcast delivery reliability
+        run: node scripts/audit-broadcast-delivery.mjs
       - name: Validate D1 migrations locally
         run: npx wrangler d1 migrations apply DB --local
       - name: Check Mini App JavaScript syntax
@@ -96,6 +98,7 @@ jobs:
           test -f migrations/0011_admin_users_reliability.sql
           test -f migrations/0012_source_url_safety.sql
           test -f migrations/0013_submission_intake_reservations.sql
+          test -f migrations/0014_broadcast_recipients.sql
       - name: Audit Mini App localization coverage
         run: |
           node scripts/audit-miniapp-i18n.mjs
