@@ -4,7 +4,9 @@ import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleMiniAppRequest } from './miniapp';
+import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
+import { handlePublicationDiscussionForward, handlePublishingRequest } from './publishing';
 import {
   handleReferralApiRequest,
   handleReferralChatMemberUpdate,
@@ -30,6 +32,13 @@ export default {
     if (coverResponse) return coverResponse;
 
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+
+    const publishingResponse = await handlePublishingRequest(request, env, apiTelegram, ctx);
+    if (publishingResponse) return publishingResponse;
+
+    const notificationResponse = await handleNotificationApiRequest(request, env);
+    if (notificationResponse) return notificationResponse;
+
     const referralResponse = await handleReferralApiRequest(request, env, apiTelegram);
     if (referralResponse) return referralResponse;
 
@@ -78,6 +87,8 @@ export default {
 
       if (update.chat_member) {
         await handleReferralChatMemberUpdate(update.chat_member, env);
+      } else if (update.message && await handlePublicationDiscussionForward(update.message, env, telegram, ctx)) {
+        // Publication comment/file delivery is handled by the linked discussion-group forward.
       } else {
         await handleUpdate(update, env, telegram, ctx);
       }
@@ -100,6 +111,7 @@ export default {
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     await retryPendingAdminDeliveries(env, telegram);
     await runReferralMaintenance(env, telegram, new Date(controller.scheduledTime));
+    await runBroadcastMaintenance(env, telegram, 2);
 
     const scheduledAt = new Date(controller.scheduledTime);
     if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
