@@ -15,6 +15,7 @@ import { normalizeLocale, t } from './i18n/index';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
 import {
   attachFileToSubmissionReservation,
+  cleanupExpiredSubmissionReservations,
   commitSubmissionReservation,
   failSubmissionReservation,
   getQuotaState,
@@ -65,7 +66,7 @@ export async function handleEnhancedMiniAppRequest(
     return miniAppJsonError('unsupported_file', 'Only TXT and EPUB files are supported in the Mini App.', 400);
   }
 
-  const requestId = field(form, 'request_id');
+  const suppliedRequestId = field(form, 'request_id');
   const title = field(form, 'title');
   const originalLanguage = field(form, 'original_language');
   const chapterCount = Number(field(form, 'chapter_count'));
@@ -77,7 +78,7 @@ export async function handleEnhancedMiniAppRequest(
   const notes = field(form, 'notes');
   const rulesAccepted = field(form, 'rules_accepted') === 'true';
 
-  if (!REQUEST_ID_RE.test(requestId)) {
+  if (suppliedRequestId && !REQUEST_ID_RE.test(suppliedRequestId)) {
     return miniAppJsonError('invalid_request_id', 'Restart the submission form and try again.', 400);
   }
   if (!rulesAccepted) return miniAppJsonError('rules_required', 'Please confirm the Dollar TL submission rules.', 400);
@@ -101,19 +102,12 @@ export async function handleEnhancedMiniAppRequest(
   const baseLimit = subscription.subscriber
     ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
     : FREE_MONTHLY_REQUEST_LIMIT;
-  const quotaBefore = await getQuotaState(env, auth.telegramUser.id, baseLimit);
 
   if (subscription.verificationError && chapterCount > REGULAR_MAX_CHAPTERS) {
     return miniAppJsonError('verification_unavailable', 'Boosty verification is temporarily unavailable. Please try again later.', 503);
   }
   if (!subscription.subscriber && chapterCount > REGULAR_MAX_CHAPTERS) {
     return miniAppJsonError('chapter_limit', `Regular users can suggest novels with up to ${REGULAR_MAX_CHAPTERS} chapters.`, 409);
-  }
-  if (!quotaBefore.unlimited && quotaBefore.remaining <= 0) {
-    if (subscription.verificationError) {
-      return miniAppJsonError('verification_unavailable', 'Boosty verification is temporarily unavailable. Please try again later.', 503);
-    }
-    return miniAppJsonError('quota_reached', 'Your monthly request limit has been reached.', 409);
   }
 
   const now = new Date().toISOString();
@@ -130,7 +124,9 @@ export async function handleEnhancedMiniAppRequest(
     notes,
     file: fileValue,
   });
+  const requestId = suppliedRequestId || `auto_${monthKey.replace(/[^0-9]/g, '')}_${payloadFingerprint.slice(0, 48)}`;
 
+  await cleanupExpiredSubmissionReservations(env, new Date(now));
   const reservationResult = await reserveSubmissionQuota(env, {
     userId: auth.telegramUser.id,
     requestId,
@@ -165,7 +161,10 @@ export async function handleEnhancedMiniAppRequest(
     );
   }
   if (!reservationResult || reservationResult.status !== 'reserved') {
-    return miniAppJsonError('quota_race', 'Your monthly request limit was reached before submission started.', 409);
+    if (subscription.verificationError) {
+      return miniAppJsonError('verification_unavailable', 'Boosty verification is temporarily unavailable. Please try again later.', 503);
+    }
+    return miniAppJsonError('quota_reached', 'Your monthly request limit has been reached.', 409);
   }
 
   const reservation = reservationResult.reservation;
