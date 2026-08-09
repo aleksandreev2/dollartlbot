@@ -32,7 +32,8 @@ export async function upsertUser(env: Env, user: TelegramUser): Promise<void> {
 
 export function getUser(env: Env, userId: number): Promise<UserRow | null> {
   return env.DB.prepare(`
-    SELECT telegram_id, username, first_name, language, language_selected
+    SELECT telegram_id, username, first_name, language, language_selected,
+           last_limit_reset_notified_month, last_promo_at, promo_opt_out
     FROM users WHERE telegram_id = ?
   `)
     .bind(userId)
@@ -76,7 +77,8 @@ export function getSubmission(env: Env, id: number): Promise<SubmissionRow | nul
     SELECT id, user_id, language, title, original_language, chapter_count,
            publication_status, source_url, raw_file_id, raw_file_name, raw_file_mime,
            genres_tags, sexual_content, sensitive_content, notes, plan, status, slot_returned,
-           admin_summary_sent, admin_file_sent
+           admin_summary_sent, admin_file_sent, queue_status, queue_position,
+           queued_at, started_at, completed_at
     FROM submissions WHERE id = ?
   `)
     .bind(id)
