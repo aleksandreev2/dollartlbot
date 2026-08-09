@@ -32,17 +32,35 @@
     link.href = href;
     document.head.appendChild(link);
   }
-  function loadScript(src) {
-    if (document.querySelector(`script[src="${src}"]`)) return;
+  function loadScript(src, onload) {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) { if (onload) existing.addEventListener('load', onload, { once:true }); return; }
     const script = document.createElement('script');
     script.src = src;
-    script.defer = true;
+    script.async = true;
+    if (onload) script.addEventListener('load', onload, { once:true });
     document.head.appendChild(script);
   }
+
+  loadStyle('/app/desktop.css');
   loadStyle('/app/admin-v2.css');
   loadStyle('/app/notifications-ui.css');
-  loadScript('/app/admin-v2.js');
+  loadScript('/app/admin-v2.js', () => {
+    // If the user opened Admin before this small enhancement finished loading,
+    // trigger one normal Admin render so Admin 2.0 can take over immediately.
+    if (document.querySelector('#viewRoot .admin-stats') && !document.querySelector('.admin-v2')) {
+      document.querySelector('[data-nav="admin"]')?.click();
+    }
+  });
   loadScript('/app/notifications-ui.js');
+
+  // Labels already activate their nested file input natively. Admin 2.0 also
+  // has an explicit handler for WebViews, so stop that handler from recursively
+  // re-triggering when the click originated from the input itself.
+  document.addEventListener('click', (event) => {
+    const input = event.target instanceof Element ? event.target.closest('#pubImage,#pubFiles') : null;
+    if (input) event.stopImmediatePropagation();
+  }, true);
 
   const syncVisibility = () => {
     root.classList.toggle('dtl-background', document.hidden);
