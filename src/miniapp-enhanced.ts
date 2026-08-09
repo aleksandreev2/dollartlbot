@@ -14,6 +14,7 @@ import { maybeExtractEpubCover, storeSubmissionCover } from './covers';
 import { normalizeLocale, t } from './i18n/index';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
 import { getQuotaState, insertSubmissionWithQuota } from './quota';
+import { applyLiveQueuePosition, getQueuePositionMap } from './queue';
 import { getSubscriptionState } from './subscription';
 import { deliverSubmissionToAdmin } from './submissions';
 import { TelegramClient } from './telegram';
@@ -184,7 +185,13 @@ export async function enhanceMiniAppResponse(
   env: Env,
 ): Promise<Response> {
   const url = new URL(request.url);
-  if (request.method !== 'GET' || url.pathname !== '/api/app/bootstrap' || !response.ok) return response;
+  if (request.method !== 'GET' || !response.ok) return response;
+
+  const positionAware = url.pathname === '/api/app/bootstrap'
+    || url.pathname === '/api/app/queue'
+    || url.pathname === '/api/app/requests'
+    || /^\/api\/app\/novel\/\d+$/.test(url.pathname);
+  if (!positionAware) return response;
 
   let data: any;
   try {
@@ -192,25 +199,44 @@ export async function enhanceMiniAppResponse(
   } catch {
     return response;
   }
-  const userId = Number(data?.user?.id);
-  const baseLimit = Number(data?.account?.limit);
-  if (!Number.isSafeInteger(userId) || !Number.isFinite(baseLimit)) return miniAppJson(data, response.status);
 
-  const quota = await getQuotaState(env, userId, baseLimit);
-  data.account = {
-    ...data.account,
-    used: quota.used,
-    base_limit: quota.baseLimit,
-    effective_base_limit: quota.effectiveBaseLimit,
-    admin_adjustment: quota.adminAdjustment,
-    unlimited: quota.unlimited,
-    referral_bonus: quota.referralBonus,
-    referral_available: quota.referralAvailable,
-    referral_used: quota.referralUsed,
-    referral_cap: 3,
-    limit: quota.limit,
-    remaining: quota.remaining,
-  };
+  const positions = await getQueuePositionMap(env);
+  const fix = (row: any) => row && typeof row === 'object' ? applyLiveQueuePosition(row, positions) : row;
+
+  if (data?.queue) {
+    data.queue = {
+      ...data.queue,
+      active: Array.isArray(data.queue.active) ? data.queue.active.map(fix) : data.queue.active,
+      upcoming: Array.isArray(data.queue.upcoming) ? data.queue.upcoming.map(fix) : data.queue.upcoming,
+      completed: Array.isArray(data.queue.completed) ? data.queue.completed.map(fix) : data.queue.completed,
+    };
+  }
+  if (Array.isArray(data?.my_requests)) data.my_requests = data.my_requests.map(fix);
+  if (Array.isArray(data?.requests)) data.requests = data.requests.map(fix);
+  if (data?.novel) data.novel = fix(data.novel);
+
+  if (url.pathname === '/api/app/bootstrap') {
+    const userId = Number(data?.user?.id);
+    const baseLimit = Number(data?.account?.limit);
+    if (Number.isSafeInteger(userId) && Number.isFinite(baseLimit)) {
+      const quota = await getQuotaState(env, userId, baseLimit);
+      data.account = {
+        ...data.account,
+        used: quota.used,
+        base_limit: quota.baseLimit,
+        effective_base_limit: quota.effectiveBaseLimit,
+        admin_adjustment: quota.adminAdjustment,
+        unlimited: quota.unlimited,
+        referral_bonus: quota.referralBonus,
+        referral_available: quota.referralAvailable,
+        referral_used: quota.referralUsed,
+        referral_cap: 3,
+        limit: quota.limit,
+        remaining: quota.remaining,
+      };
+    }
+  }
+
   return miniAppJson(data, response.status);
 }
 
