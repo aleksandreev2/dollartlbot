@@ -51,6 +51,16 @@ assertLocales(polishCopy,'ui-polish copy',true);
 assertSameKeys(languageNames,'ui-polish languageNames','en');
 assertSameKeys(polishCopy,'ui-polish copy','en');
 
+const referrals=read('public/app/referrals-ui.js');
+const referralCopy=evalObject(between(referrals,'const L = ',';\n\n  function locale'),'referrals-ui copy');
+assertLocales(referralCopy,'referrals-ui copy',true);
+assertSameKeys(referralCopy,'referrals-ui copy','en');
+
+const onboarding=read('public/app/onboarding-ui.js');
+const onboardingCopy=evalObject(between(onboarding,'const COPY = ',';\n\n  const icons'),'onboarding-ui copy');
+assertLocales(onboardingCopy,'onboarding-ui copy',true);
+assertSameKeys(onboardingCopy,'onboarding-ui copy','en');
+
 const app=read('public/app/app.js');
 const dangerous=[
   ['Thank you for supporting novel translations!','Thank you for supporting novel translations.'],
@@ -64,7 +74,7 @@ const dangerous=[
   ['Request #','Request\\s+#'],
   ['Nothing here.','Nothing here.']
 ];
-const localizationCorpus=[complete,wizard,polish,read('public/app/i18n-inline-fixes.js')].join('\n');
+const localizationCorpus=[complete,wizard,polish,read('public/app/i18n-inline-fixes.js'),referrals,onboarding].join('\n');
 const normalizedCorpus=normalizeText(localizationCorpus);
 for(const [phrase,evidence] of dangerous){
   if(!app.includes(phrase))continue;
@@ -72,4 +82,4 @@ for(const [phrase,evidence] of dangerous){
   if(!covered)throw new Error(`Hardcoded Mini App phrase is not covered by localization layers: ${phrase}`);
 }
 
-console.log(`Mini App i18n audit passed for ${locales.length+1} locales.`);
+console.log(`Mini App i18n audit passed for ${locales.length+1} locales, including referrals and onboarding.`);
