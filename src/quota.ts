@@ -141,7 +141,7 @@ export async function insertSubmissionWithQuota(
     input.originalLanguage,
     input.chapterCount,
     input.publicationStatus,
-    input.sourceUrl,
+    safeHttpUrl(input.sourceUrl),
     input.rawFileId,
     input.rawFileName,
     input.rawFileMime,
@@ -282,4 +282,16 @@ async function findAvailableReferral(
     ORDER BY r.reward_expires_at ASC, r.id ASC
     LIMIT 1
   `).bind(userId, now).first<{ id: number }>();
+}
+
+function safeHttpUrl(value: string | null): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
