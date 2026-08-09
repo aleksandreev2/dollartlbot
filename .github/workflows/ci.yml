@@ -37,10 +37,9 @@ jobs:
           node --check public/app/performance.js
           node --check public/app/telegram-desktop.js
           node --check public/app/icons.js
-          node --check public/app/locale-sync.js
+          node --check public/app/i18n-core.js
           node --check public/app/ui-polish.js
           node --check public/app/i18n-complete.js
-          node --check public/app/i18n-inline-fixes.js
           node --check public/app/i18n-wizard.js
           node --check public/app/i18n-runtime-v2.js
           node --check public/app/novel-presenter.js
@@ -74,6 +73,7 @@ jobs:
           test -f public/app/publication-management.js
           test -f public/app/publication-management.css
           test -f public/app/notifications-ui.css
+          test -f public/app/i18n-core.js
           test -f public/app/i18n-runtime-v2.js
           test -f public/app/language-switch.css
           test -f public/app/novel-presenter.js
@@ -87,6 +87,7 @@ jobs:
           grep -q '/app/publishing-comments-ui.js' public/app/index.html
           grep -q '/app/publication-management.js' public/app/index.html
           grep -q '/app/publication-management.css' public/app/index.html
+          grep -q '/app/i18n-core.js' public/app/index.html
           grep -q '/app/i18n-runtime-v2.js' public/app/index.html
           grep -q '/app/language-switch.css' public/app/index.html
           grep -q '/app/novel-presenter.js' public/app/index.html
