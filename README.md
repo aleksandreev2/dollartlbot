@@ -40,66 +40,135 @@ A monthly slot is consumed only after **Confirm & Submit** succeeds.
 - TypeScript
 - No runtime npm dependencies
 
-## Cloudflare configuration
+## Secrets
 
-`wrangler.jsonc` declares these required secrets:
+Never commit real secret values. `.dev.vars` is ignored by Git.
 
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_WEBHOOK_SECRET`
-- `ADMIN_TELEGRAM_ID`
-- `BOOSTY_GROUP_ID`
+Copy the example file:
 
-`BOOSTY_SUBSCRIPTION_URL` is a non-secret config variable.
+```bash
+cp .dev.vars.example .dev.vars
+```
 
-## Setup
+On Windows PowerShell:
+
+```powershell
+Copy-Item .dev.vars.example .dev.vars
+```
+
+Fill in:
+
+```dotenv
+TELEGRAM_BOT_TOKEN="your_bot_token"
+TELEGRAM_WEBHOOK_SECRET="a_long_random_secret"
+ADMIN_TELEGRAM_ID="0"
+BOOSTY_GROUP_ID="0"
+```
+
+`BOOSTY_SUBSCRIPTION_URL` is public configuration and already lives in `wrangler.jsonc`.
+
+## First setup
+
+### 1. Install tools
 
 ```bash
 npm install
 npx wrangler login
 ```
 
-Copy `.dev.vars.example` to `.dev.vars` and fill in the values. For an initial deployment, `ADMIN_TELEGRAM_ID` and `BOOSTY_GROUP_ID` can temporarily be `0`.
+### 2. Prepare the Telegram verification group
 
-Generate types and deploy:
+`Dollar TL — Subscriber Verification` should contain:
+
+- your Telegram account as an administrator;
+- `@boosty_to_bot` with the permissions Boosty requires;
+- `@dollartlbot` as an administrator so it can verify members with `getChatMember`.
+
+The group can stay read-only and otherwise empty. Translation requests are **not** sent to this group.
+
+### 3. Discover your Telegram IDs before enabling the webhook
+
+Put the real `TELEGRAM_BOT_TOKEN` in `.dev.vars` first.
+
+Then:
+
+1. Send any message (for example `/id`) to `@dollartlbot` in private chat.
+2. Send `/chatid` in `Dollar TL — Subscriber Verification`.
+3. Run:
 
 ```bash
-npm run cf-typegen
+npm run discover-ids
+```
+
+The script reads pending Telegram updates and prints values similar to:
+
+```text
+ADMIN_TELEGRAM_ID=123456789
+BOOSTY_GROUP_ID=-1001234567890
+```
+
+Copy both values into `.dev.vars`.
+
+### 4. Type-check and deploy
+
+```bash
+npm run typecheck
 npx wrangler deploy --secrets-file .dev.vars
+```
+
+The D1 binding in `wrangler.jsonc` is intentionally declared without an account-specific database ID. Current Wrangler can provision the D1 resource during deployment and keep the local binding linked without committing your Cloudflare resource ID to this public repository.
+
+Apply the schema after the first deployment:
+
+```bash
 npm run db:remote
 ```
 
-After the webhook is active:
+### 5. Enable the Telegram webhook
 
-- send `/id` to the bot in private chat to obtain your numeric Telegram user ID;
-- add `@dollartlbot` as an administrator of `Dollar TL — Subscriber Verification` and send `/chatid` in that group to obtain its numeric chat ID;
-- replace both values and update the deployed secrets.
+Copy the deployed Worker URL printed by Wrangler, for example:
 
-To configure Telegram, set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `WEBHOOK_URL` in your shell and run:
+```text
+https://dollartlbot.<your-subdomain>.workers.dev
+```
+
+Bash/zsh:
 
 ```bash
+WEBHOOK_URL="https://dollartlbot.<your-subdomain>.workers.dev" npm run configure-bot
+```
+
+PowerShell:
+
+```powershell
+$env:WEBHOOK_URL="https://dollartlbot.<your-subdomain>.workers.dev"
 npm run configure-bot
 ```
 
-The script registers bot commands and sets the webhook to `${WEBHOOK_URL}/webhook` using Telegram's secret-token header.
+`configure-bot` reads the bot token and webhook secret from `.dev.vars`, registers Telegram commands, and configures `${WEBHOOK_URL}/webhook` with Telegram's secret-token header.
 
-## Required Telegram setup
-
-`Dollar TL — Subscriber Verification` should contain the owner as admin, `@boosty_to_bot` as required by Boosty, and `@dollartlbot` as an administrator. The group can stay read-only and otherwise empty.
-
-Set `ADMIN_TELEGRAM_ID` to the numeric Telegram ID of the account that should receive requests. No request group/channel is used.
+Now open `@dollartlbot` and send `/start`.
 
 ## Useful commands
 
-- `/start` — main menu; asks for language on first use
-- `/rules` — submission rules
-- `/limit` — current monthly usage and Boosty status
-- `/language` — change language
-- `/cancel` — cancel the active form (or an admin message draft)
-- `/id` — show your numeric Telegram user ID
+- `/start` — open the main menu; first use starts with language selection
+- `/rules` — view submission rules
+- `/limit` — view current monthly usage and Boosty status
+- `/language` — change interface language
+- `/cancel` — cancel the active form or admin message draft
+- `/id` — show the sender's numeric Telegram ID
 - `/chatid` — show the current chat ID
 
-## Limits
+## Limits and subscriber verification
 
-The bot counts submitted requests from the current UTC calendar month. Usage is derived from D1 submissions rather than a separate mutable counter. `Reject + Return Slot` marks a request as returned so it no longer counts against the monthly allowance.
+The bot counts submitted requests from the current UTC calendar month. Usage is derived from actual D1 submissions rather than a separate mutable counter.
 
-Final submission uses one conditional SQL insert so concurrent confirmations cannot exceed the user's current 1/5 request limit.
+- Free: 1 request/month, up to 200 chapters.
+- Boosty subscriber: 5 requests/month; longer novels are allowed.
+- `Reject + Return Slot` marks a request as returned, so it no longer consumes the monthly allowance.
+- Boosty status is checked when starting a submission and again before final submission.
+- Final submission uses one conditional SQL insert so concurrent confirmations cannot exceed the user's current 1/5 request limit.
+
+## Request delivery
+
+Completed requests are sent only to `ADMIN_TELEGRAM_ID` in private Telegram messages. The summary contains the submitter, plan, title, language, chapter count, source, tags, sexual/fetish disclosures, sensitive-content disclosures, and notes. The raw file is re-sent using its Telegram `file_id`; the Worker does not download or store the novel file itself.
