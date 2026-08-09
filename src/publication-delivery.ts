@@ -4,6 +4,7 @@ import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './min
 type Publication = {
   id:number; add_bot_comment:number; add_donate:number; discussion_message_id:number|null;
   bot_comment_status:string; published_at:string|null; comments_check_attempts:number;
+  telegram_deleted_at:string|null;
 };
 type Asset = { id:number;file_name:string;mime_type:string|null;r2_key:string;telegram_file_id:string|null;delivery_status:string };
 
@@ -26,6 +27,7 @@ export async function runPublicationDeliveryMaintenance(env:Env,telegram:Telegra
     FROM publications p
     LEFT JOIN publication_assets a ON a.publication_id=p.id
     WHERE p.status='published'
+      AND p.telegram_deleted_at IS NULL
       AND (
         p.comments_check_status IN ('pending','needs_attention')
         OR (p.add_bot_comment=1 AND p.bot_comment_status IN ('pending','failed'))
@@ -46,8 +48,8 @@ export async function deliverPublicationPayload(
   env:Env,
   telegram:TelegramClient,
 ):Promise<void>{
-  const publication=await env.DB.prepare(`SELECT id,add_bot_comment,add_donate,discussion_message_id,bot_comment_status,published_at,comments_check_attempts FROM publications WHERE id=?`).bind(publicationId).first<Publication>();
-  if(!publication)return;
+  const publication=await env.DB.prepare(`SELECT id,add_bot_comment,add_donate,discussion_message_id,bot_comment_status,published_at,comments_check_attempts,telegram_deleted_at FROM publications WHERE id=?`).bind(publicationId).first<Publication>();
+  if(!publication||publication.telegram_deleted_at)return;
   const assets=(await env.DB.prepare(`SELECT id,file_name,mime_type,r2_key,telegram_file_id,delivery_status FROM publication_assets WHERE publication_id=? ORDER BY sort_order,id`).bind(publicationId).all<Asset>()).results;
 
   for(const asset of assets){
@@ -100,8 +102,12 @@ export async function deliverPublicationPayload(
 }
 
 async function checkPublicationDelivery(id:number,env:Env,telegram:TelegramClient,manual:boolean){
-  const p=await env.DB.prepare(`SELECT id,add_bot_comment,add_donate,discussion_message_id,bot_comment_status,published_at,comments_check_attempts FROM publications WHERE id=? AND status='published'`).bind(id).first<Publication>();
+  const p=await env.DB.prepare(`SELECT id,add_bot_comment,add_donate,discussion_message_id,bot_comment_status,published_at,comments_check_attempts,telegram_deleted_at FROM publications WHERE id=? AND status='published'`).bind(id).first<Publication>();
   if(!p)return null;
+  if(p.telegram_deleted_at){
+    await env.DB.prepare(`UPDATE publications SET comments_check_status='not_required',comments_checked_at=? WHERE id=?`).bind(new Date().toISOString(),id).run();
+    return statusPayload(id,env);
+  }
   const now=new Date();
   await env.DB.prepare(`UPDATE publications SET comments_check_attempts=comments_check_attempts+1,comments_checked_at=? WHERE id=?`).bind(now.toISOString(),id).run();
 
@@ -148,7 +154,7 @@ async function finalize(id:number,env:Env){
 }
 
 async function statusPayload(id:number,env:Env){
-  const p=await env.DB.prepare(`SELECT id,status,discussion_message_id,comments_check_status,comments_checked_at,comments_check_attempts,bot_comment_status,bot_comment_message_id,bot_comment_error FROM publications WHERE id=?`).bind(id).first<Record<string,unknown>>();
+  const p=await env.DB.prepare(`SELECT id,status,discussion_message_id,comments_check_status,comments_checked_at,comments_check_attempts,bot_comment_status,bot_comment_message_id,bot_comment_error,telegram_deleted_at FROM publications WHERE id=?`).bind(id).first<Record<string,unknown>>();
   const assets=await env.DB.prepare(`SELECT id,file_name,delivery_status,delivered_message_id,delivery_attempts,last_delivery_attempt_at,delivery_error FROM publication_assets WHERE publication_id=? ORDER BY sort_order,id`).bind(id).all<Record<string,unknown>>();
   return {publication:p,assets:assets.results};
 }
