@@ -2,8 +2,6 @@
   const tg = window.Telegram?.WebApp;
   const view = document.getElementById('viewRoot');
   const regionalFlags = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
-  let releasesCache = null;
-  let releasesAt = 0;
   let request = null;
   let scheduled = false;
 
@@ -67,12 +65,13 @@
   }
 
   async function getReleases(){
-    if(releasesCache && Date.now()-releasesAt<30000) return releasesCache;
     if(request) return request;
     if(!tg?.initData) return [];
-    request=fetch('/api/app/releases',{headers:{'x-telegram-init-data':tg.initData}})
+    request=fetch('/api/app/releases',{
+      cache:'no-store',
+      headers:{'x-telegram-init-data':tg.initData},
+    })
       .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error?.message||`HTTP ${r.status}`);return Array.isArray(d.releases)?d.releases:[];})
-      .then(rows=>{releasesCache=rows;releasesAt=Date.now();return rows;})
       .finally(()=>{request=null;});
     return request;
   }
@@ -83,7 +82,8 @@
       ? `<img src="${esc(row.image_url)}" alt="" loading="lazy">`
       : '<i data-lucide="book-open-check" aria-hidden="true"></i>';
     const meta=[formatDate(row.published_at),Number(row.file_count)>0?c.files(Number(row.file_count)):null].filter(Boolean).map(esc).join('<span>·</span>');
-    const inner=`<span class="dtl-release-thumb">${image}</span><span class="dtl-release-main"><strong>${esc(row.title)}</strong>${row.excerpt?`<p>${esc(row.excerpt)}</p>`:''}<span class="dtl-release-meta">${meta}</span></span>${row.telegram_url?'<span class="dtl-release-open">›</span>':''}`;
+    const openIcon=row.telegram_url?'<span class="dtl-release-open" aria-hidden="true"><i data-lucide="circle-arrow-right"></i></span>':'';
+    const inner=`<span class="dtl-release-thumb">${image}</span><span class="dtl-release-main"><strong>${esc(row.title)}</strong>${row.excerpt?`<p>${esc(row.excerpt)}</p>`:''}<span class="dtl-release-meta">${meta}</span></span>${openIcon}`;
     return row.telegram_url
       ? `<a class="dtl-release-card dtl-release-link" href="${esc(row.telegram_url)}" aria-label="${esc(c.open)}: ${esc(row.title)}">${inner}</a>`
       : `<article class="dtl-release-card">${inner}</article>`;
@@ -136,7 +136,7 @@
     if(link&&tg?.openTelegramLink){event.preventDefault();tg.openTelegramLink(link.href);return;}
     if(event.target.closest?.('[data-nav="home"],.brand')) setTimeout(schedule,0);
   },true);
-  document.addEventListener('dtl:localechange',()=>{releasesAt=0;schedule();});
+  document.addEventListener('dtl:localechange',schedule);
   if(view)new MutationObserver(schedule).observe(view,{childList:true,subtree:false});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
 })();
