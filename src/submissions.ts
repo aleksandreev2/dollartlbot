@@ -12,10 +12,10 @@ import {
   getUser,
   isAdmin,
   isCompleteDraft,
-  monthlySubmissionCount,
   parseDraft,
   saveSession,
 } from './db';
+import { getQuotaState, insertSubmissionWithQuota } from './quota';
 import { getSubscriptionState } from './subscription';
 import { sendLimitReached, sendMainMenu, sendRules } from './ui';
 import {
@@ -32,25 +32,24 @@ export async function beginSubmission(
   env: Env,
   telegram: TelegramClient,
 ): Promise<void> {
-  const count = await monthlySubmissionCount(env, userId);
   const subscription = await getSubscriptionState(userId, env, telegram);
-
-  if (subscription.verificationError && count >= FREE_MONTHLY_REQUEST_LIMIT) {
-    await telegram.sendMessage(userId, t(locale, 'verificationUnavailable'), {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: t(locale, 'retryVerification'), callback_data: 'menu:submit' }],
-          [{ text: t(locale, 'subscribe'), url: env.BOOSTY_SUBSCRIPTION_URL }],
-        ],
-      },
-    });
-    return;
-  }
-
-  const limit = subscription.subscriber
+  const baseLimit = subscription.subscriber
     ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
     : FREE_MONTHLY_REQUEST_LIMIT;
-  if (count >= limit) {
+  const quota = await getQuotaState(env, userId, baseLimit);
+
+  if (quota.remaining <= 0) {
+    if (subscription.verificationError) {
+      await telegram.sendMessage(userId, t(locale, 'verificationUnavailable'), {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: t(locale, 'retryVerification'), callback_data: 'menu:submit' }],
+            [{ text: t(locale, 'subscribe'), url: env.BOOSTY_SUBSCRIPTION_URL }],
+          ],
+        },
+      });
+      return;
+    }
     await sendLimitReached(userId, locale, subscription.subscriber, env, telegram);
     return;
   }
@@ -82,13 +81,13 @@ export async function finalizeSubmission(
     return;
   }
 
-  const count = await monthlySubmissionCount(env, user.id);
   const subscription = await getSubscriptionState(user.id, env, telegram);
+  const baseLimit = subscription.subscriber
+    ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
+    : FREE_MONTHLY_REQUEST_LIMIT;
+  const quota = await getQuotaState(env, user.id, baseLimit);
 
-  if (
-    subscription.verificationError &&
-    (count >= FREE_MONTHLY_REQUEST_LIMIT || draft.chapter_count > REGULAR_MAX_CHAPTERS)
-  ) {
+  if (subscription.verificationError && draft.chapter_count > REGULAR_MAX_CHAPTERS) {
     await telegram.sendMessage(user.id, t(locale, 'verificationUnavailable'), {
       reply_markup: {
         inline_keyboard: [[{ text: t(locale, 'retryVerification'), callback_data: 'form:confirm' }]],
@@ -106,58 +105,52 @@ export async function finalizeSubmission(
     return;
   }
 
-  const plan: 'free' | 'subscriber' = subscription.subscriber ? 'subscriber' : 'free';
-  const limit = plan === 'subscriber'
-    ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
-    : FREE_MONTHLY_REQUEST_LIMIT;
-  const monthKey = currentMonthKey();
-  const now = new Date().toISOString();
-
-  const insert = await env.DB.prepare(`
-    INSERT INTO submissions (
-      user_id, username_snapshot, language, month_key, title, original_language,
-      chapter_count, publication_status, source_url, raw_file_id, raw_file_name,
-      raw_file_mime, genres_tags, sexual_content, sensitive_content, notes,
-      plan, status, slot_returned, created_at, updated_at
-    )
-    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?
-    WHERE (
-      SELECT COUNT(*) FROM submissions
-      WHERE user_id = ? AND month_key = ? AND slot_returned = 0
-    ) < ?
-  `)
-    .bind(
-      user.id,
-      user.username ?? null,
-      locale,
-      monthKey,
-      draft.title,
-      draft.original_language,
-      draft.chapter_count,
-      draft.publication_status,
-      draft.source_url || null,
-      draft.raw_file_id,
-      draft.raw_file_name || null,
-      draft.raw_file_mime || null,
-      draft.genres_tags,
-      draft.sexual_content,
-      draft.sensitive_content,
-      draft.notes || null,
-      plan,
-      now,
-      now,
-      user.id,
-      monthKey,
-      limit,
-    )
-    .run();
-
-  if ((insert.meta.changes ?? 0) === 0) {
+  if (quota.remaining <= 0) {
+    if (subscription.verificationError) {
+      await telegram.sendMessage(user.id, t(locale, 'verificationUnavailable'), {
+        reply_markup: {
+          inline_keyboard: [[{ text: t(locale, 'retryVerification'), callback_data: 'form:confirm' }]],
+        },
+      });
+      return;
+    }
     await sendLimitReached(user.id, locale, subscription.subscriber, env, telegram);
     return;
   }
 
-  const submissionId = Number(insert.meta.last_row_id);
+  const plan: 'free' | 'subscriber' = subscription.subscriber ? 'subscriber' : 'free';
+  const monthKey = currentMonthKey();
+  const now = new Date().toISOString();
+
+  const insert = await insertSubmissionWithQuota(env, {
+    userId: user.id,
+    username: user.username ?? null,
+    locale,
+    monthKey,
+    title: draft.title,
+    originalLanguage: draft.original_language,
+    chapterCount: draft.chapter_count,
+    publicationStatus: draft.publication_status,
+    sourceUrl: draft.source_url || null,
+    rawFileId: draft.raw_file_id,
+    rawFileName: draft.raw_file_name || null,
+    rawFileMime: draft.raw_file_mime || null,
+    genresTags: draft.genres_tags,
+    sexualContent: draft.sexual_content,
+    sensitiveContent: draft.sensitive_content,
+    notes: draft.notes || null,
+    plan,
+    adminSummarySent: 0,
+    adminFileSent: 0,
+    now,
+  }, baseLimit);
+
+  if (!insert) {
+    await sendLimitReached(user.id, locale, subscription.subscriber, env, telegram);
+    return;
+  }
+
+  const submissionId = insert.submissionId;
   await clearSession(env, user.id);
   await telegram.sendMessage(user.id, t(locale, 'submitted'));
   await sendMainMenu(user.id, locale, telegram);
@@ -189,6 +182,11 @@ export async function deliverSubmissionToAdmin(
     const displayName = user?.first_name ? escapeHtml(user.first_name) : '—';
     const source = submission.source_url ? escapeHtml(submission.source_url) : '—';
     const notes = submission.notes ? escapeHtml(submission.notes) : '—';
+    const baseLimit = submission.plan === 'subscriber'
+      ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
+      : FREE_MONTHLY_REQUEST_LIMIT;
+    const quota = await getQuotaState(env, submission.user_id, baseLimit);
+    const referralSuffix = quota.referralBonus > 0 ? ` (base ${baseLimit} + referral ${quota.referralBonus})` : '';
 
     const summary = [
       `📚 <b>NEW NOVEL REQUEST #${submission.id}</b>`,
@@ -196,7 +194,7 @@ export async function deliverSubmissionToAdmin(
       `<b>User:</b> ${displayName} ${username}`,
       `<b>Telegram ID:</b> <code>${submission.user_id}</code>`,
       `<b>Plan:</b> ${submission.plan === 'subscriber' ? '⭐ Boosty Subscriber' : 'Free'}`,
-      `<b>Monthly usage:</b> ${await monthlySubmissionCount(env, submission.user_id)} / ${submission.plan === 'subscriber' ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT : FREE_MONTHLY_REQUEST_LIMIT}`,
+      `<b>Monthly usage:</b> ${quota.used} / ${quota.limit}${referralSuffix}`,
       '',
       `<b>Title:</b> ${escapeHtml(submission.title)}`,
       `<b>Original language:</b> ${escapeHtml(submission.original_language)}`,
