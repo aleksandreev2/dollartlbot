@@ -169,11 +169,20 @@ export async function storeSubmissionCover(
   });
 
   const now = new Date().toISOString();
-  await env.DB.prepare(`
-    UPDATE submissions
-    SET cover_key = ?, cover_source = ?, cover_mime = ?, cover_updated_at = ?, updated_at = ?
-    WHERE id = ?
-  `).bind(key, source, cover.mime, now, now, submissionId).run();
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE submissions
+      SET cover_key = ?, cover_source = ?, cover_mime = ?, cover_updated_at = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(key, source, cover.mime, now, now, submissionId),
+    env.DB.prepare(`
+      INSERT INTO cover_versions (submission_id, r2_key, mime_type, source, created_at)
+      SELECT ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1 FROM cover_versions WHERE submission_id = ? AND r2_key = ?
+      )
+    `).bind(submissionId, key, cover.mime, source, now, submissionId, key),
+  ]);
 
   // Deliberately keep previous immutable R2 objects. cover_versions is our tiny
   // rollback/self-heal history. Explicit admin removal deletes the whole history.
