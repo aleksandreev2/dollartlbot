@@ -22,12 +22,29 @@ export interface TelegramDocument {
   file_size?: number;
 }
 
+export interface TelegramPhotoSize {
+  file_id: string;
+  file_unique_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
+}
+
+export type TelegramMessageOrigin =
+  | { type: 'channel'; date?: number; chat: TelegramChat; message_id: number; author_signature?: string }
+  | { type: string; date?: number; [key: string]: unknown };
+
 export interface TelegramMessage {
   message_id: number;
   from?: TelegramUser;
   chat: TelegramChat;
   text?: string;
+  caption?: string;
   document?: TelegramDocument;
+  photo?: TelegramPhotoSize[];
+  is_automatic_forward?: boolean;
+  forward_origin?: TelegramMessageOrigin;
+  reply_to_message?: TelegramMessage;
 }
 
 export interface TelegramCallbackQuery {
@@ -66,6 +83,7 @@ export interface TelegramChatMemberUpdated {
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
+  channel_post?: TelegramMessage;
   callback_query?: TelegramCallbackQuery;
   chat_member?: TelegramChatMemberUpdated;
 }
@@ -112,6 +130,13 @@ function normalizeChatId(chatId: number | string): number | string {
   return chatId;
 }
 
+type SendOptions = {
+  reply_markup?: InlineKeyboardMarkup;
+  disable_web_page_preview?: boolean;
+  disable_notification?: boolean;
+  reply_to_message_id?: number;
+};
+
 export class TelegramClient {
   private readonly baseUrl: string;
 
@@ -138,19 +163,14 @@ export class TelegramClient {
     return body.result;
   }
 
-  sendMessage(
-    chatId: number | string,
-    text: string,
-    options: {
-      reply_markup?: InlineKeyboardMarkup;
-      disable_web_page_preview?: boolean;
-    } = {},
-  ): Promise<TelegramMessage> {
+  sendMessage(chatId: number | string, text: string, options: SendOptions = {}): Promise<TelegramMessage> {
     return this.call<TelegramMessage>('sendMessage', {
       chat_id: normalizeChatId(chatId),
       text: normalizeHtml(text),
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: options.disable_web_page_preview ?? true },
+      ...(options.disable_notification ? { disable_notification: true } : {}),
+      ...(options.reply_to_message_id ? { reply_parameters: { message_id: options.reply_to_message_id } } : {}),
       ...(options.reply_markup ? { reply_markup: options.reply_markup } : {}),
     });
   }
@@ -159,10 +179,7 @@ export class TelegramClient {
     chatId: number | string,
     messageId: number,
     text: string,
-    options: {
-      reply_markup?: InlineKeyboardMarkup;
-      disable_web_page_preview?: boolean;
-    } = {},
+    options: { reply_markup?: InlineKeyboardMarkup; disable_web_page_preview?: boolean } = {},
   ): Promise<TelegramMessage | boolean> {
     return this.call<TelegramMessage | boolean>('editMessageText', {
       chat_id: normalizeChatId(chatId),
@@ -178,11 +195,15 @@ export class TelegramClient {
     chatId: number | string,
     fileId: string,
     caption?: string,
+    options: SendOptions = {},
   ): Promise<TelegramMessage> {
     return this.call<TelegramMessage>('sendDocument', {
       chat_id: normalizeChatId(chatId),
       document: fileId,
       ...(caption ? { caption: normalizeHtml(caption), parse_mode: 'HTML' } : {}),
+      ...(options.disable_notification ? { disable_notification: true } : {}),
+      ...(options.reply_to_message_id ? { reply_parameters: { message_id: options.reply_to_message_id } } : {}),
+      ...(options.reply_markup ? { reply_markup: options.reply_markup } : {}),
     });
   }
 
@@ -190,26 +211,45 @@ export class TelegramClient {
     chatId: number | string,
     file: File,
     caption?: string,
+    options: SendOptions = {},
   ): Promise<TelegramMessage> {
+    return this.uploadFile<TelegramMessage>('sendDocument', chatId, 'document', file, caption, options);
+  }
+
+  async sendPhotoUpload(
+    chatId: number | string,
+    file: File,
+    caption?: string,
+    options: SendOptions = {},
+  ): Promise<TelegramMessage> {
+    return this.uploadFile<TelegramMessage>('sendPhoto', chatId, 'photo', file, caption, options);
+  }
+
+  private async uploadFile<T>(
+    method: 'sendDocument' | 'sendPhoto',
+    chatId: number | string,
+    fieldName: 'document' | 'photo',
+    file: File,
+    caption?: string,
+    options: SendOptions = {},
+  ): Promise<T> {
     const form = new FormData();
     form.set('chat_id', String(normalizeChatId(chatId)));
-    form.set('document', file, file.name || 'document.bin');
+    form.set(fieldName, file, file.name || (fieldName === 'photo' ? 'image.jpg' : 'document.bin'));
     if (caption) {
       form.set('caption', normalizeHtml(caption));
       form.set('parse_mode', 'HTML');
     }
+    if (options.disable_notification) form.set('disable_notification', 'true');
+    if (options.reply_to_message_id) {
+      form.set('reply_parameters', JSON.stringify({ message_id: options.reply_to_message_id }));
+    }
+    if (options.reply_markup) form.set('reply_markup', JSON.stringify(options.reply_markup));
 
-    const response = await fetch(`${this.baseUrl}/sendDocument`, {
-      method: 'POST',
-      body: form,
-    });
-    const body = (await response.json()) as TelegramApiEnvelope<TelegramMessage>;
+    const response = await fetch(`${this.baseUrl}/${method}`, { method: 'POST', body: form });
+    const body = (await response.json()) as TelegramApiEnvelope<T>;
     if (!response.ok || !body.ok || body.result === undefined) {
-      throw new TelegramApiError(
-        'sendDocument',
-        body.description ?? `HTTP ${response.status}`,
-        body.error_code ?? response.status,
-      );
+      throw new TelegramApiError(method, body.description ?? `HTTP ${response.status}`, body.error_code ?? response.status);
     }
     return body.result;
   }
@@ -240,10 +280,7 @@ export class TelegramClient {
     });
   }
 
-  createChatInviteLink(
-    chatId: number | string,
-    name?: string,
-  ): Promise<TelegramChatInviteLink> {
+  createChatInviteLink(chatId: number | string, name?: string): Promise<TelegramChatInviteLink> {
     return this.call<TelegramChatInviteLink>('createChatInviteLink', {
       chat_id: normalizeChatId(chatId),
       ...(name ? { name: name.slice(0, 32) } : {}),
