@@ -1,35 +1,19 @@
-.dtl-country-flag{display:inline-block;flex:0 0 auto;width:22px;height:15px;border:1px solid rgba(15,15,15,.12);border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.08);vertical-align:-2px;overflow:hidden;background:#eee}
-.dtl-country-flag.flag-kr{background:radial-gradient(circle at 50% 42%,#cd2e3a 0 24%,#0047a0 25% 46%,transparent 47%),#fff}
-.dtl-country-flag.flag-jp{background:radial-gradient(circle at 50% 50%,#bc002d 0 34%,transparent 35%),#fff}
-.dtl-country-flag.flag-cn{background:radial-gradient(circle at 27% 32%,#ffde00 0 12%,transparent 13%),#de2910}
-.dtl-country-flag.flag-gb{background:linear-gradient(90deg,transparent 42%,#fff 42% 58%,transparent 58%),linear-gradient(transparent 36%,#fff 36% 64%,transparent 64%),linear-gradient(90deg,transparent 46%,#c8102e 46% 54%,transparent 54%),linear-gradient(transparent 42%,#c8102e 42% 58%,transparent 58%),#21468b}
-.dtl-country-flag.flag-ru{background:linear-gradient(#fff 0 33.33%,#1c57a7 33.33% 66.66%,#d52b1e 66.66%)}
-.dtl-country-flag.flag-es{background:linear-gradient(#aa151b 0 25%,#f1bf00 25% 75%,#aa151b 75%)}
-.dtl-country-flag.flag-pt{background:linear-gradient(90deg,#046a38 0 40%,#da291c 40%)}
-.dtl-country-flag.flag-id{background:linear-gradient(#ce1126 0 50%,#fff 50%)}
-.dtl-country-flag.flag-vn{background:radial-gradient(circle at 50% 50%,#ffcd00 0 13%,transparent 14%),#da251d}
-.dtl-country-flag.flag-fr{background:linear-gradient(90deg,#0055a4 0 33.33%,#fff 33.33% 66.66%,#ef4135 66.66%)}
-.dtl-country-flag.flag-de{background:linear-gradient(#000 0 33.33%,#dd0000 33.33% 66.66%,#ffce00 66.66%)}
-.dtl-country-flag.flag-in{background:radial-gradient(circle at 50% 50%,#1a5dab 0 8%,transparent 9%),linear-gradient(#ff9933 0 33.33%,#fff 33.33% 66.66%,#138808 66.66%)}
-.dtl-country-flag.flag-ph{background:linear-gradient(#0038a8 0 50%,#ce1126 50%)}
+/* Home v2 owns release presentation only. Language artwork is centralized in card-upgrade. */
 .language-picker-flag{display:none!important}
-#sheetRoot [data-lang]::before{content:"";display:block;flex:0 0 auto;width:24px;height:16px;border:1px solid rgba(15,15,15,.12);border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.08);background:#eee}
-#sheetRoot [data-lang="en"]::before{background:linear-gradient(90deg,transparent 42%,#fff 42% 58%,transparent 58%),linear-gradient(transparent 36%,#fff 36% 64%,transparent 64%),linear-gradient(90deg,transparent 46%,#c8102e 46% 54%,transparent 54%),linear-gradient(transparent 42%,#c8102e 42% 58%,transparent 58%),#21468b}
-#sheetRoot [data-lang="es"]::before{background:linear-gradient(#aa151b 0 25%,#f1bf00 25% 75%,#aa151b 75%)}
-#sheetRoot [data-lang="fil"]::before{background:linear-gradient(#0038a8 0 50%,#ce1126 50%)}
-#sheetRoot [data-lang="hi"]::before{background:radial-gradient(circle at 50% 50%,#1a5dab 0 8%,transparent 9%),linear-gradient(#ff9933 0 33.33%,#fff 33.33% 66.66%,#138808 66.66%)}
-#sheetRoot [data-lang="pt"]::before{background:linear-gradient(90deg,#046a38 0 40%,#da291c 40%)}
-#sheetRoot [data-lang="id"]::before{background:linear-gradient(#ce1126 0 50%,#fff 50%)}
-#sheetRoot [data-lang="vi"]::before{background:radial-gradient(circle at 50% 50%,#ffcd00 0 13%,transparent 14%),#da251d}
-#sheetRoot [data-lang="fr"]::before{background:linear-gradient(90deg,#0055a4 0 33.33%,#fff 33.33% 66.66%,#ef4135 66.66%)}
-#sheetRoot [data-lang="de"]::before{background:linear-gradient(#000 0 33.33%,#dd0000 33.33% 66.66%,#ffce00 66.66%)}
-#sheetRoot [data-lang="ru"]::before{background:linear-gradient(#fff 0 33.33%,#1c57a7 33.33% 66.66%,#d52b1e 66.66%)}
+#sheetRoot [data-lang]::before{content:none!important;display:none!important}
+#sheetRoot [data-lang] .language-picker-circle-flag{width:22px;height:22px;flex:0 0 22px;border-radius:999px;box-shadow:0 0 0 1px rgba(20,20,20,.05),0 1px 3px rgba(20,20,20,.08)}
 
 /* Keep the source -> target language indicator visually centered and use the circular Lucide glyph. */
 .language-arrow-icon{width:16px!important;height:16px!important;color:#aaa399;stroke-width:1.65!important;vertical-align:-3px}
 .novel-meta>span:has(.language-arrow-icon){display:grid;place-items:center;line-height:1}
 .novel-card-main:not(:has(.progress-block)){justify-content:center}
 .novel-card-main:not(:has(.progress-block)) .novel-status-row{margin-top:12px;padding-top:0}
+
+/* A compact Telegram Desktop width is still a mobile-style column. Do not squeeze
+   My Requests into a two-column dashboard until each preview can stay readable. */
+@media (max-width:899px){
+  .page .simple-list{display:block!important;grid-template-columns:none!important}
+}
 
 .dtl-releases-section .section-header{align-items:flex-end}
 .dtl-releases-copy{min-width:0}
