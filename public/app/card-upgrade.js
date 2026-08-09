@@ -35,7 +35,8 @@
     img.src = `${FLAG_BASE}/${country}.svg`;
     img.alt = '';
     img.decoding = 'async';
-    img.loading = 'eager';
+    img.loading = 'lazy';
+    img.fetchPriority = 'low';
     img.referrerPolicy = 'no-referrer';
     img.addEventListener('error', () => img.remove(), { once:true });
     return img;
@@ -156,7 +157,8 @@
     });
   }
 
-  new MutationObserver(schedule).observe(document.documentElement, { childList:true, subtree:true, characterData:true });
+  const patchRoot = document.getElementById('viewRoot') || document.body;
+  new MutationObserver(schedule).observe(patchRoot, { childList:true, subtree:true });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once:true });
   else schedule();
 })();
