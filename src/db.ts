@@ -1,5 +1,12 @@
 import type { TelegramUser } from './telegram';
-import type { FormStep, SessionRow, SubmissionDraft, SubmissionRow, UserRow } from './domain';
+import {
+  ABSOLUTE_MAX_CHAPTERS,
+  type FormStep,
+  type SessionRow,
+  type SubmissionDraft,
+  type SubmissionRow,
+  type UserRow,
+} from './domain';
 
 export async function monthlySubmissionCount(env: Env, userId: number): Promise<number> {
   const row = await env.DB.prepare(`
@@ -110,6 +117,7 @@ export function isCompleteDraft(draft: SubmissionDraft): draft is Required<
     draft.title &&
       draft.original_language &&
       draft.chapter_count &&
+      draft.chapter_count <= ABSOLUTE_MAX_CHAPTERS &&
       draft.publication_status &&
       draft.raw_file_id &&
       draft.genres_tags &&
