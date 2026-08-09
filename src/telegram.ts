@@ -47,6 +47,7 @@ export interface InlineKeyboardButton {
   text: string;
   callback_data?: string;
   url?: string;
+  web_app?: { url: string };
 }
 
 export interface InlineKeyboardMarkup {
@@ -156,6 +157,34 @@ export class TelegramClient {
       document: fileId,
       ...(caption ? { caption: normalizeHtml(caption), parse_mode: 'HTML' } : {}),
     });
+  }
+
+  async sendDocumentUpload(
+    chatId: number | string,
+    file: File,
+    caption?: string,
+  ): Promise<TelegramMessage> {
+    const form = new FormData();
+    form.set('chat_id', String(normalizeChatId(chatId)));
+    form.set('document', file, file.name || 'document.bin');
+    if (caption) {
+      form.set('caption', normalizeHtml(caption));
+      form.set('parse_mode', 'HTML');
+    }
+
+    const response = await fetch(`${this.baseUrl}/sendDocument`, {
+      method: 'POST',
+      body: form,
+    });
+    const body = (await response.json()) as TelegramApiEnvelope<TelegramMessage>;
+    if (!response.ok || !body.ok || body.result === undefined) {
+      throw new TelegramApiError(
+        'sendDocument',
+        body.description ?? `HTTP ${response.status}`,
+        body.error_code ?? response.status,
+      );
+    }
+    return body.result;
   }
 
   answerCallbackQuery(callbackQueryId: string, text?: string): Promise<boolean> {
