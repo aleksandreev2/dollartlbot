@@ -1,0 +1,284 @@
+import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
+
+const MAX_ADMIN_COVER_BYTES = 8 * 1024 * 1024;
+const MAX_AUTO_EXTRACT_EPUB_BYTES = 20 * 1024 * 1024;
+const ALLOWED_COVER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+
+type ZipEntry = {
+  name: string;
+  method: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localOffset: number;
+};
+
+export type ExtractedCover = {
+  bytes: Uint8Array;
+  mime: string;
+  extension: string;
+};
+
+export async function handleCoverRequest(request: Request, env: Env): Promise<Response | null> {
+  const url = new URL(request.url);
+
+  const mediaMatch = /^\/media\/covers\/(\d+)$/.exec(url.pathname);
+  if (request.method === 'GET' && mediaMatch) {
+    const id = Number(mediaMatch[1]);
+    const row = await env.DB.prepare(
+      'SELECT cover_key, cover_mime FROM submissions WHERE id = ?',
+    ).bind(id).first<{ cover_key: string | null; cover_mime: string | null }>();
+    if (!row?.cover_key) return new Response('Not found', { status: 404 });
+
+    const object = await env.COVERS.get(row.cover_key, { onlyIf: request.headers });
+    if (!object) return new Response('Not found', { status: 404 });
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set('etag', object.httpEtag);
+    headers.set('content-type', row.cover_mime || headers.get('content-type') || 'image/jpeg');
+    headers.set('cache-control', 'public, max-age=300, stale-while-revalidate=86400');
+    return new Response('body' in object ? object.body : undefined, {
+      status: 'body' in object ? 200 : 304,
+      headers,
+    });
+  }
+
+  const adminMatch = /^\/api\/app\/admin\/cover\/(\d+)$/.exec(url.pathname);
+  if (adminMatch && (request.method === 'POST' || request.method === 'DELETE')) {
+    const auth = await authenticateMiniAppRequest(request, env);
+    if (auth instanceof Response) return auth;
+    if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
+
+    const submissionId = Number(adminMatch[1]);
+    const exists = await env.DB.prepare('SELECT id FROM submissions WHERE id = ?')
+      .bind(submissionId)
+      .first<{ id: number }>();
+    if (!exists) return miniAppJsonError('not_found', 'Request not found.', 404);
+
+    if (request.method === 'DELETE') {
+      await removeSubmissionCover(env, submissionId);
+      return miniAppJson({ ok: true, cover_url: null });
+    }
+
+    const form = await request.formData();
+    const image = form.get('cover');
+    if (!(image instanceof File) || image.size <= 0) {
+      return miniAppJsonError('cover_required', 'Choose an image file.', 400);
+    }
+    if (image.size > MAX_ADMIN_COVER_BYTES) {
+      return miniAppJsonError('cover_too_large', 'Cover images must be 8 MB or smaller.', 413);
+    }
+    const mime = normalizeImageMime(image.type, image.name);
+    if (!ALLOWED_COVER_TYPES.has(mime)) {
+      return miniAppJsonError('unsupported_cover', 'Use JPEG, PNG, WebP or AVIF.', 400);
+    }
+
+    const bytes = new Uint8Array(await image.arrayBuffer());
+    await storeSubmissionCover(env, submissionId, {
+      bytes,
+      mime,
+      extension: extensionForMime(mime),
+    }, 'admin');
+    return miniAppJson({ ok: true, cover_url: `/media/covers/${submissionId}` });
+  }
+
+  return null;
+}
+
+export async function maybeExtractEpubCover(file: File): Promise<ExtractedCover | null> {
+  if (!file.name.toLowerCase().endsWith('.epub')) return null;
+  if (file.size > MAX_AUTO_EXTRACT_EPUB_BYTES) return null;
+
+  const buffer = await file.arrayBuffer();
+  const entries = readZipDirectory(buffer);
+  if (!entries.length) return null;
+
+  const container = entries.find((entry) => entry.name.toLowerCase() === 'meta-inf/container.xml');
+  let opfPath = '';
+  if (container) {
+    const xml = await extractZipText(buffer, container);
+    opfPath = matchAttribute(xml, /<rootfile\b[^>]*\bfull-path\s*=\s*["']([^"']+)["']/i);
+  }
+  if (!opfPath) opfPath = entries.find((entry) => /\.opf$/i.test(entry.name))?.name ?? '';
+  if (!opfPath) return null;
+
+  const opfEntry = findEntry(entries, opfPath);
+  if (!opfEntry) return null;
+  const opf = await extractZipText(buffer, opfEntry);
+  const manifest = parseManifestItems(opf);
+
+  let coverItem = manifest.find((item) => /(^|\s)cover-image(\s|$)/i.test(item.properties));
+  if (!coverItem) {
+    const coverId = matchAttribute(opf, /<meta\b[^>]*\bname\s*=\s*["']cover["'][^>]*\bcontent\s*=\s*["']([^"']+)["']/i)
+      || matchAttribute(opf, /<meta\b[^>]*\bcontent\s*=\s*["']([^"']+)["'][^>]*\bname\s*=\s*["']cover["']/i);
+    if (coverId) coverItem = manifest.find((item) => item.id === coverId);
+  }
+  if (!coverItem) {
+    coverItem = manifest.find((item) => /cover/i.test(item.id) && /^image\//i.test(item.mediaType));
+  }
+  if (!coverItem || !/^image\//i.test(coverItem.mediaType)) return null;
+
+  const coverPath = resolveZipPath(opfPath, coverItem.href);
+  const coverEntry = findEntry(entries, coverPath);
+  if (!coverEntry || coverEntry.uncompressedSize > MAX_ADMIN_COVER_BYTES) return null;
+  const bytes = await extractZipBytes(buffer, coverEntry);
+  const mime = normalizeImageMime(coverItem.mediaType, coverPath);
+  if (!ALLOWED_COVER_TYPES.has(mime)) return null;
+
+  return { bytes, mime, extension: extensionForMime(mime) };
+}
+
+export async function storeSubmissionCover(
+  env: Env,
+  submissionId: number,
+  cover: ExtractedCover,
+  source: 'epub' | 'admin',
+): Promise<void> {
+  const old = await env.DB.prepare('SELECT cover_key FROM submissions WHERE id = ?')
+    .bind(submissionId)
+    .first<{ cover_key: string | null }>();
+  const key = `covers/${submissionId}/${crypto.randomUUID()}.${cover.extension}`;
+  await env.COVERS.put(key, cover.bytes, {
+    httpMetadata: {
+      contentType: cover.mime,
+      cacheControl: 'public, max-age=31536000, immutable',
+    },
+    customMetadata: { submissionId: String(submissionId), source },
+  });
+
+  const now = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE submissions
+    SET cover_key = ?, cover_source = ?, cover_mime = ?, cover_updated_at = ?, updated_at = ?
+    WHERE id = ?
+  `).bind(key, source, cover.mime, now, now, submissionId).run();
+
+  if (old?.cover_key && old.cover_key !== key) {
+    await env.COVERS.delete(old.cover_key).catch(() => undefined);
+  }
+}
+
+export async function removeSubmissionCover(env: Env, submissionId: number): Promise<void> {
+  const row = await env.DB.prepare('SELECT cover_key FROM submissions WHERE id = ?')
+    .bind(submissionId)
+    .first<{ cover_key: string | null }>();
+  await env.DB.prepare(`
+    UPDATE submissions
+    SET cover_key = NULL, cover_source = NULL, cover_mime = NULL,
+        cover_updated_at = NULL, updated_at = ?
+    WHERE id = ?
+  `).bind(new Date().toISOString(), submissionId).run();
+  if (row?.cover_key) await env.COVERS.delete(row.cover_key).catch(() => undefined);
+}
+
+function readZipDirectory(buffer: ArrayBuffer): ZipEntry[] {
+  const view = new DataView(buffer);
+  let eocd = -1;
+  for (let i = Math.max(0, buffer.byteLength - 65_557); i <= buffer.byteLength - 22; i += 1) {
+    if (view.getUint32(i, true) === 0x06054b50) eocd = i;
+  }
+  if (eocd < 0) return [];
+
+  const count = view.getUint16(eocd + 10, true);
+  let offset = view.getUint32(eocd + 16, true);
+  const decoder = new TextDecoder();
+  const entries: ZipEntry[] = [];
+  for (let n = 0; n < count && offset + 46 <= buffer.byteLength; n += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) break;
+    const method = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLen = view.getUint16(offset + 28, true);
+    const extraLen = view.getUint16(offset + 30, true);
+    const commentLen = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const name = decoder.decode(new Uint8Array(buffer, offset + 46, nameLen));
+    entries.push({ name, method, compressedSize, uncompressedSize, localOffset });
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+async function extractZipText(buffer: ArrayBuffer, entry: ZipEntry): Promise<string> {
+  return new TextDecoder('utf-8').decode(await extractZipBytes(buffer, entry));
+}
+
+async function extractZipBytes(buffer: ArrayBuffer, entry: ZipEntry): Promise<Uint8Array> {
+  const view = new DataView(buffer);
+  if (view.getUint32(entry.localOffset, true) !== 0x04034b50) throw new Error('Bad ZIP entry');
+  const nameLen = view.getUint16(entry.localOffset + 26, true);
+  const extraLen = view.getUint16(entry.localOffset + 28, true);
+  const start = entry.localOffset + 30 + nameLen + extraLen;
+  const bytes = new Uint8Array(buffer, start, entry.compressedSize);
+  if (entry.method === 0) return new Uint8Array(bytes);
+  if (entry.method !== 8 || typeof DecompressionStream === 'undefined') throw new Error('Unsupported ZIP compression');
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function parseManifestItems(opf: string): Array<{ id: string; href: string; mediaType: string; properties: string }> {
+  const items: Array<{ id: string; href: string; mediaType: string; properties: string }> = [];
+  const re = /<item\b([^>]+?)\/?\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(opf))) {
+    const attrs = match[1];
+    const id = attr(attrs, 'id');
+    const href = attr(attrs, 'href');
+    const mediaType = attr(attrs, 'media-type');
+    const properties = attr(attrs, 'properties');
+    if (id && href) items.push({ id, href, mediaType, properties });
+  }
+  return items;
+}
+
+function attr(source: string, name: string): string {
+  const match = new RegExp(`\\b${name.replace('-', '\\-')}\\s*=\\s*["']([^"']+)["']`, 'i').exec(source);
+  return decodeXml(match?.[1] ?? '');
+}
+
+function matchAttribute(source: string, pattern: RegExp): string {
+  return decodeXml(pattern.exec(source)?.[1] ?? '');
+}
+
+function decodeXml(value: string): string {
+  return value
+    .replaceAll('&amp;', '&')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>');
+}
+
+function resolveZipPath(baseFile: string, href: string): string {
+  const decoded = decodeURIComponent(href.split('#')[0]);
+  const baseParts = baseFile.split('/');
+  baseParts.pop();
+  for (const part of decoded.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') baseParts.pop();
+    else baseParts.push(part);
+  }
+  return baseParts.join('/');
+}
+
+function findEntry(entries: ZipEntry[], path: string): ZipEntry | undefined {
+  const normalized = path.replace(/^\.\//, '').toLowerCase();
+  return entries.find((entry) => entry.name.replace(/^\.\//, '').toLowerCase() === normalized);
+}
+
+function normalizeImageMime(mime: string, name: string): string {
+  const lower = (mime || '').toLowerCase().split(';')[0].trim();
+  if (ALLOWED_COVER_TYPES.has(lower)) return lower;
+  const ext = name.toLowerCase().split('.').pop();
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'avif') return 'image/avif';
+  return lower;
+}
+
+function extensionForMime(mime: string): string {
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  if (mime === 'image/avif') return 'avif';
+  return 'jpg';
+}
