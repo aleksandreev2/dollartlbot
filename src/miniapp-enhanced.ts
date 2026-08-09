@@ -30,6 +30,13 @@ export async function handleEnhancedMiniAppRequest(
 
   const auth = await authenticateMiniAppRequest(request, env);
   if (auth instanceof Response) return auth;
+  if (!auth.dbUser?.adult_confirmed_at || !auth.dbUser?.miniapp_onboarded_at) {
+    return miniAppJsonError(
+      'onboarding_required',
+      'Complete the Mini App welcome guide and age confirmation before submitting a novel.',
+      403,
+    );
+  }
   const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
 
   const contentLength = Number(request.headers.get('content-length') ?? '0');
