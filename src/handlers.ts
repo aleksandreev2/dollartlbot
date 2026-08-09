@@ -25,6 +25,7 @@ import { beginSubmission, finalizeSubmission } from './submissions';
 import { handleAdminCallback, showAdminHome } from './admin';
 import { disablePromoReminders } from './engagement';
 import { showMyRequests, showPublicQueue } from './queue';
+import { handleReferralBotStart } from './referrals';
 import {
   sendConfirmation,
   sendGuide,
@@ -112,8 +113,17 @@ async function handleMessage(
   }
 
   if (text === '/start' || text?.startsWith('/start ')) {
+    const startParam = text.startsWith('/start ') ? text.slice('/start '.length).trim() : '';
+    if (startParam) {
+      const handledReferral = await handleReferralBotStart(startParam, from.id, locale, env, telegram);
+      if (handledReferral) {
+        if (!user?.language_selected) await sendLanguagePicker(from.id, locale, telegram);
+        return;
+      }
+    }
+
     if (!user?.language_selected) {
-      await sendLanguagePicker(from.id, 'en', telegram);
+      await sendLanguagePicker(from.id, locale, telegram);
     } else {
       await sendMainMenu(from.id, locale, telegram);
     }
@@ -126,7 +136,7 @@ async function handleMessage(
   }
 
   if (!user?.language_selected) {
-    await sendLanguagePicker(from.id, 'en', telegram);
+    await sendLanguagePicker(from.id, locale, telegram);
     return;
   }
 
