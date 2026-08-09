@@ -61,6 +61,8 @@ export type SubmissionRow = {
   plan: 'free' | 'subscriber';
   status: string;
   slot_returned: number;
+  admin_summary_sent: number;
+  admin_file_sent: number;
 };
 
 export type SubscriptionState = {
