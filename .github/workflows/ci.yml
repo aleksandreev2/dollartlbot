@@ -44,9 +44,9 @@ jobs:
           node --check public/app/i18n-wizard.js
           node --check public/app/i18n-runtime-v2.js
           node --check public/app/language-display-fix.js
+          node --check public/app/content-normalizer.js
           node --check public/app/card-upgrade.js
           node --check public/app/interaction-upgrade.js
-          node --check public/app/arrow-upgrade.js
           node --check public/app/cover-ui.js
           node --check public/app/cover-reliability.js
           node --check public/app/referrals-ui.js
@@ -78,6 +78,7 @@ jobs:
           test -f public/app/notifications-ui.css
           test -f public/app/i18n-runtime-v2.js
           test -f public/app/language-switch.css
+          test -f public/app/content-normalizer.js
           test -f public/app/home-v2.js
           test -f public/app/home-v2.css
           grep -q '/app/desktop-v2.css' public/app/index.html
@@ -90,6 +91,7 @@ jobs:
           grep -q '/app/publication-management.css' public/app/index.html
           grep -q '/app/i18n-runtime-v2.js' public/app/index.html
           grep -q '/app/language-switch.css' public/app/index.html
+          grep -q '/app/content-normalizer.js' public/app/index.html
           grep -q '/app/home-v2.js' public/app/index.html
           grep -q '/app/home-v2.css' public/app/index.html
           test -f migrations/0008_admin_publishing_notifications.sql
