@@ -19,6 +19,7 @@ jobs:
         run: |
           node --check public/app/app.js
           node --check public/app/icons.js
+          node --check public/app/locale-sync.js
           node --check public/app/ui-polish.js
           node --check public/app/i18n-complete.js
           node --check public/app/i18n-inline-fixes.js
