@@ -5,6 +5,7 @@ const token = vars.TELEGRAM_BOT_TOKEN;
 const webhookUrl = vars.WEBHOOK_URL;
 const webhookSecret = vars.TELEGRAM_WEBHOOK_SECRET;
 const adminTelegramId = vars.ADMIN_TELEGRAM_ID;
+const miniAppUrl = vars.MINI_APP_URL || (webhookUrl ? `${webhookUrl.replace(/\/$/, '')}/app/` : '');
 
 if (!token || !webhookUrl || !webhookSecret) {
   console.error('Required: TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET in .dev.vars, plus WEBHOOK_URL in the environment.');
@@ -50,6 +51,16 @@ if (adminTelegramId && /^\d+$/.test(adminTelegramId) && adminTelegramId !== '0')
   });
 }
 
+if (miniAppUrl) {
+  await api('setChatMenuButton', {
+    menu_button: {
+      type: 'web_app',
+      text: 'Open Dollar TL',
+      web_app: { url: miniAppUrl },
+    },
+  });
+}
+
 await api('setWebhook', {
   url: `${webhookUrl.replace(/\/$/, '')}/webhook`,
   secret_token: webhookSecret,
@@ -57,4 +68,4 @@ await api('setWebhook', {
   drop_pending_updates: false,
 });
 
-console.log('Telegram commands and webhook configured.');
+console.log(`Telegram commands, Mini App menu button${miniAppUrl ? ` (${miniAppUrl})` : ''} and webhook configured.`);
