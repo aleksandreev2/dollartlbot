@@ -50,7 +50,9 @@
   function decorateFlags(){
     const selectors=['.novel-meta > span:first-child','.list-meta','.review-sub'];
     for(const el of document.querySelectorAll(selectors.join(','))){
-      if(el.querySelector('.dtl-country-flag')) continue;
+      // Circle Flags are the canonical language artwork. Never overwrite them
+      // with the old hand-drawn CSS flag fallback.
+      if(el.querySelector('.circle-language-flag,.dtl-country-flag')) continue;
       const raw=(el.textContent||'').replace(regionalFlags,'').replace(/^\s+/,'');
       const code=detectFlag(raw); if(!code) continue;
       el.textContent=raw;
