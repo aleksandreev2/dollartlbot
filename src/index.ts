@@ -1,8 +1,10 @@
 import { errorText, safeSecretEqual } from './db';
 import { handleUpdate } from './handlers';
+import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 
 const MAX_UPDATE_BYTES = 1_000_000;
+const PROCESSED_UPDATE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -58,5 +60,13 @@ export default {
       );
       return new Response('Temporary error', { status: 500 });
     }
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+    await retryPendingAdminDeliveries(env, telegram);
+
+    const cutoff = new Date(Date.now() - PROCESSED_UPDATE_RETENTION_MS).toISOString();
+    await env.DB.prepare('DELETE FROM processed_updates WHERE created_at < ?').bind(cutoff).run();
   },
 } satisfies ExportedHandler<Env>;
