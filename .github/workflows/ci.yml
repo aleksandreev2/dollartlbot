@@ -22,3 +22,4 @@ jobs:
           node --check public/app/ui-polish.js
           node --check public/app/i18n-complete.js
           node --check public/app/i18n-inline-fixes.js
+          node --check public/app/i18n-wizard.js
