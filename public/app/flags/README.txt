@@ -1,0 +1,1 @@
+Circle Flags artwork is loaded from the approved Circle Flags source at runtime. This directory is reserved for a future local mirror if needed.
