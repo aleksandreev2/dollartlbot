@@ -44,7 +44,7 @@ assertSameKeys(wizardMaps,'i18n-wizard maps','ru');
 
 const polish=read('public/app/ui-polish.js');
 const languageNames=evalObject(between(polish,'const languageNames = ','\n\n  const copy = '),'ui-polish languageNames');
-const polishCopy=evalObject(between(polish,'const copy = ','\n  const genericBlocked'),'ui-polish copy');
+const polishCopy=evalObject(between(polish,'const copy = ','\n\n  const prohibited = '),'ui-polish copy');
 assertLocales(languageNames,'ui-polish languageNames',true);
 assertLocales(polishCopy,'ui-polish copy',true);
 assertSameKeys(languageNames,'ui-polish languageNames','en');
