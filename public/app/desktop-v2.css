@@ -1,0 +1,20 @@
+/* True wide-screen mode. Narrow Telegram Desktop windows keep the compact layout. */
+@media (min-width:1200px){
+  html:not(.admin-console-active) body{background:linear-gradient(135deg,#f5f0e7,#fcfbf8 42%,#f6f1e8)}
+  html:not(.admin-console-active) .app-shell{width:min(1380px,calc(100vw - 40px));min-height:calc(100vh - 28px);margin:14px auto;border:1px solid rgba(52,42,27,.08);border-radius:26px;box-shadow:0 24px 70px rgba(39,28,9,.09);overflow:clip;padding-bottom:24px;background:#fcfbf8}
+  html:not(.admin-console-active) .topbar{height:86px;min-height:86px;border-radius:0;border-bottom:1px solid #eee7dc;padding:0 30px;position:sticky;top:0;z-index:20;background:rgba(252,251,248,.94);backdrop-filter:blur(14px)}
+  html:not(.admin-console-active) .view-root{max-width:none;width:auto;margin:0 22px 0 246px;min-height:calc(100vh - 125px)}
+  html:not(.admin-console-active) .page{max-width:1060px;margin:0 auto;padding:28px 30px 44px}
+  html:not(.admin-console-active) .bottom-nav{position:fixed;z-index:22;left:max(28px,calc(50vw - 670px));top:116px;bottom:auto;transform:none;width:210px;height:auto;display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid #e9e0d3;border-radius:18px;background:rgba(255,254,251,.96);box-shadow:0 16px 40px rgba(42,30,9,.08);overflow:visible}
+  html:not(.admin-console-active) .bottom-nav .nav-item{width:100%;min-height:48px;display:grid;grid-template-columns:30px minmax(0,1fr);align-items:center;justify-items:start;gap:8px;padding:7px 10px;border-radius:12px;text-align:left}
+  html:not(.admin-console-active) .bottom-nav .nav-item svg{width:20px;height:20px}
+  html:not(.admin-console-active) .bottom-nav .nav-item span{font-size:11px;white-space:nowrap}
+  html:not(.admin-console-active) .bottom-nav .nav-item.active{background:#fff4dc;color:#a66b0b}
+  html:not(.admin-console-active) .bottom-nav:before{content:'NAVIGATION';display:block;padding:7px 10px 5px;font:800 8px/1 system-ui;letter-spacing:.12em;color:#b4a993}
+  html:not(.admin-console-active) .detail-hero{grid-template-columns:180px minmax(0,1fr);gap:32px}
+  html:not(.admin-console-active) .detail-hero .novel-cover{width:180px}
+  html:not(.admin-console-active) .simple-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:transparent;border:0}
+  html:not(.admin-console-active) .simple-list .list-row{border:1px solid #e9e2d7;border-radius:14px;background:#fff}
+  html:not(.admin-console-active) .filter-row{position:sticky;top:90px;z-index:8;padding:8px 0;background:linear-gradient(#fcfbf8 78%,rgba(252,251,248,0))}
+}
+@media (min-width:1450px){html:not(.admin-console-active) .app-shell{width:min(1480px,calc(100vw - 56px))}html:not(.admin-console-active) .view-root{margin-left:270px;margin-right:34px}html:not(.admin-console-active) .bottom-nav{left:max(34px,calc(50vw - 720px));width:224px}}
