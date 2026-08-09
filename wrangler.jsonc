@@ -8,6 +8,9 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
   "vars": {
     "BOOSTY_SUBSCRIPTION_URL": "https://boosty.to/domnekromanta/purchase/4041120?ssource=DIRECT&share=subscription_link"
   },
