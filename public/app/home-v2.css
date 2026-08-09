@@ -12,18 +12,18 @@
 .dtl-country-flag.flag-de{background:linear-gradient(#000 0 33.33%,#dd0000 33.33% 66.66%,#ffce00 66.66%)}
 .dtl-country-flag.flag-in{background:radial-gradient(circle at 50% 50%,#1a5dab 0 8%,transparent 9%),linear-gradient(#ff9933 0 33.33%,#fff 33.33% 66.66%,#138808 66.66%)}
 .dtl-country-flag.flag-ph{background:linear-gradient(#0038a8 0 50%,#ce1126 50%)}
-.language-picker-flag{font-size:0!important;display:grid;place-items:center}
-.language-picker-flag::before{content:"";display:block;width:24px;height:16px;border:1px solid rgba(15,15,15,.12);border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.08);background:#eee}
-[data-lang="en"] .language-picker-flag::before{background:linear-gradient(90deg,transparent 42%,#fff 42% 58%,transparent 58%),linear-gradient(transparent 36%,#fff 36% 64%,transparent 64%),linear-gradient(90deg,transparent 46%,#c8102e 46% 54%,transparent 54%),linear-gradient(transparent 42%,#c8102e 42% 58%,transparent 58%),#21468b}
-[data-lang="es"] .language-picker-flag::before{background:linear-gradient(#aa151b 0 25%,#f1bf00 25% 75%,#aa151b 75%)}
-[data-lang="fil"] .language-picker-flag::before{background:linear-gradient(#0038a8 0 50%,#ce1126 50%)}
-[data-lang="hi"] .language-picker-flag::before{background:radial-gradient(circle at 50% 50%,#1a5dab 0 8%,transparent 9%),linear-gradient(#ff9933 0 33.33%,#fff 33.33% 66.66%,#138808 66.66%)}
-[data-lang="pt"] .language-picker-flag::before{background:linear-gradient(90deg,#046a38 0 40%,#da291c 40%)}
-[data-lang="id"] .language-picker-flag::before{background:linear-gradient(#ce1126 0 50%,#fff 50%)}
-[data-lang="vi"] .language-picker-flag::before{background:radial-gradient(circle at 50% 50%,#ffcd00 0 13%,transparent 14%),#da251d}
-[data-lang="fr"] .language-picker-flag::before{background:linear-gradient(90deg,#0055a4 0 33.33%,#fff 33.33% 66.66%,#ef4135 66.66%)}
-[data-lang="de"] .language-picker-flag::before{background:linear-gradient(#000 0 33.33%,#dd0000 33.33% 66.66%,#ffce00 66.66%)}
-[data-lang="ru"] .language-picker-flag::before{background:linear-gradient(#fff 0 33.33%,#1c57a7 33.33% 66.66%,#d52b1e 66.66%)}
+.language-picker-flag{display:none!important}
+#sheetRoot [data-lang]::before{content:"";display:block;flex:0 0 auto;width:24px;height:16px;border:1px solid rgba(15,15,15,.12);border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.08);background:#eee}
+#sheetRoot [data-lang="en"]::before{background:linear-gradient(90deg,transparent 42%,#fff 42% 58%,transparent 58%),linear-gradient(transparent 36%,#fff 36% 64%,transparent 64%),linear-gradient(90deg,transparent 46%,#c8102e 46% 54%,transparent 54%),linear-gradient(transparent 42%,#c8102e 42% 58%,transparent 58%),#21468b}
+#sheetRoot [data-lang="es"]::before{background:linear-gradient(#aa151b 0 25%,#f1bf00 25% 75%,#aa151b 75%)}
+#sheetRoot [data-lang="fil"]::before{background:linear-gradient(#0038a8 0 50%,#ce1126 50%)}
+#sheetRoot [data-lang="hi"]::before{background:radial-gradient(circle at 50% 50%,#1a5dab 0 8%,transparent 9%),linear-gradient(#ff9933 0 33.33%,#fff 33.33% 66.66%,#138808 66.66%)}
+#sheetRoot [data-lang="pt"]::before{background:linear-gradient(90deg,#046a38 0 40%,#da291c 40%)}
+#sheetRoot [data-lang="id"]::before{background:linear-gradient(#ce1126 0 50%,#fff 50%)}
+#sheetRoot [data-lang="vi"]::before{background:radial-gradient(circle at 50% 50%,#ffcd00 0 13%,transparent 14%),#da251d}
+#sheetRoot [data-lang="fr"]::before{background:linear-gradient(90deg,#0055a4 0 33.33%,#fff 33.33% 66.66%,#ef4135 66.66%)}
+#sheetRoot [data-lang="de"]::before{background:linear-gradient(#000 0 33.33%,#dd0000 33.33% 66.66%,#ffce00 66.66%)}
+#sheetRoot [data-lang="ru"]::before{background:linear-gradient(#fff 0 33.33%,#1c57a7 33.33% 66.66%,#d52b1e 66.66%)}
 .dtl-releases-section .section-header{align-items:flex-end}
 .dtl-releases-copy{min-width:0}
 .dtl-releases-copy .subtitle{margin-top:4px}
