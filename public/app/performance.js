@@ -9,6 +9,24 @@
   if (lowPower) root.classList.add('dtl-low-power');
   window.__DTL_LOW_POWER__ = lowPower;
 
+  // Several UI layers request Lucide refreshes after the same DOM render.
+  // Collapse them into a single scan per animation frame instead of scanning repeatedly.
+  const lucide = window.lucide;
+  if (lucide?.createIcons && !lucide.__dtlCreateIconsThrottled) {
+    const originalCreateIcons = lucide.createIcons.bind(lucide);
+    let iconRaf = 0;
+    let latestArgs = undefined;
+    lucide.createIcons = (args) => {
+      latestArgs = args;
+      if (iconRaf) return;
+      iconRaf = requestAnimationFrame(() => {
+        iconRaf = 0;
+        originalCreateIcons(latestArgs);
+      });
+    };
+    lucide.__dtlCreateIconsThrottled = true;
+  }
+
   const syncVisibility = () => {
     root.classList.toggle('dtl-background', document.hidden);
     window.dispatchEvent(new CustomEvent('dtl:visibility', { detail: { hidden: document.hidden } }));
