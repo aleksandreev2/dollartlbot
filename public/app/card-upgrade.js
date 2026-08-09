@@ -1,5 +1,5 @@
 (() => {
-  const FLAG_BASE = 'https://hatscripts.github.io/circle-flags/flags';
+  const FLAG_BASE = '/app/flags';
   const regionalFlags = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
   const countryByLanguage = {
     ko:'kr', ja:'jp', zh:'cn', en:'gb', ru:'ru', es:'es', pt:'pt', id:'id', vi:'vn', fr:'fr', de:'de', hi:'in', fil:'ph'
@@ -40,7 +40,6 @@
     img.decoding = 'async';
     img.loading = 'lazy';
     img.fetchPriority = 'low';
-    img.referrerPolicy = 'no-referrer';
     img.addEventListener('error', () => img.remove(), { once:true });
     return img;
   }
@@ -68,14 +67,26 @@
     host.dataset.circleFlagReady = '1';
   }
 
+  function enhanceLanguagePicker(root=document) {
+    root.querySelectorAll('[data-lang]').forEach(button => {
+      const code = String(button.dataset.lang || '').toLowerCase();
+      if (!countryByLanguage[code]) return;
+      if (button.querySelector('.circle-language-flag')) return;
+      stripEmojiFlags(button);
+      const old = button.querySelector('.language-picker-flag,.dtl-country-flag');
+      if (old) old.remove();
+      const img = flagImg(code, 'circle-language-flag language-picker-circle-flag');
+      if (img) button.prepend(img);
+    });
+  }
+
   function enhanceLanguageFlags(root=document) {
     root.querySelectorAll('.canonical-language[data-language-code]').forEach(el => {
       applyCircleFlag(el, el.dataset.languageCode);
     });
 
-    // The active translation row is rebuilt by several legacy polish layers.
-    // Normalize every language cell at the end so both source and target use
-    // the approved Circle Flags artwork, never emoji or hand-drawn CSS flags.
+    // Normalize every source/target language cell through one renderer so
+    // no later legacy layer can introduce emoji, globe or hand-drawn flags.
     root.querySelectorAll('.novel-meta > span').forEach(span => {
       const code = span.dataset.languageCode
         || span.querySelector?.('[data-language-code]')?.dataset.languageCode
@@ -83,6 +94,8 @@
       if (!code) return;
       applyCircleFlag(span, code);
     });
+
+    enhanceLanguagePicker(root);
   }
 
   function hashTitle(value='') {
@@ -188,8 +201,11 @@
     });
   }
 
-  const patchRoot = document.getElementById('viewRoot') || document.body;
-  new MutationObserver(schedule).observe(patchRoot, { childList:true, subtree:true });
+  const viewRoot = document.getElementById('viewRoot');
+  const sheetRoot = document.getElementById('sheetRoot');
+  if (viewRoot) new MutationObserver(schedule).observe(viewRoot, { childList:true, subtree:true });
+  if (sheetRoot) new MutationObserver(schedule).observe(sheetRoot, { childList:true, subtree:true });
+  document.addEventListener('dtl:localechange', schedule);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once:true });
   else schedule();
 })();
