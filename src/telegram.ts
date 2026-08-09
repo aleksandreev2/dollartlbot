@@ -72,6 +72,14 @@ export class TelegramApiError extends Error {
   }
 }
 
+function normalizeChatId(chatId: number | string): number | string {
+  if (typeof chatId === 'string' && /^-?\d+$/.test(chatId)) {
+    const numeric = Number(chatId);
+    if (Number.isSafeInteger(numeric)) return numeric;
+  }
+  return chatId;
+}
+
 export class TelegramClient {
   private readonly baseUrl: string;
 
@@ -107,10 +115,10 @@ export class TelegramClient {
     } = {},
   ): Promise<TelegramMessage> {
     return this.call<TelegramMessage>('sendMessage', {
-      chat_id: chatId,
+      chat_id: normalizeChatId(chatId),
       text,
       parse_mode: 'HTML',
-      disable_web_page_preview: options.disable_web_page_preview ?? true,
+      link_preview_options: { is_disabled: options.disable_web_page_preview ?? true },
       ...(options.reply_markup ? { reply_markup: options.reply_markup } : {}),
     });
   }
@@ -121,7 +129,7 @@ export class TelegramClient {
     caption?: string,
   ): Promise<TelegramMessage> {
     return this.call<TelegramMessage>('sendDocument', {
-      chat_id: chatId,
+      chat_id: normalizeChatId(chatId),
       document: fileId,
       ...(caption ? { caption, parse_mode: 'HTML' } : {}),
     });
@@ -140,7 +148,7 @@ export class TelegramClient {
     replyMarkup: InlineKeyboardMarkup = { inline_keyboard: [] },
   ): Promise<TelegramMessage | boolean> {
     return this.call<TelegramMessage | boolean>('editMessageReplyMarkup', {
-      chat_id: chatId,
+      chat_id: normalizeChatId(chatId),
       message_id: messageId,
       reply_markup: replyMarkup,
     });
@@ -148,7 +156,7 @@ export class TelegramClient {
 
   getChatMember(chatId: number | string, userId: number): Promise<Record<string, unknown>> {
     return this.call<Record<string, unknown>>('getChatMember', {
-      chat_id: chatId,
+      chat_id: normalizeChatId(chatId),
       user_id: userId,
     });
   }
