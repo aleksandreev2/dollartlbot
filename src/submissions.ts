@@ -186,7 +186,10 @@ export async function deliverSubmissionToAdmin(
       ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
       : FREE_MONTHLY_REQUEST_LIMIT;
     const quota = await getQuotaState(env, submission.user_id, baseLimit);
-    const referralSuffix = quota.referralBonus > 0 ? ` (base ${baseLimit} + referral ${quota.referralBonus})` : '';
+    const quotaLimit = quota.unlimited ? '∞' : String(quota.limit);
+    const referralSuffix = !quota.unlimited && quota.referralBonus > 0
+      ? ` (base ${baseLimit} + referral ${quota.referralBonus})`
+      : '';
 
     const summary = [
       `📚 <b>NEW NOVEL REQUEST #${submission.id}</b>`,
@@ -194,7 +197,7 @@ export async function deliverSubmissionToAdmin(
       `<b>User:</b> ${displayName} ${username}`,
       `<b>Telegram ID:</b> <code>${submission.user_id}</code>`,
       `<b>Plan:</b> ${submission.plan === 'subscriber' ? '⭐ Boosty Subscriber' : 'Free'}`,
-      `<b>Monthly usage:</b> ${quota.used} / ${quota.limit}${referralSuffix}`,
+      `<b>Monthly usage:</b> ${quota.used} / ${quotaLimit}${referralSuffix}`,
       '',
       `<b>Title:</b> ${escapeHtml(submission.title)}`,
       `<b>Original language:</b> ${escapeHtml(submission.original_language)}`,
