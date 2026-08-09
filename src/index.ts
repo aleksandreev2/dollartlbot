@@ -7,6 +7,7 @@ import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-
 import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
+import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handlePublishingRequest } from './publishing';
 import { handlePublishingV2Request } from './publishing-v2';
@@ -39,6 +40,11 @@ export default {
 
     const adminActionResponse = await handleAdminActionV2(request, env, apiTelegram);
     if (adminActionResponse) return adminActionResponse;
+
+    // Test/publish must be handled before V2 so the main channel post is sent
+    // without an inline keyboard; Telegram otherwise hides the native comments UI.
+    const publishingCommentsV3Response = await handlePublishingCommentsV3Request(request, env, apiTelegram, ctx);
+    if (publishingCommentsV3Response) return publishingCommentsV3Response;
 
     const publishingV2Response = await handlePublishingV2Request(request, env, apiTelegram, ctx);
     if (publishingV2Response) return publishingV2Response;
