@@ -1,6 +1,7 @@
 import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
 import { handleAdminUsersRequest } from './admin-users';
+import { handleCoverHealthRequest } from './cover-health';
 import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
 import { runDailyEngagement } from './engagement';
@@ -35,6 +36,9 @@ export default {
 
     const enhancedMiniAppResponse = await handleEnhancedMiniAppRequest(request, env, ctx);
     if (enhancedMiniAppResponse) return enhancedMiniAppResponse;
+
+    const coverHealthResponse = await handleCoverHealthRequest(request, env);
+    if (coverHealthResponse) return coverHealthResponse;
 
     const coverResponse = await handleCoverRequest(request, env);
     if (coverResponse) return coverResponse;
@@ -89,8 +93,8 @@ export default {
     if (Number.isFinite(contentLength) && contentLength > MAX_UPDATE_BYTES) return new Response('Payload too large', { status: 413 });
 
     let update: TelegramUpdate;
-    try { update = (await request.json()) as TelegramUpdate; }
-    catch { return new Response('Bad request', { status: 400 }); }
+    try { update = (await request.json()) as TelegramUpdate;
+    } catch { return new Response('Bad request', { status: 400 }); }
 
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     try {
