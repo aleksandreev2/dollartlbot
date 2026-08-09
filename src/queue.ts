@@ -17,6 +17,53 @@ type MyRequestRow = QueueListRow & {
   slot_returned: number;
 };
 
+type QueueOrderRow = { id: number; queue_position: number | null };
+export type QueuePositionMap = Map<number, number>;
+
+export async function getQueuePositionMap(env: Env): Promise<QueuePositionMap> {
+  const rows = await env.DB.prepare(`
+    SELECT id, queue_position
+    FROM submissions
+    WHERE status = 'accepted' AND queue_status = 'queued'
+    ORDER BY COALESCE(queue_position, 2147483647) ASC, id ASC
+  `).all<QueueOrderRow>();
+  const positions: QueuePositionMap = new Map();
+  rows.results.forEach((row, index) => positions.set(Number(row.id), index + 1));
+  return positions;
+}
+
+export async function getLiveQueuePosition(env: Env, submissionId: number): Promise<number | null> {
+  const positions = await getQueuePositionMap(env);
+  return positions.get(submissionId) ?? null;
+}
+
+export async function normalizeQueuePositions(env: Env): Promise<void> {
+  const rows = await env.DB.prepare(`
+    SELECT id, queue_position
+    FROM submissions
+    WHERE status = 'accepted' AND queue_status = 'queued'
+    ORDER BY COALESCE(queue_position, 2147483647) ASC, id ASC
+  `).all<QueueOrderRow>();
+  const now = new Date().toISOString();
+  const updates = rows.results
+    .map((row, index) => ({ id: Number(row.id), old: row.queue_position, next: index + 1 }))
+    .filter((row) => Number(row.old) !== row.next)
+    .map((row) => env.DB.prepare(
+      "UPDATE submissions SET queue_position = ?, updated_at = ? WHERE id = ? AND status = 'accepted' AND queue_status = 'queued'",
+    ).bind(row.next, now, row.id));
+  if (updates.length) await env.DB.batch(updates);
+}
+
+export function applyLiveQueuePosition<T extends { id: number; queue_status?: string | null; queue_position?: number | null }>(
+  row: T,
+  positions: QueuePositionMap,
+): T {
+  return {
+    ...row,
+    queue_position: row.queue_status === 'queued' ? (positions.get(Number(row.id)) ?? null) : null,
+  };
+}
+
 export async function showPublicQueue(
   chatId: number,
   locale: Locale,
@@ -88,22 +135,24 @@ export async function showMyRequests(
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.max(0, Math.min(page, totalPages - 1));
 
-  const rows = await env.DB.prepare(`
-    SELECT id, title, original_language, chapter_count, status, slot_returned,
-           queue_status, queue_position
-    FROM submissions
-    WHERE user_id = ?
-    ORDER BY id DESC
-    LIMIT ? OFFSET ?
-  `)
-    .bind(userId, PAGE_SIZE, safePage * PAGE_SIZE)
-    .all<MyRequestRow>();
+  const [rows, positions] = await Promise.all([
+    env.DB.prepare(`
+      SELECT id, title, original_language, chapter_count, status, slot_returned,
+             queue_status, queue_position
+      FROM submissions
+      WHERE user_id = ?
+      ORDER BY id DESC
+      LIMIT ? OFFSET ?
+    `).bind(userId, PAGE_SIZE, safePage * PAGE_SIZE).all<MyRequestRow>(),
+    getQueuePositionMap(env),
+  ]);
 
   const lines = [t(locale, 'myRequestsTitle'), ''];
   if (!rows.results.length) {
     lines.push(t(locale, 'myRequestsEmpty'));
   } else {
-    for (const row of rows.results) {
+    for (const raw of rows.results) {
+      const row = applyLiveQueuePosition(raw, positions);
       const state = requestState(locale, row);
       lines.push(`<b>#${row.id} · ${escapeHtml(row.title)}</b>`, `   ${state}`);
       if (row.status === 'accepted' && row.queue_status === 'queued' && row.queue_position) {
