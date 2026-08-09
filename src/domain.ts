@@ -13,6 +13,7 @@ export type FormStep =
   | 'confirm';
 
 export type PublicationStatus = 'ongoing' | 'completed';
+export type QueueStatus = 'queued' | 'in_progress' | 'completed';
 
 export type SubmissionDraft = {
   title?: string;
@@ -35,6 +36,9 @@ export type UserRow = {
   first_name: string | null;
   language: string;
   language_selected: number;
+  last_limit_reset_notified_month?: string | null;
+  last_promo_at?: string | null;
+  promo_opt_out?: number;
 };
 
 export type SessionRow = {
@@ -63,6 +67,11 @@ export type SubmissionRow = {
   slot_returned: number;
   admin_summary_sent: number;
   admin_file_sent: number;
+  queue_status: QueueStatus | null;
+  queue_position: number | null;
+  queued_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
 };
 
 export type SubscriptionState = {
