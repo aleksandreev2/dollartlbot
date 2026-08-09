@@ -23,3 +23,6 @@ jobs:
           node --check public/app/i18n-complete.js
           node --check public/app/i18n-inline-fixes.js
           node --check public/app/i18n-wizard.js
+          node --check public/app/language-display-fix.js
+      - name: Audit Mini App localization coverage
+        run: node scripts/audit-miniapp-i18n.mjs
