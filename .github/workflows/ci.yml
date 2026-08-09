@@ -25,6 +25,8 @@ jobs:
         run: node scripts/audit-epub-safety.mjs
       - name: Audit submission intake reliability
         run: node scripts/audit-submission-intake.mjs
+      - name: Audit Telegram transport reliability
+        run: node scripts/audit-telegram-transport.mjs
       - name: Validate D1 migrations locally
         run: npx wrangler d1 migrations apply DB --local
       - name: Check Mini App JavaScript syntax
