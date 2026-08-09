@@ -39,6 +39,8 @@ export type UserRow = {
   last_limit_reset_notified_month?: string | null;
   last_promo_at?: string | null;
   promo_opt_out?: number;
+  miniapp_onboarded_at?: string | null;
+  adult_confirmed_at?: string | null;
 };
 
 export type SessionRow = {
