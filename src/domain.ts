@@ -86,5 +86,5 @@ export const MAX_LONG = 450;
 
 export const FREE_MONTHLY_REQUEST_LIMIT = 1;
 export const SUBSCRIBER_MONTHLY_REQUEST_LIMIT = 5;
-export const FREE_MAX_CHAPTERS = 200;
-export const ABSOLUTE_MAX_CHAPTERS = 250;
+export const REGULAR_MAX_CHAPTERS = 250;
+export const MAX_REASONABLE_CHAPTERS = 10_000_000;
