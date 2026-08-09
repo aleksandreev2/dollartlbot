@@ -28,6 +28,39 @@ export async function sendLanguagePicker(
   });
 }
 
+export async function sendWelcome(
+  chatId: number,
+  locale: Locale,
+  telegram: TelegramClient,
+): Promise<void> {
+  await telegram.sendMessage(chatId, t(locale, 'welcomeText'), {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
+        [
+          { text: t(locale, 'queue'), callback_data: 'menu:queue' },
+          { text: t(locale, 'guide'), callback_data: 'menu:guide' },
+        ],
+      ],
+    },
+  });
+}
+
+export async function sendGuide(
+  chatId: number,
+  locale: Locale,
+  telegram: TelegramClient,
+): Promise<void> {
+  await telegram.sendMessage(chatId, t(locale, 'guideText'), {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
+        [{ text: '←', callback_data: 'menu:home' }],
+      ],
+    },
+  });
+}
+
 export async function sendMainMenu(
   chatId: number,
   locale: Locale,
@@ -38,10 +71,17 @@ export async function sendMainMenu(
       inline_keyboard: [
         [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
         [
-          { text: t(locale, 'rules'), callback_data: 'menu:rules' },
-          { text: t(locale, 'limit'), callback_data: 'menu:limit' },
+          { text: t(locale, 'queue'), callback_data: 'menu:queue' },
+          { text: t(locale, 'myRequests'), callback_data: 'menu:myrequests' },
         ],
-        [{ text: t(locale, 'language'), callback_data: 'menu:language' }],
+        [
+          { text: t(locale, 'limit'), callback_data: 'menu:limit' },
+          { text: t(locale, 'guide'), callback_data: 'menu:guide' },
+        ],
+        [
+          { text: t(locale, 'rules'), callback_data: 'menu:rules' },
+          { text: t(locale, 'language'), callback_data: 'menu:language' },
+        ],
       ],
     },
   });
