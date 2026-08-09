@@ -1,0 +1,141 @@
+/* Interaction and timeline refinements for the mobile Mini App. */
+
+/* Make every bottom-nav cell a true large touch target. */
+.bottom-nav {
+  touch-action: manipulation;
+}
+.nav-item {
+  width: 100%;
+  min-height: 58px;
+  padding: 6px 2px 7px;
+  border-radius: 14px;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.nav-item > *,
+.nav-item svg,
+.nav-item svg * {
+  pointer-events: none;
+}
+.nav-item:active {
+  background: rgba(209,154,61,.07);
+}
+
+/* More deliberate back affordance on detail pages. */
+.page-back {
+  position: relative;
+}
+.back-button.detail-back-fixed {
+  width: 44px;
+  height: 44px;
+  margin: 0 0 14px;
+  border-color: #e4ded4;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 7px 20px rgba(43,34,19,.07);
+  transition: transform 120ms var(--ease), background 160ms var(--ease), box-shadow 180ms var(--ease);
+}
+.back-button.detail-back-fixed:active {
+  transform: scale(.94);
+  background: var(--gold-pale);
+  box-shadow: 0 3px 10px rgba(43,34,19,.05);
+}
+.back-button.detail-back-fixed svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 2;
+}
+
+/* Live edge-back feedback. */
+.view-root {
+  will-change: transform;
+  transition: transform 170ms var(--ease);
+}
+.view-root.edge-swipe-active {
+  transform: translateX(var(--edge-swipe-x, 0));
+  transition: none;
+}
+.bottom-sheet {
+  transform: translate(-50%, var(--sheet-drag-y, 0));
+}
+
+/* Timeline: replace generic dots with meaningful Lucide stage icons. */
+.timeline {
+  margin-top: 15px;
+}
+.timeline::before {
+  left: 10%;
+  right: 10%;
+  top: 14px;
+  height: 2px;
+  background: linear-gradient(90deg, #e4dfd6, #eeeae4);
+  border-radius: 999px;
+}
+.timeline-step {
+  gap: 6px;
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+.timeline-dot {
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  border: 1px solid #ded9d0;
+  background: rgba(255,255,255,.98);
+  color: #9d9990;
+  box-shadow: 0 2px 7px rgba(43,34,19,.035);
+  font-size: 0;
+  transition: transform 180ms var(--ease), background 180ms var(--ease), color 180ms var(--ease), border-color 180ms var(--ease), box-shadow 180ms var(--ease);
+}
+.timeline-dot svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.9;
+}
+.timeline-step.done .timeline-dot {
+  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 4px 10px rgba(22,154,82,.15);
+}
+.timeline-step.current .timeline-dot {
+  color: #fff;
+  background: linear-gradient(135deg, #dda746, #c98b2a);
+  border-color: transparent;
+  box-shadow: 0 5px 12px rgba(198,135,38,.18), 0 0 0 3px rgba(209,154,61,.09);
+  transform: scale(1.04);
+}
+.timeline-step.rejected-step,
+.timeline-step.rejected-step.current {
+  color: var(--red);
+}
+.timeline-step.rejected-step .timeline-dot,
+.timeline-step.rejected-step.current .timeline-dot {
+  color: #fff;
+  background: var(--red);
+  border-color: var(--red);
+  box-shadow: 0 4px 10px rgba(196,59,59,.14), 0 0 0 3px rgba(196,59,59,.07);
+}
+
+@media (max-width: 380px) {
+  .nav-item {
+    min-height: 56px;
+    font-size: 8.5px;
+  }
+  .timeline-step {
+    font-size: 8.5px;
+  }
+  .timeline-dot {
+    width: 27px;
+    height: 27px;
+  }
+  .timeline::before { top: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-root,
+  .back-button.detail-back-fixed,
+  .timeline-dot {
+    transition: none !important;
+  }
+}
