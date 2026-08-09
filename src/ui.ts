@@ -120,10 +120,6 @@ export async function sendMainMenu(
       `<b>${t(locale, 'chapterLimitLabel')}:</b> ${chapterLimit}`,
     ];
 
-    if (quota.referralBonus > 0) {
-      lines.push(`<b>Referral bonus:</b> +${quota.referralBonus} / 3`);
-    }
-
     if (!subscription.subscriber) {
       lines.push(
         '',
@@ -324,7 +320,6 @@ export async function sendLimit(
     `<b>${t(locale, 'statusLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
     `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${quota.used} / ${quota.limit}`,
     `<b>${t(locale, 'remainingLabel')}:</b> ${quota.remaining}`,
-    quota.referralBonus > 0 ? `<b>Referral bonus:</b> +${quota.referralBonus} / 3` : '',
     `<b>${t(locale, 'chapterLimitLabel')}:</b> ${chapterLimit}`,
     `<b>${t(locale, 'resetLabel')}:</b> ${escapeHtml(resetDate)}`,
     !subscription.subscriber ? `\n${t(locale, 'hardChapterLimit')}` : '',
