@@ -87,7 +87,7 @@ function normalizeChatId(chatId: number | string): number | string {
 export class TelegramClient {
   private readonly baseUrl: string;
 
-  constructor(token: string) {
+  constructor(token: string, readonly env?: Env) {
     this.baseUrl = `https://api.telegram.org/bot${token}`;
   }
 
