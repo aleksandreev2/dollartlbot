@@ -1,4 +1,6 @@
 import { handleAdminActionV2 } from './admin-actions-v2';
+import { handleAdminAnalyticsRequest } from './admin-analytics';
+import { handleAdminUsersRequest } from './admin-users';
 import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
 import { runDailyEngagement } from './engagement';
@@ -7,6 +9,7 @@ import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-
 import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
+import { handlePublicationDeliveryAdminRequest, runPublicationDeliveryMaintenance } from './publication-delivery';
 import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handlePublishingRequest } from './publishing';
@@ -37,6 +40,15 @@ export default {
     if (coverResponse) return coverResponse;
 
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+
+    const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
+    if (adminUsersResponse) return adminUsersResponse;
+
+    const adminAnalyticsResponse = await handleAdminAnalyticsRequest(request, env);
+    if (adminAnalyticsResponse) return adminAnalyticsResponse;
+
+    const publicationDeliveryResponse = await handlePublicationDeliveryAdminRequest(request, env, apiTelegram);
+    if (publicationDeliveryResponse) return publicationDeliveryResponse;
 
     const adminActionResponse = await handleAdminActionV2(request, env, apiTelegram);
     if (adminActionResponse) return adminActionResponse;
@@ -102,6 +114,7 @@ export default {
     await retryPendingAdminDeliveries(env, telegram);
     await runReferralMaintenance(env, telegram, new Date(controller.scheduledTime));
     await runBroadcastMaintenance(env, telegram, 2);
+    await runPublicationDeliveryMaintenance(env, telegram, 8);
 
     const scheduledAt = new Date(controller.scheduledTime);
     if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) await runDailyEngagement(env, telegram, scheduledAt);
