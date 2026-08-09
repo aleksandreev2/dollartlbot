@@ -88,7 +88,113 @@
   stroke-width: 1.8;
 }
 
+/* Defensive responsive layout: user-provided titles and translated labels must never widen the WebView. */
+html, body, .app-shell, .view-root, .page {
+  max-width: 100%;
+  overflow-x: clip;
+}
+.surface-card,
+.novel-card-main,
+.list-copy,
+.request-card > div:last-child,
+.request-top > div:first-child,
+.admin-request-head > div:first-child,
+.premium-top > div:nth-child(2),
+.setting-row > span:nth-child(2) {
+  min-width: 0;
+}
+.novel-title,
+.list-title,
+.card-title,
+.detail-title,
+.setting-title,
+.premium-name,
+.status-pill {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.list-title {
+  display: block;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.25;
+}
+.status-pill {
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
+  justify-content: center;
+}
+.list-row:not(.queue-row) {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+.list-row:not(.queue-row) > .status-pill {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 3px;
+}
+.queue-row {
+  grid-template-columns: 34px auto minmax(0, 1fr) auto;
+}
+.request-card {
+  grid-template-columns: minmax(64px, 78px) minmax(0, 1fr);
+}
+.request-top {
+  flex-wrap: wrap;
+}
+.request-top > div:first-child {
+  flex: 1 1 180px;
+}
+.request-top > .status-pill {
+  flex: 0 1 auto;
+}
+.admin-request-head {
+  flex-wrap: wrap;
+}
+.premium-top {
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+}
+
+@media (max-width: 520px) {
+  .section-header {
+    align-items: flex-start;
+  }
+  .section-header h2 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .link-button {
+    flex: 0 0 auto;
+  }
+  .request-top > .status-pill {
+    flex-basis: auto;
+  }
+}
+
 @media (max-width: 420px) {
   .setting-row { align-items: flex-start; }
   .setting-row > .round-icon { margin-top: 1px; }
+  .premium-top {
+    grid-template-columns: 62px minmax(0, 1fr) auto;
+  }
+  .list-row:not(.queue-row) > .status-pill {
+    max-width: 100%;
+  }
+  .request-top > .status-pill {
+    width: fit-content;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 350px) {
+  .premium-top {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+  .premium-top > .plan-check {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
