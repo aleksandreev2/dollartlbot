@@ -43,7 +43,6 @@ jobs:
           node --check public/app/i18n-inline-fixes.js
           node --check public/app/i18n-wizard.js
           node --check public/app/i18n-runtime-v2.js
-          node --check public/app/language-display-fix.js
           node --check public/app/content-normalizer.js
           node --check public/app/card-upgrade.js
           node --check public/app/interaction-upgrade.js
