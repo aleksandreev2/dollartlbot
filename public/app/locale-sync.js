@@ -32,6 +32,7 @@
   }
   function sync(){const locale=detect();if(document.documentElement.lang!==locale)document.documentElement.lang=locale;}
   let raf=0;const schedule=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;sync();});};
-  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
+  const shell=document.getElementById('app')||document.body;
+  new MutationObserver(schedule).observe(shell,{childList:true,subtree:true});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
 })();
