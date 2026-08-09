@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="/app/admin-v3.css">
   <link rel="stylesheet" href="/app/quota-unlimited-ui.css">
   <link rel="stylesheet" href="/app/publishing-fixes.css">
+  <link rel="stylesheet" href="/app/publication-management.css">
   <link rel="stylesheet" href="/app/telegram-desktop.css">
 </head>
 <body>
@@ -29,30 +30,19 @@
     <header class="topbar">
       <button class="brand" type="button" data-nav="home" aria-label="Dollar TL home">
         <img class="brand-mark" src="/app/logo.png" alt="">
-        <span class="brand-copy">
-          <strong>Dollar TL</strong>
-        </span>
+        <span class="brand-copy"><strong>Dollar TL</strong></span>
       </button>
       <button class="icon-button notification-button" id="notificationButton" type="button" aria-label="Notifications">
         <i data-lucide="bell" aria-hidden="true"></i>
         <span class="notification-dot" aria-hidden="true"></span>
       </button>
     </header>
-
-    <div id="previewBanner" class="preview-banner" hidden>
-      Preview mode — open from Telegram to load your real Dollar TL data.
-    </div>
-
+    <div id="previewBanner" class="preview-banner" hidden>Preview mode — open from Telegram to load your real Dollar TL data.</div>
     <main id="viewRoot" class="view-root" tabindex="-1">
       <section class="page loading-page" aria-label="Loading">
-        <div class="skeleton skeleton-title"></div>
-        <div class="skeleton skeleton-line"></div>
-        <div class="skeleton skeleton-card tall"></div>
-        <div class="skeleton skeleton-button"></div>
-        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-title"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-card tall"></div><div class="skeleton skeleton-button"></div><div class="skeleton skeleton-card"></div>
       </section>
     </main>
-
     <nav id="bottomNav" class="bottom-nav" aria-label="Primary navigation"></nav>
     <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
     <div id="sheetRoot"></div>
@@ -84,6 +74,7 @@
   <script src="/app/quota-unlimited-ui.js"></script>
   <script src="/app/publishing-fixes.js"></script>
   <script src="/app/publishing-comments-ui.js"></script>
+  <script src="/app/publication-management.js"></script>
   <script type="module" src="/app/app.js"></script>
 </body>
 </html>
