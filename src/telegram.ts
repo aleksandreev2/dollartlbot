@@ -37,10 +37,37 @@ export interface TelegramCallbackQuery {
   data?: string;
 }
 
+export interface TelegramChatInviteLink {
+  invite_link: string;
+  name?: string;
+  creator?: TelegramUser;
+  creates_join_request?: boolean;
+  is_primary?: boolean;
+  is_revoked?: boolean;
+}
+
+export interface TelegramChatMember {
+  status: 'creator' | 'administrator' | 'member' | 'restricted' | 'left' | 'kicked' | string;
+  user: TelegramUser;
+  is_member?: boolean;
+}
+
+export interface TelegramChatMemberUpdated {
+  chat: TelegramChat;
+  from: TelegramUser;
+  date: number;
+  old_chat_member: TelegramChatMember;
+  new_chat_member: TelegramChatMember;
+  invite_link?: TelegramChatInviteLink;
+  via_join_request?: boolean;
+  via_chat_folder_invite_link?: boolean;
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
   callback_query?: TelegramCallbackQuery;
+  chat_member?: TelegramChatMemberUpdated;
 }
 
 export interface InlineKeyboardButton {
@@ -206,10 +233,20 @@ export class TelegramClient {
     });
   }
 
-  getChatMember(chatId: number | string, userId: number): Promise<Record<string, unknown>> {
-    return this.call<Record<string, unknown>>('getChatMember', {
+  getChatMember(chatId: number | string, userId: number): Promise<TelegramChatMember> {
+    return this.call<TelegramChatMember>('getChatMember', {
       chat_id: normalizeChatId(chatId),
       user_id: userId,
+    });
+  }
+
+  createChatInviteLink(
+    chatId: number | string,
+    name?: string,
+  ): Promise<TelegramChatInviteLink> {
+    return this.call<TelegramChatInviteLink>('createChatInviteLink', {
+      chat_id: normalizeChatId(chatId),
+      ...(name ? { name: name.slice(0, 32) } : {}),
     });
   }
 }
