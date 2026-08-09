@@ -8,8 +8,8 @@
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
     "typecheck": "npm run cf-typegen && tsc --noEmit",
-    "db:local": "wrangler d1 migrations apply dollartlbot-db --local",
-    "db:remote": "wrangler d1 migrations apply dollartlbot-db --remote",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote",
     "configure-bot": "node scripts/configure-bot.mjs"
   },
   "devDependencies": {
