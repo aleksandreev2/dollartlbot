@@ -1,0 +1,4 @@
+TELEGRAM_BOT_TOKEN="123456789:replace_me"
+TELEGRAM_WEBHOOK_SECRET="replace_with_a_long_random_value"
+ADMIN_TELEGRAM_ID="0"
+BOOSTY_GROUP_ID="0"
