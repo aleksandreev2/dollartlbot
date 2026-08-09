@@ -151,7 +151,7 @@ export async function finalizeSubmission(
   await sendMainMenu(user.id, locale, telegram);
 
   ctx.waitUntil(
-    notifyAdmin(submissionId, env, telegram).catch((error) => {
+    deliverSubmissionToAdmin(submissionId, env, telegram).catch((error) => {
       console.error(
         JSON.stringify({
           event: 'admin_notification_failed',
@@ -163,7 +163,7 @@ export async function finalizeSubmission(
   );
 }
 
-async function notifyAdmin(
+export async function deliverSubmissionToAdmin(
   submissionId: number,
   env: Env,
   telegram: TelegramClient,
@@ -171,52 +171,94 @@ async function notifyAdmin(
   const submission = await getSubmission(env, submissionId);
   if (!submission) return;
 
-  const user = await getUser(env, submission.user_id);
-  const username = user?.username ? `@${escapeHtml(user.username)}` : '—';
-  const displayName = user?.first_name ? escapeHtml(user.first_name) : '—';
-  const source = submission.source_url ? escapeHtml(submission.source_url) : '—';
-  const notes = submission.notes ? escapeHtml(submission.notes) : '—';
+  if (!submission.admin_summary_sent) {
+    const user = await getUser(env, submission.user_id);
+    const username = user?.username ? `@${escapeHtml(user.username)}` : '—';
+    const displayName = user?.first_name ? escapeHtml(user.first_name) : '—';
+    const source = submission.source_url ? escapeHtml(submission.source_url) : '—';
+    const notes = submission.notes ? escapeHtml(submission.notes) : '—';
 
-  const summary = [
-    `📚 <b>NEW NOVEL REQUEST #${submission.id}</b>`,
-    '',
-    `<b>User:</b> ${displayName} ${username}`,
-    `<b>Telegram ID:</b> <code>${submission.user_id}</code>`,
-    `<b>Plan:</b> ${submission.plan === 'subscriber' ? '⭐ Boosty Subscriber' : 'Free'}`,
-    `<b>Monthly usage:</b> ${await monthlySubmissionCount(env, submission.user_id)} / ${submission.plan === 'subscriber' ? 5 : 1}`,
-    '',
-    `<b>Title:</b> ${escapeHtml(submission.title)}`,
-    `<b>Original language:</b> ${escapeHtml(submission.original_language)}`,
-    `<b>Chapters:</b> ${submission.chapter_count}`,
-    `<b>Status:</b> ${escapeHtml(submission.publication_status)}`,
-    `<b>Source:</b> ${source}`,
-    '',
-    `<b>Genres / Tags:</b>\n${escapeHtml(submission.genres_tags)}`,
-    '',
-    `<b>Fetishes / Sexual content:</b>\n${escapeHtml(submission.sexual_content)}`,
-    '',
-    `<b>Sensitive content:</b>\n${escapeHtml(submission.sensitive_content)}`,
-    '',
-    `<b>Notes:</b>\n${notes}`,
-  ].join('\n');
+    const summary = [
+      `📚 <b>NEW NOVEL REQUEST #${submission.id}</b>`,
+      '',
+      `<b>User:</b> ${displayName} ${username}`,
+      `<b>Telegram ID:</b> <code>${submission.user_id}</code>`,
+      `<b>Plan:</b> ${submission.plan === 'subscriber' ? '⭐ Boosty Subscriber' : 'Free'}`,
+      `<b>Monthly usage:</b> ${await monthlySubmissionCount(env, submission.user_id)} / ${submission.plan === 'subscriber' ? 5 : 1}`,
+      '',
+      `<b>Title:</b> ${escapeHtml(submission.title)}`,
+      `<b>Original language:</b> ${escapeHtml(submission.original_language)}`,
+      `<b>Chapters:</b> ${submission.chapter_count}`,
+      `<b>Status:</b> ${escapeHtml(submission.publication_status)}`,
+      `<b>Source:</b> ${source}`,
+      '',
+      `<b>Genres / Tags:</b>\n${escapeHtml(submission.genres_tags)}`,
+      '',
+      `<b>Fetishes / Sexual content:</b>\n${escapeHtml(submission.sexual_content)}`,
+      '',
+      `<b>Sensitive content:</b>\n${escapeHtml(submission.sensitive_content)}`,
+      '',
+      `<b>Notes:</b>\n${notes}`,
+    ].join('\n');
 
-  const keyboard: InlineKeyboardMarkup = {
-    inline_keyboard: [
-      [
-        { text: '✅ Accept', callback_data: `admin:accept:${submission.id}` },
-        { text: '❌ Reject', callback_data: `admin:reject:${submission.id}` },
+    const keyboard: InlineKeyboardMarkup = {
+      inline_keyboard: [
+        [
+          { text: '✅ Accept', callback_data: `admin:accept:${submission.id}` },
+          { text: '❌ Reject', callback_data: `admin:reject:${submission.id}` },
+        ],
+        [{ text: '♻️ Reject + Return Slot', callback_data: `admin:return:${submission.id}` }],
+        [{ text: '💬 Message User', callback_data: `admin:message:${submission.id}` }],
       ],
-      [{ text: '♻️ Reject + Return Slot', callback_data: `admin:return:${submission.id}` }],
-      [{ text: '💬 Message User', callback_data: `admin:message:${submission.id}` }],
-    ],
-  };
+    };
 
-  await telegram.sendMessage(env.ADMIN_TELEGRAM_ID, summary, { reply_markup: keyboard });
-  await telegram.sendDocument(
-    env.ADMIN_TELEGRAM_ID,
-    submission.raw_file_id,
-    `📎 Raw file for request #${submission.id}${submission.raw_file_name ? ` — ${escapeHtml(submission.raw_file_name)}` : ''}`,
-  );
+    await telegram.sendMessage(env.ADMIN_TELEGRAM_ID, summary, { reply_markup: keyboard });
+    await env.DB.prepare(
+      'UPDATE submissions SET admin_summary_sent = 1, updated_at = ? WHERE id = ?',
+    )
+      .bind(new Date().toISOString(), submission.id)
+      .run();
+  }
+
+  if (!submission.admin_file_sent) {
+    await telegram.sendDocument(
+      env.ADMIN_TELEGRAM_ID,
+      submission.raw_file_id,
+      `📎 Raw file for request #${submission.id}${submission.raw_file_name ? ` — ${escapeHtml(submission.raw_file_name)}` : ''}`,
+    );
+    await env.DB.prepare(
+      'UPDATE submissions SET admin_file_sent = 1, updated_at = ? WHERE id = ?',
+    )
+      .bind(new Date().toISOString(), submission.id)
+      .run();
+  }
+}
+
+export async function retryPendingAdminDeliveries(
+  env: Env,
+  telegram: TelegramClient,
+): Promise<void> {
+  const pending = await env.DB.prepare(`
+    SELECT id
+    FROM submissions
+    WHERE admin_summary_sent = 0 OR admin_file_sent = 0
+    ORDER BY id ASC
+    LIMIT 20
+  `).all<{ id: number }>();
+
+  for (const row of pending.results) {
+    try {
+      await deliverSubmissionToAdmin(Number(row.id), env, telegram);
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: 'admin_delivery_retry_failed',
+          submission_id: row.id,
+          error: errorText(error),
+        }),
+      );
+    }
+  }
 }
 
 export async function handleAdminCallback(
