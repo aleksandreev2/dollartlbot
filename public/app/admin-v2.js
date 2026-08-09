@@ -19,21 +19,41 @@
   function toast(text,error=false){const r=document.getElementById('toastRegion');if(!r)return;const e=document.createElement('div');e.className=`toast ${error?'error':'success'}`;e.textContent=text;r.appendChild(e);setTimeout(()=>e.remove(),2800);}
 
   function activateAdminClass(on=true){document.documentElement.classList.toggle('admin-console-active',on);document.body.classList.toggle('admin-console-active',on);}
+  function bindShellNavigation(root){
+    root.querySelectorAll('[data-admin-section]').forEach(b=>{
+      if(b.dataset.adminV2Bound==='1')return;
+      b.dataset.adminV2Bound='1';
+      b.addEventListener('click',()=>{state.section=b.dataset.adminSection;render();});
+    });
+  }
   function shell(content, subtitle='Рабочая панель Dollar TL') {
     const root=document.getElementById('viewRoot'); if(!root)return;
     activateAdminClass(true);
-    root.innerHTML=`<section class="admin-v2">
-      <aside class="admin-side">
-        <div class="admin-side-brand"><img src="/app/logo.png" alt=""><div><strong>Dollar TL</strong><span>ADMIN</span></div></div>
-        <nav class="admin-side-nav">${Object.entries(A).map(([id,[ic,label]])=>`<button type="button" data-admin-section="${id}" class="${state.section===id?'active':''}">${icon(ic)}<span>${label}</span></button>`).join('')}</nav>
-      </aside>
-      <div class="admin-workspace">
-        <header class="admin-work-head"><div><div class="admin-kicker">АДМИН-ПАНЕЛЬ</div><h1>${A[state.section]?.[1]||'Админ'}</h1><p>${esc(subtitle)}</p></div><div class="admin-live"><span></span> Система активна</div></header>
-        <div class="admin-mobile-nav">${Object.entries(A).map(([id,[ic,label]])=>`<button type="button" data-admin-section="${id}" class="${state.section===id?'active':''}">${icon(ic)}<span>${label}</span></button>`).join('')}</div>
-        <main class="admin-content">${content}</main>
-      </div>
-    </section>`;
-    root.querySelectorAll('[data-admin-section]').forEach(b=>b.addEventListener('click',()=>{state.section=b.dataset.adminSection;render();}));
+    let admin=root.querySelector('.admin-v2');
+    if(!admin){
+      root.innerHTML=`<section class="admin-v2">
+        <aside class="admin-side">
+          <div class="admin-side-brand"><img src="/app/logo.png" alt=""><div><strong>Dollar TL</strong><span>ADMIN</span></div></div>
+          <nav class="admin-side-nav">${Object.entries(A).map(([id,[ic,label]])=>`<button type="button" data-admin-section="${id}" class="${state.section===id?'active':''}">${icon(ic)}<span>${label}</span></button>`).join('')}</nav>
+        </aside>
+        <div class="admin-workspace">
+          <header class="admin-work-head"><div><div class="admin-kicker">АДМИН-ПАНЕЛЬ</div><h1>${A[state.section]?.[1]||'Админ'}</h1><p>${esc(subtitle)}</p></div><div class="admin-live"><span></span> Система активна</div></header>
+          <div class="admin-mobile-nav">${Object.entries(A).map(([id,[ic,label]])=>`<button type="button" data-admin-section="${id}" class="${state.section===id?'active':''}">${icon(ic)}<span>${label}</span></button>`).join('')}</div>
+          <main class="admin-content">${content}</main>
+        </div>
+      </section>`;
+      admin=root.querySelector('.admin-v2');
+      bindShellNavigation(root);
+    }else{
+      const heading=admin.querySelector('.admin-work-head h1');
+      const sub=admin.querySelector('.admin-work-head p');
+      const area=admin.querySelector('.admin-content');
+      if(heading)heading.textContent=A[state.section]?.[1]||'Админ';
+      if(sub)sub.textContent=subtitle;
+      if(area)area.innerHTML=content;
+      admin.querySelectorAll('[data-admin-section]').forEach(b=>b.classList.toggle('active',b.dataset.adminSection===state.section));
+      bindShellNavigation(root);
+    }
     document.querySelector('[data-nav="admin"] span:last-child')?.replaceChildren(document.createTextNode('Админ'));
     refreshIcons();
   }
@@ -92,7 +112,7 @@
         <div class="publisher-actions"><button id="pubSave">${icon('save')} Сохранить черновик</button><button id="pubTest">${icon('flask-conical')} Отправить тест мне</button><button id="pubPublish" class="primary">${icon('send')} Опубликовать</button></div>
       </section>
       <aside class="publisher-preview admin-panel"><div class="admin-panel-head"><div><h2>Предпросмотр</h2><p>Как пост будет выглядеть в Telegram</p></div></div><div class="tg-preview"><div id="tgPreviewImage" class="tg-preview-image empty">${icon('image')}</div><div class="tg-preview-body" id="tgPreviewBody">Текст публикации появится здесь.</div><div class="tg-preview-footer"><b>Need a translation?</b><br>Open <span>Dollar TL Bot</span> and suggest a novel for translation.</div><div class="tg-preview-buttons"><span>Suggest a Novel</span><span>Donate</span></div></div></aside>
-    </div><section class="admin-panel admin-publication-history"><div class="admin-panel-head"><div><h2>История публикаций</h2><p>Черновики и отправленные посты</p></div></div><div class="admin-publication-list">${pubs.length?pubs.map(publicationRow).join(''):'<div class="admin-empty">Пока пусто.</div>'}</div></section>`,'Создавайте публикацию и сразу проверяйте её перед отправкой');bindPublisher();bindPublicationRows();}
+    </div><section class="admin-panel admin-publication-history"><div class="admin-panel-head"><div><h2>История публикаций</h2><p>Черновики и опубликованные посты</p></div></div><div class="admin-publication-list">${pubs.length?pubs.map(publicationRow).join(''):'<div class="admin-empty">Пока пусто.</div>'}</div></section>`,'Создавайте публикацию и сразу проверяйте её перед отправкой');bindPublisher();bindPublicationRows();}
     catch(e){shell(errorBox(e.message),'Ошибка редактора публикаций');}
   }
   function publicationRow(p){return `<div class="publication-row"><div class="publication-thumb">${p.image_key?`<img src="/media/publications/${p.id}/image" alt="">`:icon('file-text')}</div><div class="publication-copy"><strong>${esc(p.internal_title)}</strong><span>${date(p.created_at)} · ${p.file_count||0} файл(ов)</span>${p.error_text?`<small>${esc(p.error_text)}</small>`:''}</div>${pubBadge(p.status)}<div class="publication-actions">${p.status!=='published'?`<button data-pub-test="${p.id}" title="Тест">${icon('flask-conical')}</button><button data-pub-send="${p.id}" title="Опубликовать">${icon('send')}</button><button data-pub-del="${p.id}" title="Удалить">${icon('trash-2')}</button>`:''}</div></div>`;}
