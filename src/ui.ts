@@ -1,6 +1,6 @@
 import { SUPPORTED_LANGUAGES, t, type Locale } from './i18n/index';
-import { monthlySubmissionCount } from './db';
 import { getSubscriptionState } from './subscription';
+import { getQuotaState } from './quota';
 import { escapeHtml, type InlineKeyboardMarkup, type TelegramClient } from './telegram';
 import {
   FREE_MONTHLY_REQUEST_LIMIT,
@@ -102,12 +102,11 @@ export async function sendMainMenu(
   let text = t(locale, 'menuTitle');
 
   if (env) {
-    const count = await monthlySubmissionCount(env, chatId);
     const subscription = await getSubscriptionState(chatId, env, telegram);
-    const limit = subscription.subscriber
+    const baseLimit = subscription.subscriber
       ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
       : FREE_MONTHLY_REQUEST_LIMIT;
-    const remaining = Math.max(0, limit - count);
+    const quota = await getQuotaState(env, chatId, baseLimit);
     const chapterLimit = subscription.subscriber
       ? t(locale, 'subscriberChapterLimitValue')
       : String(REGULAR_MAX_CHAPTERS);
@@ -116,10 +115,14 @@ export async function sendMainMenu(
       t(locale, 'menuTitle'),
       '',
       `<b>${t(locale, 'statusLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
-      `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${count}/${limit}`,
-      `<b>${t(locale, 'remainingLabel')}:</b> ${remaining}`,
+      `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${quota.used}/${quota.limit}`,
+      `<b>${t(locale, 'remainingLabel')}:</b> ${quota.remaining}`,
       `<b>${t(locale, 'chapterLimitLabel')}:</b> ${chapterLimit}`,
     ];
+
+    if (quota.referralBonus > 0) {
+      lines.push(`<b>Referral bonus:</b> +${quota.referralBonus} / 3`);
+    }
 
     if (!subscription.subscriber) {
       lines.push(
@@ -305,12 +308,11 @@ export async function sendLimit(
   env: Env,
   telegram: TelegramClient,
 ): Promise<void> {
-  const count = await monthlySubmissionCount(env, userId);
   const subscription = await getSubscriptionState(userId, env, telegram);
-  const limit = subscription.subscriber
+  const baseLimit = subscription.subscriber
     ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
     : FREE_MONTHLY_REQUEST_LIMIT;
-  const remaining = Math.max(0, limit - count);
+  const quota = await getQuotaState(env, userId, baseLimit);
   const resetDate = nextMonthDate(locale);
   const chapterLimit = subscription.subscriber
     ? t(locale, 'subscriberChapterLimitValue')
@@ -320,13 +322,14 @@ export async function sendLimit(
     t(locale, 'limitTitle'),
     '',
     `<b>${t(locale, 'statusLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
-    `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${count} / ${limit}`,
-    `<b>${t(locale, 'remainingLabel')}:</b> ${remaining}`,
+    `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${quota.used} / ${quota.limit}`,
+    `<b>${t(locale, 'remainingLabel')}:</b> ${quota.remaining}`,
+    quota.referralBonus > 0 ? `<b>Referral bonus:</b> +${quota.referralBonus} / 3` : '',
     `<b>${t(locale, 'chapterLimitLabel')}:</b> ${chapterLimit}`,
     `<b>${t(locale, 'resetLabel')}:</b> ${escapeHtml(resetDate)}`,
     !subscription.subscriber ? `\n${t(locale, 'hardChapterLimit')}` : '',
     subscription.verificationError ? `\n${t(locale, 'verificationUnavailable')}` : '',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const rows: InlineKeyboardMarkup['inline_keyboard'] = [];
   if (!subscription.subscriber) {
