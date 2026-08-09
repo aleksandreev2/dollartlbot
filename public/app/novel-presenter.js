@@ -1,9 +1,11 @@
 (() => {
   const FLAG_BASE = '/app/flags';
   const regionalFlags = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
+
   const countryByLanguage = {
     ko:'kr', ja:'jp', zh:'cn', en:'gb', ru:'ru', es:'es', pt:'pt', id:'id', vi:'vn', fr:'fr', de:'de', hi:'in', fil:'ph'
   };
+
   const languagePatterns = {
     ko:/(?:\bkorean\b|\bkoreano\b|\bcoreano\b|\bcoréen\b|\bkoreanisch\b|корей\w*|한국어|한국말|tiếng hàn|कोरियाई|bahasa korea)/i,
     ja:/(?:\bjapanese\b|\bjaponés\b|\bjaponês\b|\bjaponais\b|\bjapanisch\b|япон\w*|日本語|tiếng nhật|जापानी|bahasa jepang|\bhapon\b)/i,
@@ -20,14 +22,95 @@
     fil:/(?:\bfilipino\b|\bfilipina\b|\btagalog\b|филиппин\w*|फ़िलिपिनो)/i
   };
 
+  const languageLabels = {
+    en:{ko:'Korean',ja:'Japanese',zh:'Chinese',en:'English',ru:'Russian',es:'Spanish',pt:'Portuguese',id:'Indonesian',vi:'Vietnamese',fr:'French',de:'German',hi:'Hindi',fil:'Filipino'},
+    ru:{ko:'Корейский',ja:'Японский',zh:'Китайский',en:'Английский',ru:'Русский',es:'Испанский',pt:'Португальский',id:'Индонезийский',vi:'Вьетнамский',fr:'Французский',de:'Немецкий',hi:'Хинди',fil:'Филиппинский'},
+    es:{ko:'Coreano',ja:'Japonés',zh:'Chino',en:'Inglés',ru:'Ruso',es:'Español',pt:'Portugués',id:'Indonesio',vi:'Vietnamita',fr:'Francés',de:'Alemán',hi:'Hindi',fil:'Filipino'},
+    fil:{ko:'Koreano',ja:'Hapon',zh:'Tsino',en:'Ingles',ru:'Ruso',es:'Espanyol',pt:'Portuges',id:'Indones',vi:'Biyetnames',fr:'Pranses',de:'Aleman',hi:'Hindi',fil:'Filipino'},
+    hi:{ko:'कोरियाई',ja:'जापानी',zh:'चीनी',en:'अंग्रेज़ी',ru:'रूसी',es:'स्पेनिश',pt:'पुर्तगाली',id:'इंडोनेशियाई',vi:'वियतनामी',fr:'फ़्रेंच',de:'जर्मन',hi:'हिंदी',fil:'फ़िलिपिनो'},
+    pt:{ko:'Coreano',ja:'Japonês',zh:'Chinês',en:'Inglês',ru:'Russo',es:'Espanhol',pt:'Português',id:'Indonésio',vi:'Vietnamita',fr:'Francês',de:'Alemão',hi:'Hindi',fil:'Filipino'},
+    id:{ko:'Korea',ja:'Jepang',zh:'Tionghoa',en:'Inggris',ru:'Rusia',es:'Spanyol',pt:'Portugis',id:'Indonesia',vi:'Vietnam',fr:'Prancis',de:'Jerman',hi:'Hindi',fil:'Filipino'},
+    vi:{ko:'Tiếng Hàn',ja:'Tiếng Nhật',zh:'Tiếng Trung',en:'Tiếng Anh',ru:'Tiếng Nga',es:'Tiếng Tây Ban Nha',pt:'Tiếng Bồ Đào Nha',id:'Tiếng Indonesia',vi:'Tiếng Việt',fr:'Tiếng Pháp',de:'Tiếng Đức',hi:'Tiếng Hindi',fil:'Tiếng Filipino'},
+    fr:{ko:'Coréen',ja:'Japonais',zh:'Chinois',en:'Anglais',ru:'Russe',es:'Espagnol',pt:'Portugais',id:'Indonésien',vi:'Vietnamien',fr:'Français',de:'Allemand',hi:'Hindi',fil:'Filipino'},
+    de:{ko:'Koreanisch',ja:'Japanisch',zh:'Chinesisch',en:'Englisch',ru:'Russisch',es:'Spanisch',pt:'Portugiesisch',id:'Indonesisch',vi:'Vietnamesisch',fr:'Französisch',de:'Deutsch',hi:'Hindi',fil:'Filipino'}
+  };
+
+  function detectLanguage(text = '') {
+    const value = String(text).normalize('NFKC').replace(regionalFlags, ' ').trim();
+    for (const [code, re] of Object.entries(languagePatterns)) if (re.test(value)) return code;
+    return null;
+  }
+
+  function currentLocale() {
+    const raw = String(window.__DTL_LOCALE__ || document.documentElement.lang || window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'en')
+      .toLowerCase().split('-')[0];
+    return languageLabels[raw] ? raw : 'en';
+  }
+
+  function escapeMarkup(value = '') {
+    return String(value).replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  function canonicalLanguageMarkup(code, locale) {
+    const text = (languageLabels[locale] || languageLabels.en)[code] || languageLabels.en[code] || code;
+    return `<span class="localized-language canonical-language" data-language-code="${code}"><span>${escapeMarkup(text)}</span></span>`;
+  }
+
+  function annotateNovelMeta(root) {
+    root.querySelectorAll('.novel-meta .localized-language').forEach((el) => {
+      if (el.dataset.languageCode) {
+        el.classList.add('canonical-language');
+        return;
+      }
+      const code = detectLanguage(el.textContent);
+      if (!code) return;
+      el.dataset.languageCode = code;
+      el.classList.add('canonical-language');
+    });
+  }
+
+  function normalizeListMeta(root) {
+    const locale = currentLocale();
+    root.querySelectorAll('.list-meta').forEach((el) => {
+      const raw = String(el.textContent || '').replace(regionalFlags, ' ').replace(/\s+/g, ' ').trim();
+      const code = detectLanguage(raw);
+      if (!code) return;
+
+      const separator = raw.indexOf('·');
+      const suffix = separator >= 0 ? raw.slice(separator + 1).trim() : '';
+      const stamp = `${locale}:${code}:${suffix}`;
+      if (el.dataset.circleLanguageStamp === stamp && el.querySelector('.canonical-language[data-language-code]')) return;
+
+      el.dataset.circleLanguageStamp = stamp;
+      el.innerHTML = `${canonicalLanguageMarkup(code, locale)}${suffix ? `<span class="language-meta-rest"> · ${escapeMarkup(suffix)}</span>` : ''}`;
+    });
+  }
+
+  function replaceArrows(root) {
+    let changed = false;
+    root.querySelectorAll('.novel-meta span').forEach((span) => {
+      if (span.dataset.arrowIconReady === '1') return;
+      if ((span.textContent || '').trim() !== '→') return;
+      span.textContent = '';
+      const icon = document.createElement('i');
+      icon.setAttribute('data-lucide', 'circle-arrow-right');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.className = 'language-arrow-icon';
+      span.appendChild(icon);
+      span.dataset.arrowIconReady = '1';
+      changed = true;
+    });
+    if (changed && window.lucide?.createIcons) {
+      window.lucide.createIcons({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } });
+    }
+  }
+
   function codeFromNode(scope) {
     const canonical = scope?.matches?.('.canonical-language[data-language-code]')
       ? scope
       : scope?.querySelector?.('.canonical-language[data-language-code]');
     if (canonical?.dataset.languageCode) return canonical.dataset.languageCode;
-    const text = scope?.textContent || '';
-    for (const [code, re] of Object.entries(languagePatterns)) if (re.test(text)) return code;
-    return null;
+    return detectLanguage(scope?.textContent || '');
   }
 
   function flagImg(code, className='circle-language-flag') {
@@ -85,8 +168,6 @@
       applyCircleFlag(el, el.dataset.languageCode);
     });
 
-    // Normalize every source/target language cell through one renderer so
-    // no later legacy layer can introduce emoji, globe or hand-drawn flags.
     root.querySelectorAll('.novel-meta > span').forEach(span => {
       const code = span.dataset.languageCode
         || span.querySelector?.('[data-language-code]')?.dataset.languageCode
@@ -186,6 +267,9 @@
   }
 
   function patch(root=document) {
+    annotateNovelMeta(root);
+    normalizeListMeta(root);
+    replaceArrows(root);
     enhanceLanguageFlags(root);
     root.querySelectorAll('.novel-cover').forEach(enhanceCover);
     compactPreviewRows(root);
@@ -203,8 +287,8 @@
 
   const viewRoot = document.getElementById('viewRoot');
   const sheetRoot = document.getElementById('sheetRoot');
-  if (viewRoot) new MutationObserver(schedule).observe(viewRoot, { childList:true, subtree:true });
-  if (sheetRoot) new MutationObserver(schedule).observe(sheetRoot, { childList:true, subtree:true });
+  if (viewRoot) new MutationObserver(schedule).observe(viewRoot, { childList:true, subtree:true, characterData:true });
+  if (sheetRoot) new MutationObserver(schedule).observe(sheetRoot, { childList:true, subtree:true, characterData:true });
   document.addEventListener('dtl:localechange', schedule);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once:true });
   else schedule();
