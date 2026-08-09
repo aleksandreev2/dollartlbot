@@ -6,19 +6,27 @@ function read(path) {
 function need(source, needle, label) {
   if (!source.includes(needle)) throw new Error(`${label}: missing ${needle}`);
 }
+function forbid(source, needle, label) {
+  if (source.includes(needle)) throw new Error(`${label}: forbidden ${needle}`);
+}
+function stripSqlLineComments(source) {
+  return source.split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
+}
 
 const quota = read('src/quota.ts');
 const index = read('src/index.ts');
 const migration = read('migrations/0012_source_url_safety.sql');
+const migrationSql = stripSqlLineComments(migration);
 
 need(quota, 'safeHttpUrl(input.sourceUrl)', 'quota source URL normalization');
 need(quota, "url.protocol !== 'http:' && url.protocol !== 'https:'", 'quota protocol guard');
+need(quota, 'return url.toString()', 'quota canonical URL storage');
 
-for (const trigger of ['submissions_source_url_insert_guard', 'submissions_source_url_update_guard']) {
-  need(migration, trigger, 'source URL D1 guard');
-}
-need(migration, "NOT LIKE 'http://%'", 'source URL migration');
-need(migration, "NOT LIKE 'https://%'", 'source URL migration');
+// 0012 must stay remotely executable. A previous version used a trigger body that
+// passed local workerd migrations but failed against remote D1.
+forbid(migrationSql, 'CREATE TRIGGER', 'remote-compatible source URL migration');
+need(migrationSql, "NOT LIKE 'http://%'", 'source URL migration');
+need(migrationSql, "NOT LIKE 'https://%'", 'source URL migration');
 
 for (const task of [
   'queue_normalize',
