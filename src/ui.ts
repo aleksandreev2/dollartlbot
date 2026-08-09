@@ -2,7 +2,14 @@ import { SUPPORTED_LANGUAGES, t, type Locale } from './i18n/index';
 import { monthlySubmissionCount } from './db';
 import { getSubscriptionState } from './subscription';
 import { escapeHtml, type InlineKeyboardMarkup, type TelegramClient } from './telegram';
-import type { FormStep, SubmissionDraft } from './domain';
+import {
+  ABSOLUTE_MAX_CHAPTERS,
+  FREE_MAX_CHAPTERS,
+  FREE_MONTHLY_REQUEST_LIMIT,
+  SUBSCRIBER_MONTHLY_REQUEST_LIMIT,
+  type FormStep,
+  type SubmissionDraft,
+} from './domain';
 
 const LOCALE_TAGS: Record<Locale, string> = {
   en: 'en-US', es: 'es-ES', fil: 'fil-PH', hi: 'hi-IN', pt: 'pt-BR',
@@ -66,24 +73,62 @@ export async function sendMainMenu(
   locale: Locale,
   telegram: TelegramClient,
 ): Promise<void> {
-  await telegram.sendMessage(chatId, t(locale, 'menuTitle'), {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
-        [
-          { text: t(locale, 'queue'), callback_data: 'menu:queue' },
-          { text: t(locale, 'myRequests'), callback_data: 'menu:myrequests' },
-        ],
-        [
-          { text: t(locale, 'limit'), callback_data: 'menu:limit' },
-          { text: t(locale, 'guide'), callback_data: 'menu:guide' },
-        ],
-        [
-          { text: t(locale, 'rules'), callback_data: 'menu:rules' },
-          { text: t(locale, 'language'), callback_data: 'menu:language' },
-        ],
-      ],
-    },
+  const env = telegram.env;
+  const rows: InlineKeyboardMarkup['inline_keyboard'] = [
+    [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
+  ];
+
+  let text = t(locale, 'menuTitle');
+
+  if (env) {
+    const count = await monthlySubmissionCount(env, chatId);
+    const subscription = await getSubscriptionState(chatId, env, telegram);
+    const limit = subscription.subscriber
+      ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
+      : FREE_MONTHLY_REQUEST_LIMIT;
+    const maxChapters = subscription.subscriber ? ABSOLUTE_MAX_CHAPTERS : FREE_MAX_CHAPTERS;
+    const remaining = Math.max(0, limit - count);
+
+    const lines = [
+      t(locale, 'menuTitle'),
+      '',
+      `<b>${t(locale, 'statusLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
+      `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${count}/${limit}`,
+      `<b>${t(locale, 'remainingLabel')}:</b> ${remaining}`,
+      `<b>${t(locale, 'chapterLimitLabel')}:</b> ${maxChapters}`,
+    ];
+
+    if (!subscription.subscriber) {
+      lines.push(
+        '',
+        t(locale, 'freeUpgradeHint'),
+        `<a href="${escapeHtml(env.BOOSTY_SUBSCRIPTION_URL)}">${t(locale, 'subscribe')}</a>`,
+      );
+      rows.push([{ text: t(locale, 'upgradeButton'), url: env.BOOSTY_SUBSCRIPTION_URL }]);
+    }
+
+    lines.push('', t(locale, 'hardChapterLimit'));
+    if (subscription.verificationError) lines.push('', t(locale, 'verificationUnavailable'));
+    text = lines.join('\n');
+  }
+
+  rows.push(
+    [
+      { text: t(locale, 'queue'), callback_data: 'menu:queue' },
+      { text: t(locale, 'myRequests'), callback_data: 'menu:myrequests' },
+    ],
+    [
+      { text: t(locale, 'limit'), callback_data: 'menu:limit' },
+      { text: t(locale, 'guide'), callback_data: 'menu:guide' },
+    ],
+    [
+      { text: t(locale, 'rules'), callback_data: 'menu:rules' },
+      { text: t(locale, 'language'), callback_data: 'menu:language' },
+    ],
+  );
+
+  await telegram.sendMessage(chatId, text, {
+    reply_markup: { inline_keyboard: rows },
   });
 }
 
@@ -109,7 +154,7 @@ export async function sendRules(
 
   await telegram.sendMessage(
     chatId,
-    `${t(locale, 'rulesText')}${asGate ? `\n\n${t(locale, 'rulesGate')}` : ''}`,
+    `${t(locale, 'rulesText')}\n\n${t(locale, 'hardChapterLimit')}${asGate ? `\n\n${t(locale, 'rulesGate')}` : ''}`,
     { reply_markup: keyboard },
   );
 }
@@ -191,6 +236,18 @@ export async function sendConfirmation(
   draft: SubmissionDraft,
   telegram: TelegramClient,
 ): Promise<void> {
+  if ((draft.chapter_count ?? 0) > ABSOLUTE_MAX_CHAPTERS) {
+    await telegram.sendMessage(chatId, t(locale, 'hardChapterLimit'), {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: t(locale, 'restart'), callback_data: 'form:restart' }],
+          [{ text: t(locale, 'cancel'), callback_data: 'form:cancel' }],
+        ],
+      },
+    });
+    return;
+  }
+
   const status = draft.publication_status === 'completed' ? t(locale, 'completed') : t(locale, 'ongoing');
   const source = draft.source_url ? escapeHtml(draft.source_url) : '—';
   const notes = draft.notes ? escapeHtml(draft.notes) : '—';
@@ -238,23 +295,29 @@ export async function sendLimit(
 ): Promise<void> {
   const count = await monthlySubmissionCount(env, userId);
   const subscription = await getSubscriptionState(userId, env, telegram);
-  const limit = subscription.subscriber ? 5 : 1;
+  const limit = subscription.subscriber
+    ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
+    : FREE_MONTHLY_REQUEST_LIMIT;
   const remaining = Math.max(0, limit - count);
   const resetDate = nextMonthDate(locale);
+  const maxChapters = subscription.subscriber ? ABSOLUTE_MAX_CHAPTERS : FREE_MAX_CHAPTERS;
 
   const text = [
     t(locale, 'limitTitle'),
     '',
-    `<b>${t(locale, 'planLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
-    `<b>${t(locale, 'usedLabel')}:</b> ${count} / ${limit}`,
+    `<b>${t(locale, 'statusLabel')}:</b> ${t(locale, subscription.subscriber ? 'planSubscriber' : 'planFree')}`,
+    `<b>${t(locale, 'monthlyUsageLabel')}:</b> ${count} / ${limit}`,
     `<b>${t(locale, 'remainingLabel')}:</b> ${remaining}`,
+    `<b>${t(locale, 'chapterLimitLabel')}:</b> ${maxChapters}`,
     `<b>${t(locale, 'resetLabel')}:</b> ${escapeHtml(resetDate)}`,
+    '',
+    t(locale, 'hardChapterLimit'),
     subscription.verificationError ? `\n${t(locale, 'verificationUnavailable')}` : '',
   ].join('\n');
 
   const rows: InlineKeyboardMarkup['inline_keyboard'] = [];
   if (!subscription.subscriber) {
-    rows.push([{ text: t(locale, 'subscribe'), url: env.BOOSTY_SUBSCRIPTION_URL }]);
+    rows.push([{ text: t(locale, 'upgradeButton'), url: env.BOOSTY_SUBSCRIPTION_URL }]);
   }
   rows.push([{ text: '←', callback_data: 'menu:home' }]);
 
@@ -270,7 +333,7 @@ export async function sendLimitReached(
 ): Promise<void> {
   const rows: InlineKeyboardMarkup['inline_keyboard'] = [];
   if (!subscriber) {
-    rows.push([{ text: t(locale, 'subscribe'), url: env.BOOSTY_SUBSCRIPTION_URL }]);
+    rows.push([{ text: t(locale, 'upgradeButton'), url: env.BOOSTY_SUBSCRIPTION_URL }]);
   }
   rows.push([{ text: t(locale, 'limit'), callback_data: 'menu:limit' }]);
 
