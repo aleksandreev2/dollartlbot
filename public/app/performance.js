@@ -25,34 +25,10 @@
     lucide.__dtlCreateIconsThrottled = true;
   }
 
-  function loadStyle(href) {
-    if (document.querySelector(`link[href="${href}"]`)) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    document.head.appendChild(link);
-  }
-  function loadScript(src, onload) {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) { if (onload) existing.addEventListener('load', onload, { once:true }); return; }
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    if (onload) script.addEventListener('load', onload, { once:true });
-    document.head.appendChild(script);
-  }
-
-  loadStyle('/app/desktop.css');
-  loadStyle('/app/admin-v2.css');
-  loadStyle('/app/notifications-ui.css');
-  loadScript('/app/admin-v2.js', () => {
-    // If the user opened Admin before this small enhancement finished loading,
-    // trigger one normal Admin render so Admin 2.0 can take over immediately.
-    if (document.querySelector('#viewRoot .admin-stats') && !document.querySelector('.admin-v2')) {
-      document.querySelector('[data-nav="admin"]')?.click();
-    }
-  });
-  loadScript('/app/notifications-ui.js');
+  // Admin, notifications and desktop assets are now declared directly in
+  // index.html. Older builds dynamically injected the same scripts here,
+  // which could execute Admin 2.0 twice and register duplicate observers and
+  // click handlers. Keep this file focused on runtime performance only.
 
   // Labels already activate their nested file input natively. Admin 2.0 also
   // has an explicit handler for WebViews, so stop that handler from recursively
