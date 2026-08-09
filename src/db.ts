@@ -43,6 +43,7 @@ export async function upsertUser(env: Env, user: TelegramUser): Promise<void> {
     ON CONFLICT(telegram_id) DO UPDATE SET
       username = excluded.username,
       first_name = excluded.first_name,
+      language = CASE WHEN users.language_selected = 0 THEN excluded.language ELSE users.language END,
       updated_at = excluded.updated_at
   `)
     .bind(user.id, user.username ?? null, user.first_name ?? null, initialLanguage, now, now)
