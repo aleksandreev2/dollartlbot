@@ -83,4 +83,6 @@ jobs:
           test -f migrations/0010_publication_logs.sql
           test -f migrations/0011_admin_users_reliability.sql
       - name: Audit Mini App localization coverage
-        run: node scripts/audit-miniapp-i18n.mjs
+        run: |
+          node scripts/audit-miniapp-i18n.mjs
+          node scripts/audit-home-v2.mjs
