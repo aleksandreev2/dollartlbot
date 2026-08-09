@@ -10,20 +10,21 @@ import { fr } from './fr';
 import { de } from './de';
 import { ru } from './ru';
 import { featureTranslations } from './features';
+import { policyTranslations } from './policy';
 
 export { SUPPORTED_LANGUAGES, type Locale } from './types';
 
 const dictionaries = {
-  en: { ...en, ...featureTranslations.en },
-  es: { ...es, ...featureTranslations.es },
-  fil: { ...fil, ...featureTranslations.fil },
-  hi: { ...hi, ...featureTranslations.hi },
-  pt: { ...pt, ...featureTranslations.pt },
-  id: { ...id, ...featureTranslations.id },
-  vi: { ...vi, ...featureTranslations.vi },
-  fr: { ...fr, ...featureTranslations.fr },
-  de: { ...de, ...featureTranslations.de },
-  ru: { ...ru, ...featureTranslations.ru },
+  en: { ...en, ...featureTranslations.en, ...policyTranslations.en },
+  es: { ...es, ...featureTranslations.es, ...policyTranslations.es },
+  fil: { ...fil, ...featureTranslations.fil, ...policyTranslations.fil },
+  hi: { ...hi, ...featureTranslations.hi, ...policyTranslations.hi },
+  pt: { ...pt, ...featureTranslations.pt, ...policyTranslations.pt },
+  id: { ...id, ...featureTranslations.id, ...policyTranslations.id },
+  vi: { ...vi, ...featureTranslations.vi, ...policyTranslations.vi },
+  fr: { ...fr, ...featureTranslations.fr, ...policyTranslations.fr },
+  de: { ...de, ...featureTranslations.de, ...policyTranslations.de },
+  ru: { ...ru, ...featureTranslations.ru, ...policyTranslations.ru },
 } as const;
 
 export type TranslationKey = keyof typeof dictionaries.en;
