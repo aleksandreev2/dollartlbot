@@ -1,0 +1,62 @@
+import { errorText, safeSecretEqual } from './db';
+import { handleUpdate } from './handlers';
+import { TelegramClient, type TelegramUpdate } from './telegram';
+
+const MAX_UPDATE_BYTES = 1_000_000;
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (request.method === 'GET' && url.pathname === '/') {
+      return Response.json({ ok: true, service: 'dollartlbot' });
+    }
+
+    if (request.method !== 'POST' || url.pathname !== '/webhook') {
+      return new Response('Not found', { status: 404 });
+    }
+
+    const suppliedSecret = request.headers.get('x-telegram-bot-api-secret-token') ?? '';
+    if (!(await safeSecretEqual(suppliedSecret, env.TELEGRAM_WEBHOOK_SECRET))) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const contentLength = Number(request.headers.get('content-length') ?? '0');
+    if (Number.isFinite(contentLength) && contentLength > MAX_UPDATE_BYTES) {
+      return new Response('Payload too large', { status: 413 });
+    }
+
+    let update: TelegramUpdate;
+    try {
+      update = (await request.json()) as TelegramUpdate;
+    } catch {
+      return new Response('Bad request', { status: 400 });
+    }
+
+    const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+
+    try {
+      const inserted = await env.DB.prepare(
+        'INSERT OR IGNORE INTO processed_updates (update_id, created_at) VALUES (?, ?)',
+      )
+        .bind(update.update_id, new Date().toISOString())
+        .run();
+
+      if ((inserted.meta.changes ?? 0) === 0) return new Response('OK');
+
+      await handleUpdate(update, env, telegram, ctx);
+      return new Response('OK');
+    } catch (error) {
+      ctx.waitUntil(
+        env.DB.prepare('DELETE FROM processed_updates WHERE update_id = ?')
+          .bind(update.update_id)
+          .run()
+          .catch(() => undefined),
+      );
+      console.error(
+        JSON.stringify({ event: 'update_failed', update_id: update.update_id, error: errorText(error) }),
+      );
+      return new Response('Temporary error', { status: 500 });
+    }
+  },
+} satisfies ExportedHandler<Env>;
