@@ -21,6 +21,8 @@ jobs:
         run: node scripts/audit-backend-safety.mjs
       - name: Audit frontend stability invariants
         run: node scripts/audit-frontend-stability.mjs
+      - name: Audit EPUB resource safety
+        run: node scripts/audit-epub-safety.mjs
       - name: Validate D1 migrations locally
         run: npx wrangler d1 migrations apply DB --local
       - name: Check Mini App JavaScript syntax
