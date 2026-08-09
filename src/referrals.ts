@@ -5,6 +5,7 @@ import { getQuotaState, REFERRAL_MONTHLY_SLOT_CAP } from './quota';
 import { getSubscriptionState } from './subscription';
 import {
   TelegramClient,
+  type InlineKeyboardMarkup,
   type TelegramChat,
   type TelegramChatMember,
   type TelegramChatMemberUpdated,
@@ -14,7 +15,11 @@ import { FREE_MONTHLY_REQUEST_LIMIT, SUBSCRIBER_MONTHLY_REQUEST_LIMIT } from './
 const QUALIFY_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 const MAINTENANCE_BATCH = 50;
 
-type ReferralEnv = Env & { REFERRAL_CHANNEL_ID?: string };
+type ReferralEnv = Env & {
+  REFERRAL_CHANNEL_ID?: string;
+  BOT_USERNAME?: string;
+  MINI_APP_URL?: string;
+};
 
 type ReferralRow = {
   id: number;
@@ -43,6 +48,69 @@ const NOTIFY: Record<Locale, { earned: string; cap: string }> = {
   ru: { earned: '🎁 Реферал засчитан! Вы получили +1 дополнительную заявку на новеллу.', cap: '✅ Реферал засчитан. У вас уже достигнут максимум: +3 реферальных слота.' },
 };
 
+const REFERRAL_START: Record<Locale, { title: string; body: string; join: string; app: string }> = {
+  en: {
+    title: '🎁 You were invited to Dollar TL',
+    body: 'Join our channel using the button below and stay subscribed for at least 7 days. After that, the person who invited you receives +1 bonus novel request. You can also open the Dollar TL Mini App right away.',
+    join: 'Join the Dollar TL channel',
+    app: 'Open Dollar TL',
+  },
+  es: {
+    title: '🎁 Te invitaron a Dollar TL',
+    body: 'Únete a nuestro canal con el botón de abajo y permanece suscrito al menos 7 días. Después, la persona que te invitó recibirá +1 solicitud extra de novela. También puedes abrir la Mini App de Dollar TL ahora mismo.',
+    join: 'Unirse al canal de Dollar TL',
+    app: 'Abrir Dollar TL',
+  },
+  fil: {
+    title: '🎁 Inimbitahan ka sa Dollar TL',
+    body: 'Sumali sa aming channel gamit ang button sa ibaba at manatili nang hindi bababa sa 7 araw. Pagkatapos nito, makakakuha ng +1 bonus na kahilingan sa nobela ang nag-imbita sa iyo. Maaari mo ring buksan agad ang Dollar TL Mini App.',
+    join: 'Sumali sa Dollar TL channel',
+    app: 'Buksan ang Dollar TL',
+  },
+  hi: {
+    title: '🎁 आपको Dollar TL में आमंत्रित किया गया है',
+    body: 'नीचे दिए गए बटन से हमारे चैनल में जुड़ें और कम से कम 7 दिन सदस्य बने रहें। इसके बाद आपको आमंत्रित करने वाले व्यक्ति को +1 अतिरिक्त उपन्यास अनुरोध मिलेगा। आप अभी Dollar TL Mini App भी खोल सकते हैं।',
+    join: 'Dollar TL चैनल से जुड़ें',
+    app: 'Dollar TL खोलें',
+  },
+  pt: {
+    title: '🎁 Você foi convidado para o Dollar TL',
+    body: 'Entre no nosso canal pelo botão abaixo e permaneça inscrito por pelo menos 7 dias. Depois disso, quem te convidou recebe +1 pedido extra de novel. Você também pode abrir o Mini App do Dollar TL agora.',
+    join: 'Entrar no canal do Dollar TL',
+    app: 'Abrir Dollar TL',
+  },
+  id: {
+    title: '🎁 Kamu diundang ke Dollar TL',
+    body: 'Gabung ke channel kami lewat tombol di bawah dan tetap menjadi anggota setidaknya selama 7 hari. Setelah itu, orang yang mengundangmu mendapat +1 permintaan novel bonus. Kamu juga bisa langsung membuka Mini App Dollar TL.',
+    join: 'Gabung channel Dollar TL',
+    app: 'Buka Dollar TL',
+  },
+  vi: {
+    title: '🎁 Bạn được mời vào Dollar TL',
+    body: 'Hãy tham gia kênh của chúng tôi bằng nút bên dưới và ở lại ít nhất 7 ngày. Sau đó, người đã mời bạn sẽ nhận +1 lượt yêu cầu tiểu thuyết. Bạn cũng có thể mở Mini App Dollar TL ngay bây giờ.',
+    join: 'Tham gia kênh Dollar TL',
+    app: 'Mở Dollar TL',
+  },
+  fr: {
+    title: '🎁 Vous avez été invité sur Dollar TL',
+    body: 'Rejoignez notre canal avec le bouton ci-dessous et restez abonné pendant au moins 7 jours. Ensuite, la personne qui vous a invité reçoit +1 demande de roman bonus. Vous pouvez aussi ouvrir immédiatement la Mini App Dollar TL.',
+    join: 'Rejoindre le canal Dollar TL',
+    app: 'Ouvrir Dollar TL',
+  },
+  de: {
+    title: '🎁 Du wurdest zu Dollar TL eingeladen',
+    body: 'Tritt unserem Kanal über die Schaltfläche unten bei und bleibe mindestens 7 Tage Mitglied. Danach erhält die Person, die dich eingeladen hat, +1 zusätzliche Roman-Anfrage. Du kannst außerdem sofort die Dollar TL Mini App öffnen.',
+    join: 'Dollar TL Kanal beitreten',
+    app: 'Dollar TL öffnen',
+  },
+  ru: {
+    title: '🎁 Вас пригласили в Dollar TL',
+    body: 'Вступите в наш канал по кнопке ниже и оставайтесь подписчиком не менее 7 дней. После этого пригласивший вас пользователь получит +1 дополнительную заявку на новеллу. Mini App Dollar TL можно открыть сразу.',
+    join: 'Вступить в канал Dollar TL',
+    app: 'Открыть Dollar TL',
+  },
+};
+
 export async function handleReferralApiRequest(
   request: Request,
   env: Env,
@@ -59,30 +127,15 @@ export async function handleReferralApiRequest(
     return miniAppJson({ enabled: false, max_bonus: REFERRAL_MONTHLY_SLOT_CAP });
   }
 
-  let invite = await env.DB.prepare(
-    'SELECT invite_link FROM referral_invites WHERE referrer_user_id = ?',
-  ).bind(auth.telegramUser.id).first<{ invite_link: string }>();
-
-  if (!invite?.invite_link) {
-    try {
-      const created = await telegram.createChatInviteLink(channel, `DTL ref ${auth.telegramUser.id}`);
-      const now = new Date().toISOString();
-      await env.DB.prepare(`
-        INSERT INTO referral_invites (referrer_user_id, invite_link, created_at, updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(referrer_user_id) DO UPDATE SET
-          invite_link = excluded.invite_link,
-          updated_at = excluded.updated_at
-      `).bind(auth.telegramUser.id, created.invite_link, now, now).run();
-      invite = { invite_link: created.invite_link };
-    } catch (error) {
-      console.warn(JSON.stringify({ event: 'referral_invite_create_failed', user_id: auth.telegramUser.id, error: String(error) }));
-      return miniAppJsonError(
-        'referral_unavailable',
-        'Referral links are temporarily unavailable. Please try again later.',
-        503,
-      );
-    }
+  try {
+    await ensureChannelInvite(auth.telegramUser.id, env, telegram);
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'referral_invite_create_failed', user_id: auth.telegramUser.id, error: String(error) }));
+    return miniAppJsonError(
+      'referral_unavailable',
+      'Referral links are temporarily unavailable. Please try again later.',
+      503,
+    );
   }
 
   const [subscription, pending, qualified, grantStats] = await Promise.all([
@@ -121,7 +174,7 @@ export async function handleReferralApiRequest(
 
   return miniAppJson({
     enabled: true,
-    invite_link: invite.invite_link,
+    invite_link: referralDeepLink(auth.telegramUser.id, env),
     max_bonus: REFERRAL_MONTHLY_SLOT_CAP,
     grants_this_month: Number(grantStats?.count ?? 0),
     quota: {
@@ -145,6 +198,45 @@ export async function handleReferralApiRequest(
     }),
     qualified: qualified.results,
   });
+}
+
+export async function handleReferralBotStart(
+  startParam: string,
+  referredUserId: number,
+  locale: Locale,
+  env: Env,
+  telegram: TelegramClient,
+): Promise<boolean> {
+  const match = /^ref_([0-9a-z]+)$/i.exec(startParam.trim());
+  if (!match) return false;
+
+  const referrerUserId = Number.parseInt(match[1], 36);
+  if (!Number.isSafeInteger(referrerUserId) || referrerUserId <= 0 || referrerUserId === referredUserId) {
+    return true;
+  }
+
+  const referrer = await getUser(env, referrerUserId);
+  if (!referrer || !referralChannel(env)) return true;
+
+  let inviteLink: string;
+  try {
+    inviteLink = await ensureChannelInvite(referrerUserId, env, telegram);
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'referral_start_invite_failed', referrer_user_id: referrerUserId, referred_user_id: referredUserId, error: String(error) }));
+    return true;
+  }
+
+  const copy = REFERRAL_START[locale];
+  const keyboard: InlineKeyboardMarkup = {
+    inline_keyboard: [
+      [{ text: copy.join, url: inviteLink }],
+      ...((env as ReferralEnv).MINI_APP_URL
+        ? [[{ text: copy.app, web_app: { url: String((env as ReferralEnv).MINI_APP_URL) } }]]
+        : []),
+    ],
+  };
+  await telegram.sendMessage(referredUserId, `<b>${copy.title}</b>\n\n${copy.body}`, { reply_markup: keyboard });
+  return true;
 }
 
 export async function handleReferralChatMemberUpdate(
@@ -278,6 +370,35 @@ async function qualifyReferral(
   const user = await getUser(env, row.referrer_user_id);
   const locale = normalizeLocale(user?.language);
   await telegram.sendMessage(row.referrer_user_id, grant ? NOTIFY[locale].earned : NOTIFY[locale].cap).catch(() => undefined);
+}
+
+async function ensureChannelInvite(
+  referrerUserId: number,
+  env: Env,
+  telegram: TelegramClient,
+): Promise<string> {
+  const existing = await env.DB.prepare(
+    'SELECT invite_link FROM referral_invites WHERE referrer_user_id = ?',
+  ).bind(referrerUserId).first<{ invite_link: string }>();
+  if (existing?.invite_link) return existing.invite_link;
+
+  const channel = referralChannel(env);
+  if (!channel) throw new Error('Referral channel is not configured');
+  const created = await telegram.createChatInviteLink(channel, `DTL ref ${referrerUserId}`);
+  const now = new Date().toISOString();
+  await env.DB.prepare(`
+    INSERT INTO referral_invites (referrer_user_id, invite_link, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(referrer_user_id) DO UPDATE SET
+      invite_link = excluded.invite_link,
+      updated_at = excluded.updated_at
+  `).bind(referrerUserId, created.invite_link, now, now).run();
+  return created.invite_link;
+}
+
+function referralDeepLink(referrerUserId: number, env: Env): string {
+  const configured = String((env as ReferralEnv).BOT_USERNAME ?? 'dollartlbot').trim().replace(/^@/, '');
+  return `https://t.me/${configured}?start=ref_${referrerUserId.toString(36)}`;
 }
 
 function referralChannel(env: Env): number | string | null {
