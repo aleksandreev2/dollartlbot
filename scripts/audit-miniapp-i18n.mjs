@@ -92,13 +92,13 @@ const quotaWords=evalObject(between(quota,'const words=',';\n  const captions=')
 const quotaCaptions=evalObject(between(quota,'const captions=',';\n  function norm'),'quota unlimited captions');
 assertExactLocaleSet(quotaWords,'quota unlimited words');assertExactLocaleSet(quotaCaptions,'quota unlimited captions');
 
-// The classic Telegram bot must not silently fall back to English because one
-// locale forgot a key.
+// The classic Telegram bot intentionally has sparse per-locale override layers.
+// What matters is that the FINAL dictionary after the real merge order contains
+// the complete English key set for every locale, so t() never falls back because
+// a locale forgot a user-facing key.
 const base={};
 for(const locale of allLocales)base[locale]=evalExportObject(`src/i18n/${locale}.ts`,locale);
-assertSameKeys(base,'Telegram bot base dictionaries');
-
-for(const [path,name] of [
+const layerSpecs=[
   ['src/i18n/features.ts','featureTranslations'],
   ['src/i18n/policy.ts','policyTranslations'],
   ['src/i18n/policy_override.ts','policyOverrideTranslations'],
@@ -107,27 +107,47 @@ for(const [path,name] of [
   ['src/i18n/rules_quality_override.ts','rulesQualityOverrideTranslations'],
   ['src/i18n/interface_polish.ts','interfacePolishTranslations'],
   ['src/i18n/locale_cleanup.ts','localeCleanupTranslations'],
-]){
-  const obj=evalExportObject(path,name);assertExactLocaleSet(obj,`${path}/${name}`);assertSameKeys(obj,`${path}/${name}`);
+];
+const layers=[];
+for(const [path,name] of layerSpecs){
+  const obj=evalExportObject(path,name);assertExactLocaleSet(obj,`${path}/${name}`);layers.push(obj);
+}
+const merged={};
+for(const locale of allLocales)merged[locale]=Object.assign({},base[locale],...layers.map(layer=>layer[locale]||{}));
+assertSameKeys(merged,'Final Telegram bot dictionaries');
+
+// Core final values may legitimately keep brand names / technical nouns, but
+// empty values or undefined strings must never survive the merge.
+for(const locale of allLocales){
+  for(const [key,value] of Object.entries(merged[locale])){
+    if(typeof value!=='string'||!value.trim())throw new Error(`Final Telegram bot dictionaries/${locale}: empty value for ${key}`);
+  }
 }
 
-// Known hardcoded user-facing strings in app.js must have explicit coverage.
+// Known hardcoded user-facing strings in app.js must have either literal
+// translation coverage or an explicit semantic patch in the final runtime.
 const app=read('public/app/app.js');
 const corpus=[complete,wizard,polish,read('public/app/i18n-inline-fixes.js'),runtime,referrals,onboarding,notifications,quota].join('\n');
 const normalizedCorpus=normalizeText(corpus);
-const hardcoded=[
-  'Thank you for supporting novel translations!',
-  'Chapter Progress','No requests yet.','No matching requests.','Nothing here.',
+const literalHardcoded=[
+  'Thank you for supporting novel translations!','Chapter Progress','No requests yet.','No matching requests.','Nothing here.',
   'Complete the novel details.','Add at least one genre or tag.','Describe the sexual content or fetishes.',
-  'Telegram bot notifications are enabled for request status updates.','Request #','Edit',
-  'Dollar TL submission flow','Submission and content rules','5 requests/month · no 250-chapter restriction',
+  'Request #','Edit','5 requests/month · no 250-chapter restriction',
   'Could not read EPUB structure.','Bad EPUB entry','EPUB compression is not supported on this device.','just now'
 ];
-for(const phrase of hardcoded){
+for(const phrase of literalHardcoded){
   if(!app.includes(phrase))continue;
   if(!corpus.includes(phrase)&&!normalizedCorpus.includes(normalizeText(phrase))){
     throw new Error(`Hardcoded Mini App phrase is not covered by localization layers: ${phrase}`);
   }
+}
+const semanticPatches=[
+  ['Dollar TL submission flow','guideSetting:t.guideSub'],
+  ['Submission and content rules','rulesSetting:t.rulesSub'],
+  ['Telegram bot notifications are enabled for request status updates.','stopImmediatePropagation'],
+];
+for(const [phrase,evidence] of semanticPatches){
+  if(app.includes(phrase)&&!corpus.includes(evidence))throw new Error(`Hardcoded Mini App phrase has no semantic localization patch: ${phrase}`);
 }
 for(const tag of ['Fantasy','Romance','Adventure','Academy','Isekai','Reincarnation','Magic','Strong MC','Harem','Slice of Life','Time Travel','System','Villainess','Slow Burn']){
   for(const locale of allLocales)if(!runtimeTags[locale]?.[tag])throw new Error(`Popular tag ${tag}: missing ${locale} label`);
@@ -139,5 +159,6 @@ for(const required of ["'/api/app/bootstrap'","'/api/app/language'",'window.__DT
 }
 const index=read('public/app/index.html');
 for(const asset of ['/app/i18n-runtime-v2.js','/app/language-switch.css'])if(!index.includes(asset))throw new Error(`index.html does not load ${asset}`);
+if(index.includes('/app/language-display-fix.js'))throw new Error('Legacy language-display-fix.js must not be loaded: it conflicts with saved English locale.');
 
-console.log(`Localization audit passed for ${allLocales.length} locales across Mini App, feature pages, API errors and classic bot dictionaries.`);
+console.log(`Localization audit passed for ${allLocales.length} locales across Mini App, feature pages, API errors and final classic-bot dictionaries.`);
