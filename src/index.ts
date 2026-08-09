@@ -1,6 +1,7 @@
 import { errorText, safeSecretEqual } from './db';
 import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
+import { handleMiniAppRequest } from './miniapp';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 
@@ -11,8 +12,15 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    const miniAppResponse = await handleMiniAppRequest(request, env, ctx);
+    if (miniAppResponse) return miniAppResponse;
+
     if (request.method === 'GET' && url.pathname === '/') {
-      return Response.json({ ok: true, service: 'dollartlbot' });
+      return Response.json({
+        ok: true,
+        service: 'dollartlbot',
+        mini_app: `${url.origin}/app/`,
+      });
     }
 
     if (request.method !== 'POST' || url.pathname !== '/webhook') {
