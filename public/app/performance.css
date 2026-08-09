@@ -1,0 +1,76 @@
+/* Lightweight runtime safeguards for low-end Telegram WebViews. */
+.referral-page .referral-reward-track {
+  align-items: stretch;
+}
+.referral-page .referral-reward-node {
+  box-sizing: border-box;
+  width: 100%;
+  height: 58px;
+  min-height: 58px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  line-height: 1;
+  overflow: hidden;
+}
+.referral-page .referral-reward-node svg {
+  display: block;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.referral-page .referral-reward-node span {
+  display: block;
+  margin: 0;
+  min-height: 10px;
+  line-height: 1;
+  text-align: center;
+}
+
+/* Skip paint/layout work for list items that are well below the viewport. */
+@supports (content-visibility: auto) {
+  .request-card,
+  .admin-request,
+  .queue-row,
+  .referral-progress-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 120px;
+  }
+}
+
+/* Decorative animation should never burn cycles while Telegram is backgrounded. */
+html.dtl-background .onboarding-orbit,
+html.dtl-background .onboarding-spark,
+html.dtl-background .referral-hero-spark,
+html.dtl-background .cover-spark,
+html.dtl-background .notification-dot {
+  animation-play-state: paused !important;
+}
+
+/* Keep meaningful transitions, but remove continuous decoration on weak devices. */
+html.dtl-low-power .onboarding-orbit,
+html.dtl-low-power .onboarding-spark,
+html.dtl-low-power .referral-hero-spark,
+html.dtl-low-power .cover-spark {
+  animation: none !important;
+}
+html.dtl-low-power .onboarding-card,
+html.dtl-low-power .bottom-sheet {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.dtl-low-power .real-cover-image {
+  transition-duration: 120ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .referral-page .referral-reward-node,
+  .request-card,
+  .queue-row {
+    scroll-behavior: auto;
+  }
+}
