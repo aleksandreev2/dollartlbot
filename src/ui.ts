@@ -63,7 +63,7 @@ export async function sendRules(
     : {
         inline_keyboard: [
           [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
-          [{ text: '← Menu', callback_data: 'menu:home' }],
+          [{ text: '←', callback_data: 'menu:home' }],
         ],
       };
 
@@ -154,6 +154,8 @@ export async function sendConfirmation(
   const status = draft.publication_status === 'completed' ? t(locale, 'completed') : t(locale, 'ongoing');
   const source = draft.source_url ? escapeHtml(draft.source_url) : '—';
   const notes = draft.notes ? escapeHtml(draft.notes) : '—';
+  const sexual = draft.sexual_content === 'None' ? t(locale, 'none') : escapeHtml(draft.sexual_content);
+  const sensitive = draft.sensitive_content === 'None' ? t(locale, 'none') : escapeHtml(draft.sensitive_content);
 
   const text = [
     t(locale, 'confirmHeader'),
@@ -166,9 +168,9 @@ export async function sendConfirmation(
     '',
     `<b>${t(locale, 'tagsLabel')}:</b>\n${escapeHtml(draft.genres_tags)}`,
     '',
-    `<b>${t(locale, 'sexualLabel')}:</b>\n${escapeHtml(draft.sexual_content)}`,
+    `<b>${t(locale, 'sexualLabel')}:</b>\n${sexual}`,
     '',
-    `<b>${t(locale, 'sensitiveLabel')}:</b>\n${escapeHtml(draft.sensitive_content)}`,
+    `<b>${t(locale, 'sensitiveLabel')}:</b>\n${sensitive}`,
     '',
     `<b>${t(locale, 'notesLabel')}:</b>\n${notes}`,
     '',
@@ -214,7 +216,7 @@ export async function sendLimit(
   if (!subscription.subscriber) {
     rows.push([{ text: t(locale, 'subscribe'), url: env.BOOSTY_SUBSCRIPTION_URL }]);
   }
-  rows.push([{ text: '← Menu', callback_data: 'menu:home' }]);
+  rows.push([{ text: '←', callback_data: 'menu:home' }]);
 
   await telegram.sendMessage(userId, text, { reply_markup: { inline_keyboard: rows } });
 }
