@@ -1,0 +1,268 @@
+/* Request/queue card refinement: compact layout, semantic metadata and rich deterministic fallback covers. */
+
+.circle-language-flag {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  display: block;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(20,20,20,.045), 0 1px 3px rgba(20,20,20,.08);
+}
+.localized-language.canonical-language {
+  gap: 6px;
+  white-space: nowrap;
+}
+.localized-language.canonical-language > svg,
+.localized-language.canonical-language > .lucide {
+  display: none;
+}
+.language-meta-rest {
+  white-space: nowrap;
+}
+.list-meta,
+.novel-meta,
+.review-sub,
+.admin-meta {
+  min-width: 0;
+}
+.list-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 0;
+  row-gap: 3px;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+/* Rich placeholder cover. Real covers can later replace this element without changing card layout. */
+.novel-cover.rich-fallback-cover {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: 8px;
+  overflow: hidden;
+  color: rgba(255,255,255,.96);
+  border: 1px solid rgba(255,255,255,.17);
+  box-shadow: 0 9px 22px rgba(31,27,22,.13), inset 0 1px 0 rgba(255,255,255,.14);
+  font-family: var(--serif);
+  text-shadow: 0 1px 10px rgba(0,0,0,.18);
+}
+.novel-cover.rich-fallback-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 22% 12%, rgba(255,220,151,.34), transparent 35%),
+    linear-gradient(145deg, var(--cover-a), var(--cover-b) 54%, var(--cover-c));
+}
+.novel-cover.rich-fallback-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: .62;
+  background:
+    linear-gradient(118deg, transparent 0 42%, rgba(255,255,255,.055) 42% 43%, transparent 43% 100%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.032) 0 1px, transparent 1px 8px),
+    radial-gradient(circle at 80% 88%, rgba(218,163,75,.21), transparent 42%);
+  pointer-events: none;
+}
+.cover-v0 { --cover-a:#17202b; --cover-b:#30394b; --cover-c:#9a6a35; }
+.cover-v1 { --cover-a:#241a2d; --cover-b:#4a3448; --cover-c:#ad7740; }
+.cover-v2 { --cover-a:#142a27; --cover-b:#31504a; --cover-c:#a4773d; }
+.cover-v3 { --cover-a:#212127; --cover-b:#4d4c55; --cover-c:#bc8544; }
+.cover-v4 { --cover-a:#17253c; --cover-b:#334b6b; --cover-c:#b97b3f; }
+.cover-v5 { --cover-a:#30201e; --cover-b:#65433e; --cover-c:#c28b4c; }
+.cover-topline,
+.cover-footer {
+  min-height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  position: relative;
+  z-index: 1;
+}
+.cover-brand-mini {
+  font-family: var(--sans);
+  font-size: 7px;
+  line-height: 1;
+  letter-spacing: .14em;
+  font-weight: 800;
+  color: rgba(255,255,255,.72);
+}
+.cover-topline .circle-language-flag {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.38), 0 2px 5px rgba(0,0,0,.18);
+}
+.cover-monogram {
+  align-self: center;
+  max-width: 100%;
+  font: 650 clamp(20px, 5.4vw, 27px)/.95 var(--serif);
+  letter-spacing: -.035em;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+}
+.cover-footer-mark {
+  width: 18px;
+  height: 1px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.55);
+  box-shadow: 6px 0 0 rgba(255,255,255,.2);
+}
+.cover-spark {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  border: 1px solid rgba(255,224,163,.82);
+  background: rgba(218,163,75,.25);
+}
+.novel-cover.rich-fallback-cover.small {
+  width: 64px;
+  min-width: 64px;
+  height: 92px;
+  aspect-ratio: auto;
+  border-radius: 12px;
+  padding: 7px;
+}
+.novel-cover.rich-fallback-cover.small .cover-monogram {
+  font-size: 20px;
+}
+.novel-cover.rich-fallback-cover.small .cover-brand-mini {
+  font-size: 6px;
+}
+
+/* Home request preview: keep everything in one compact content column instead of leaving an empty row. */
+.list-row:not(.queue-row) {
+  grid-template-columns: 64px minmax(0,1fr) !important;
+  align-items: start !important;
+  gap: 12px !important;
+  padding: 12px 13px !important;
+}
+.list-row:not(.queue-row) > .novel-cover.small {
+  grid-row: 1;
+  align-self: center;
+}
+.list-row:not(.queue-row) > .list-copy {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  min-height: 92px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+}
+.list-row:not(.queue-row) .list-title {
+  width: 100%;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.list-row:not(.queue-row) .list-meta {
+  margin-top: 0;
+  line-height: 1.35;
+}
+.list-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+.list-status-line .status-pill {
+  min-height: 26px;
+  padding: 4px 9px;
+  font-size: 10.5px;
+  line-height: 1.15;
+}
+.list-row:not(.queue-row) > .status-pill {
+  display: none !important;
+}
+
+/* Full My Requests cards: tighter cover and more balanced information density. */
+.request-card {
+  grid-template-columns: 76px minmax(0,1fr) !important;
+  gap: 13px !important;
+  align-items: start;
+  padding: 13px !important;
+}
+.request-card > .novel-cover.rich-fallback-cover {
+  width: 76px;
+  min-width: 76px;
+  height: 106px;
+  aspect-ratio: auto;
+  border-radius: 13px;
+}
+.request-card .request-top {
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  gap: 7px;
+}
+.request-card .request-top > .status-pill {
+  justify-self: start;
+  width: fit-content;
+}
+.request-card .novel-title {
+  font-size: 17px;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+.request-card .novel-meta {
+  margin-top: 5px;
+  line-height: 1.35;
+}
+.request-card .request-position {
+  margin-top: 8px !important;
+  padding: 7px 9px;
+  width: fit-content;
+  border-radius: 10px;
+  background: var(--gold-pale);
+  border: 1px solid #ecd8af;
+}
+.request-card .timeline {
+  margin-top: 12px;
+}
+
+/* Queue rows inherit the richer cover but retain their position number. */
+.queue-row .novel-cover.rich-fallback-cover.small {
+  width: 56px;
+  min-width: 56px;
+  height: 82px;
+  padding: 6px;
+}
+.queue-row .novel-cover.rich-fallback-cover.small .cover-monogram { font-size: 17px; }
+.queue-row .list-meta { white-space: normal; overflow: visible; text-overflow: clip; }
+
+@media (max-width: 390px) {
+  .list-row:not(.queue-row) {
+    grid-template-columns: 60px minmax(0,1fr) !important;
+    gap: 10px !important;
+  }
+  .novel-cover.rich-fallback-cover.small {
+    width: 60px;
+    min-width: 60px;
+    height: 88px;
+  }
+  .list-row:not(.queue-row) > .list-copy { min-height: 88px; }
+  .request-card {
+    grid-template-columns: 70px minmax(0,1fr) !important;
+    gap: 11px !important;
+  }
+  .request-card > .novel-cover.rich-fallback-cover {
+    width: 70px;
+    min-width: 70px;
+    height: 100px;
+  }
+}
