@@ -42,6 +42,7 @@ jobs:
           node --check public/app/quota-unlimited-ui.js
           node --check public/app/publishing-fixes.js
           node --check public/app/publishing-comments-ui.js
+          node --check public/app/publication-management.js
           node --check public/app/notifications-ui.js
       - name: Verify publishing and desktop assets
         run: |
@@ -54,12 +55,16 @@ jobs:
           test -f public/app/publishing-fixes.css
           test -f public/app/publishing-fixes.js
           test -f public/app/publishing-comments-ui.js
+          test -f public/app/publication-management.js
+          test -f public/app/publication-management.css
           test -f public/app/notifications-ui.css
           grep -q '/app/desktop-v2.css' public/app/index.html
           grep -q '/app/admin-v3.js' public/app/index.html
           grep -q '/app/cover-reliability.js' public/app/index.html
           grep -q '/app/quota-unlimited-ui.js' public/app/index.html
           grep -q '/app/publishing-comments-ui.js' public/app/index.html
+          grep -q '/app/publication-management.js' public/app/index.html
+          grep -q '/app/publication-management.css' public/app/index.html
           test -f migrations/0008_admin_publishing_notifications.sql
           test -f migrations/0009_publication_image_spoiler.sql
           test -f migrations/0010_publication_logs.sql
