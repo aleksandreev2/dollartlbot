@@ -78,20 +78,34 @@ export default {
     if (Number.isFinite(contentLength) && contentLength > MAX_UPDATE_BYTES) return new Response('Payload too large', { status: 413 });
 
     let update: TelegramUpdate;
-    try { update = (await request.json()) as TelegramUpdate; }
-    catch { return new Response('Bad request', { status: 400 }); }
+    try {
+      update = (await request.json()) as TelegramUpdate;
+    } catch {
+      return new Response('Bad request', { status: 400 });
+    }
 
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     try {
-      const inserted = await env.DB.prepare('INSERT OR IGNORE INTO processed_updates (update_id, created_at) VALUES (?, ?)').bind(update.update_id, new Date().toISOString()).run();
+      const inserted = await env.DB.prepare(
+        'INSERT OR IGNORE INTO processed_updates (update_id, created_at) VALUES (?, ?)',
+      ).bind(update.update_id, new Date().toISOString()).run();
       if ((inserted.meta.changes ?? 0) === 0) return new Response('OK');
-      if (update.chat_member) await handleReferralChatMemberUpdate(update.chat_member, env);
-      else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
+
+      if (update.chat_member) {
+        await handleReferralChatMemberUpdate(update.chat_member, env);
+      } else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
         // handled by publishing center
-      } else await handleUpdate(update, env, telegram, ctx);
+      } else {
+        await handleUpdate(update, env, telegram, ctx);
+      }
       return new Response('OK');
     } catch (error) {
-      ctx.waitUntil(env.DB.prepare('DELETE FROM processed_updates WHERE update_id = ?').bind(update.update_id).run().catch(() => undefined));
+      ctx.waitUntil(
+        env.DB.prepare('DELETE FROM processed_updates WHERE update_id = ?')
+          .bind(update.update_id)
+          .run()
+          .catch(() => undefined),
+      );
       console.error(JSON.stringify({ event: 'update_failed', update_id: update.update_id, error: errorText(error) }));
       return new Response('Temporary error', { status: 500 });
     }
@@ -99,14 +113,39 @@ export default {
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
-    await normalizeQueuePositions(env);
-    await retryPendingAdminDeliveries(env, telegram);
-    await runReferralMaintenance(env, telegram, new Date(controller.scheduledTime));
-    await runBroadcastMaintenance(env, telegram, 2);
-    await runPublicationDeliveryMaintenance(env, telegram, 8);
     const scheduledAt = new Date(controller.scheduledTime);
-    if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) await runDailyEngagement(env, telegram, scheduledAt);
+
+    await runScheduledTask('queue_normalize', () => normalizeQueuePositions(env));
+    await runScheduledTask('admin_delivery_retry', () => retryPendingAdminDeliveries(env, telegram));
+    await runScheduledTask('referral_maintenance', () => runReferralMaintenance(env, telegram, scheduledAt));
+    await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenance(env, telegram, 2));
+    await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
+
+    if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
+      await runScheduledTask('daily_engagement', () => runDailyEngagement(env, telegram, scheduledAt));
+    }
+
     const cutoff = new Date(controller.scheduledTime - PROCESSED_UPDATE_RETENTION_MS).toISOString();
-    await env.DB.prepare('DELETE FROM processed_updates WHERE created_at < ?').bind(cutoff).run();
+    await runScheduledTask('processed_update_cleanup', async () => {
+      await env.DB.prepare('DELETE FROM processed_updates WHERE created_at < ?').bind(cutoff).run();
+    });
   },
 } satisfies ExportedHandler<Env>;
+
+async function runScheduledTask(name: string, task: () => Promise<unknown>): Promise<void> {
+  const startedAt = Date.now();
+  try {
+    await task();
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 1_000) {
+      console.log(JSON.stringify({ event: 'scheduled_task_complete', task: name, duration_ms: durationMs }));
+    }
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: 'scheduled_task_failed',
+      task: name,
+      duration_ms: Date.now() - startedAt,
+      error: errorText(error),
+    }));
+  }
+}
