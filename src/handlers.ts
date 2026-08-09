@@ -19,14 +19,19 @@ import {
   upsertUser,
 } from './db';
 import { getSubscriptionState } from './subscription';
-import { beginSubmission, finalizeSubmission, handleAdminCallback } from './submissions';
+import { beginSubmission, finalizeSubmission } from './submissions';
+import { handleAdminCallback, showAdminHome } from './admin';
+import { disablePromoReminders } from './engagement';
+import { showMyRequests, showPublicQueue } from './queue';
 import {
   sendConfirmation,
+  sendGuide,
   sendLanguagePicker,
   sendLimit,
   sendMainMenu,
   sendRules,
   sendStep,
+  sendWelcome,
 } from './ui';
 import {
   escapeHtml,
@@ -105,7 +110,6 @@ async function handleMessage(
   }
 
   if (text === '/start' || text?.startsWith('/start ')) {
-    await clearSession(env, from.id);
     if (!user?.language_selected) {
       await sendLanguagePicker(from.id, 'en', telegram);
     } else {
@@ -131,6 +135,26 @@ async function handleMessage(
 
   if (text === '/limit') {
     await sendLimit(from.id, locale, env, telegram);
+    return;
+  }
+
+  if (text === '/queue') {
+    await showPublicQueue(from.id, locale, env, telegram);
+    return;
+  }
+
+  if (text === '/requests' || text === '/myrequests') {
+    await showMyRequests(from.id, locale, env, telegram);
+    return;
+  }
+
+  if (text === '/guide' || text === '/help') {
+    await sendGuide(from.id, locale, telegram);
+    return;
+  }
+
+  if (text === '/admin' && isAdmin(from.id, env)) {
+    await showAdminHome(from.id, env, telegram);
     return;
   }
 
@@ -294,6 +318,7 @@ async function handleCallback(
     const requested = data.slice(5);
     const nextLocale = normalizeLocale(requested);
     if (!SUPPORTED_LANGUAGES.some((language) => language.code === requested)) return;
+    const firstSelection = !user?.language_selected;
 
     await env.DB.prepare(
       'UPDATE users SET language = ?, language_selected = 1, updated_at = ? WHERE telegram_id = ?',
@@ -310,14 +335,33 @@ async function handleCallback(
       } else {
         await sendStep(query.from.id, session.step, locale, telegram);
       }
+    } else if (firstSelection) {
+      await sendWelcome(query.from.id, locale, telegram);
+      await sendMainMenu(query.from.id, locale, telegram);
     } else {
       await sendMainMenu(query.from.id, locale, telegram);
     }
     return;
   }
 
+  if (data === 'promo:optout') {
+    await disablePromoReminders(query.from.id, env, telegram);
+    return;
+  }
+
   if (data.startsWith('admin:')) {
     await handleAdminCallback(query, data, env, telegram);
+    return;
+  }
+
+  const queuePage = /^queue:page:(\d+)$/.exec(data);
+  if (queuePage) {
+    await showPublicQueue(query.from.id, locale, env, telegram, Number(queuePage[1]), query.message?.message_id);
+    return;
+  }
+  const requestPage = /^myreq:page:(\d+)$/.exec(data);
+  if (requestPage) {
+    await showMyRequests(query.from.id, locale, env, telegram, Number(requestPage[1]), query.message?.message_id);
     return;
   }
 
@@ -333,6 +377,15 @@ async function handleCallback(
       return;
     case 'menu:limit':
       await sendLimit(query.from.id, locale, env, telegram);
+      return;
+    case 'menu:queue':
+      await showPublicQueue(query.from.id, locale, env, telegram);
+      return;
+    case 'menu:myrequests':
+      await showMyRequests(query.from.id, locale, env, telegram);
+      return;
+    case 'menu:guide':
+      await sendGuide(query.from.id, locale, telegram);
       return;
     case 'menu:submit':
       await beginSubmission(query.from.id, locale, env, telegram);
