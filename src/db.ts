@@ -78,7 +78,7 @@ export function getSubmission(env: Env, id: number): Promise<SubmissionRow | nul
            publication_status, source_url, raw_file_id, raw_file_name, raw_file_mime,
            genres_tags, sexual_content, sensitive_content, notes, plan, status, slot_returned,
            admin_summary_sent, admin_file_sent, queue_status, queue_position,
-           queued_at, started_at, completed_at
+           queued_at, started_at, completed_at, current_chapter, progress_updated_at
     FROM submissions WHERE id = ?
   `)
     .bind(id)
