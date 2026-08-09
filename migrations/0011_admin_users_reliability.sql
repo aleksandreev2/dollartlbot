@@ -40,15 +40,6 @@ FROM submissions
 WHERE cover_key IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM cover_versions cv WHERE cv.submission_id = submissions.id AND cv.r2_key = submissions.cover_key);
 
-CREATE TRIGGER IF NOT EXISTS trg_submission_cover_history
-AFTER UPDATE OF cover_key ON submissions
-WHEN NEW.cover_key IS NOT NULL AND (OLD.cover_key IS NULL OR NEW.cover_key <> OLD.cover_key)
-BEGIN
-  INSERT INTO cover_versions (submission_id,r2_key,mime_type,source,created_at)
-  SELECT NEW.id,NEW.cover_key,NEW.cover_mime,COALESCE(NEW.cover_source,'admin'),COALESCE(NEW.cover_updated_at,NEW.updated_at)
-  WHERE NOT EXISTS (SELECT 1 FROM cover_versions WHERE submission_id=NEW.id AND r2_key=NEW.cover_key);
-END;
-
 ALTER TABLE publication_assets ADD COLUMN delivery_status TEXT NOT NULL DEFAULT 'pending'
   CHECK (delivery_status IN ('pending','sent','failed'));
 ALTER TABLE publication_assets ADD COLUMN delivered_message_id INTEGER;
