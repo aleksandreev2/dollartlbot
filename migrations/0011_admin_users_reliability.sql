@@ -64,6 +64,7 @@ ALTER TABLE publications ADD COLUMN bot_comment_status TEXT NOT NULL DEFAULT 'pe
   CHECK (bot_comment_status IN ('pending','sent','failed','disabled'));
 ALTER TABLE publications ADD COLUMN bot_comment_message_id INTEGER;
 ALTER TABLE publications ADD COLUMN bot_comment_error TEXT;
+ALTER TABLE publications ADD COLUMN telegram_deleted_at TEXT;
 
 UPDATE publication_assets SET delivery_status='sent' WHERE telegram_file_id IS NOT NULL;
 UPDATE publications SET bot_comment_status='disabled' WHERE add_bot_comment=0;
