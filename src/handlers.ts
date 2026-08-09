@@ -119,6 +119,11 @@ async function handleMessage(
     return;
   }
 
+  if (!user?.language_selected) {
+    await sendLanguagePicker(from.id, 'en', telegram);
+    return;
+  }
+
   if (text === '/rules') {
     await sendRules(from.id, locale, telegram, false);
     return;
@@ -134,11 +139,6 @@ async function handleMessage(
     await clearSession(env, from.id);
     await telegram.sendMessage(from.id, t(locale, 'cancelled'));
     await sendMainMenu(from.id, locale, telegram);
-    return;
-  }
-
-  if (!user?.language_selected) {
-    await sendLanguagePicker(from.id, 'en', telegram);
     return;
   }
 
