@@ -1,7 +1,6 @@
 (() => {
   const tg = window.Telegram?.WebApp;
   const view = document.getElementById('viewRoot');
-  const regionalFlags = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
   let request = null;
   let scheduled = false;
 
@@ -18,47 +17,12 @@
     de:{title:'Übersetzte Kapitel',subtitle:'Die neuesten von Dollar TL veröffentlichten Kapitel.',empty:'Noch keine übersetzten Kapitel veröffentlicht.',open:'Release öffnen',files:n=>`${n} Datei${n===1?'':'en'}`},
   };
 
-  const languageMatchers = [
-    ['kr',['korean','корей','coreano','coréen','koreanisch','korea','hàn quốc','कोरियाई','한국']],
-    ['jp',['japanese','япон','japonés','japonês','japonais','japanisch','jepang','nhật','जापानी','日本']],
-    ['cn',['chinese','китай','chino','chinês','chinois','chinesisch','tiongkok','trung quốc','चीनी','中文']],
-    ['gb',['english','англ','inglés','inglês','anglais','englisch','inggris','tiếng anh','अंग्रेज़ी']],
-    ['ru',['russian','русск','ruso','russo','russe','russisch','rusia','nga','रूसी']],
-    ['es',['spanish','испан','español','espagnol','spanisch','spanyol','tây ban nha','स्पेनिश']],
-    ['pt',['portuguese','португал','português','portugais','portugiesisch','portugis','bồ đào nha','पुर्तगाली']],
-    ['id',['indonesian','индонез','indonesio','indonésien','indonesisch','indonesia','इंडोनेशियाई']],
-    ['vn',['vietnamese','вьетнам','vietnamita','vietnamien','vietnamesisch','vietnam','việt nam','वियतनामी']],
-    ['fr',['french','француз','francés','francês','français','französisch','prancis','pháp','फ़्रेंच']],
-    ['de',['german','немец','alemán','alemão','allemand','deutsch','jerman','đức','जर्मन']],
-    ['in',['hindi','хинди','hindi','हिन्दी','हिंदी']],
-    ['ph',['filipino','филиппин','filipino','philippin','filipino']],
-  ];
-
   function locale(){
     const value = String(window.__DTL_LOCALE__ || document.documentElement.lang || tg?.initDataUnsafe?.user?.language_code || 'en').toLowerCase();
     return copy[value] ? value : 'en';
   }
   function t(){ return copy[locale()] || copy.en; }
   function esc(value=''){ return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-  function detectFlag(text=''){
-    const raw=String(text).toLowerCase();
-    for(const [code,terms] of languageMatchers) if(terms.some(term=>raw.includes(term))) return code;
-    return null;
-  }
-  function flagMarkup(code){ return code ? `<span class="dtl-country-flag flag-${code}" aria-hidden="true"></span>` : ''; }
-
-  function decorateFlags(){
-    const selectors=['.novel-meta > span:first-child','.list-meta','.review-sub'];
-    for(const el of document.querySelectorAll(selectors.join(','))){
-      // Circle Flags are the canonical language artwork. Never overwrite them
-      // with the old hand-drawn CSS flag fallback.
-      if(el.querySelector('.circle-language-flag,.dtl-country-flag')) continue;
-      const raw=(el.textContent||'').replace(regionalFlags,'').replace(/^\s+/,'');
-      const code=detectFlag(raw); if(!code) continue;
-      el.textContent=raw;
-      el.insertAdjacentHTML('afterbegin',flagMarkup(code)+' ');
-    }
-  }
 
   function formatDate(value){
     if(!value) return '';
@@ -128,7 +92,6 @@
   }
 
   function enhance(){
-    decorateFlags();
     if(document.getElementById('homeQueue')&&document.getElementById('homeRequests')) renderReleases();
   }
   function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;enhance();});}
