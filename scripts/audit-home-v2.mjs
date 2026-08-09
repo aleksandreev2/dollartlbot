@@ -3,7 +3,7 @@ import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../public/app/home-v2.js', import.meta.url), 'utf8');
 const startMarker = 'const copy = {';
-const endMarker = '\n\n  const languageMatchers';
+const endMarker = '\n\n  function locale';
 const start = source.indexOf(startMarker);
 const end = source.indexOf(endMarker, start + startMarker.length);
 if (start < 0 || end < 0) throw new Error('Could not locate home-v2 localization dictionary.');
