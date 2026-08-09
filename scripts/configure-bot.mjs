@@ -1,9 +1,12 @@
-const token = process.env.TELEGRAM_BOT_TOKEN;
-const webhookUrl = process.env.WEBHOOK_URL;
-const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+import { loadLocalVars } from './env.mjs';
+
+const vars = loadLocalVars();
+const token = vars.TELEGRAM_BOT_TOKEN;
+const webhookUrl = vars.WEBHOOK_URL;
+const webhookSecret = vars.TELEGRAM_WEBHOOK_SECRET;
 
 if (!token || !webhookUrl || !webhookSecret) {
-  console.error('Required env: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, WEBHOOK_URL');
+  console.error('Required: TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET in .dev.vars, plus WEBHOOK_URL in the environment.');
   process.exit(1);
 }
 
