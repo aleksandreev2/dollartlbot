@@ -37,5 +37,11 @@ jobs:
           node --check public/app/onboarding-interactions-fix.js
           node --check public/app/admin-v2.js
           node --check public/app/notifications-ui.js
+      - name: Verify publishing center assets
+        run: |
+          test -f public/app/admin-v2.css
+          test -f public/app/desktop.css
+          test -f public/app/notifications-ui.css
+          test -f migrations/0008_admin_publishing_notifications.sql
       - name: Audit Mini App localization coverage
         run: node scripts/audit-miniapp-i18n.mjs
