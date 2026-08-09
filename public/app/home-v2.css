@@ -1,0 +1,45 @@
+.dtl-country-flag{display:inline-block;flex:0 0 auto;width:22px;height:15px;border:1px solid rgba(15,15,15,.12);border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.08);vertical-align:-2px;overflow:hidden;background:#eee}
+.dtl-country-flag.flag-kr{background:radial-gradient(circle at 50% 42%,#cd2e3a 0 24%,#0047a0 25% 46%,transparent 47%),#fff}
+.dtl-country-flag.flag-jp{background:radial-gradient(circle at 50% 50%,#bc002d 0 34%,transparent 35%),#fff}
+.dtl-country-flag.flag-cn{background:radial-gradient(circle at 27% 32%,#ffde00 0 12%,transparent 13%),#de2910}
+.dtl-country-flag.flag-gb{background:linear-gradient(90deg,transparent 42%,#fff 42% 58%,transparent 58%),linear-gradient(transparent 36%,#fff 36% 64%,transparent 64%),linear-gradient(90deg,transparent 46%,#c8102e 46% 54%,transparent 54%),linear-gradient(transparent 42%,#c8102e 42% 58%,transparent 58%),#21468b}
+.dtl-country-flag.flag-ru{background:linear-gradient(#fff 0 33.33%,#1c57a7 33.33% 66.66%,#d52b1e 66.66%)}
+.dtl-country-flag.flag-es{background:linear-gradient(#aa151b 0 25%,#f1bf00 25% 75%,#aa151b 75%)}
+.dtl-country-flag.flag-pt{background:linear-gradient(90deg,#046a38 0 40%,#da291c 40%)}
+.dtl-country-flag.flag-id{background:linear-gradient(#ce1126 0 50%,#fff 50%)}
+.dtl-country-flag.flag-vn{background:radial-gradient(circle at 50% 50%,#ffcd00 0 13%,transparent 14%),#da251d}
+.dtl-country-flag.flag-fr{background:linear-gradient(90deg,#0055a4 0 33.33%,#fff 33.33% 66.66%,#ef4135 66.66%)}
+.dtl-country-flag.flag-de{background:linear-gradient(#000 0 33.33%,#dd0000 33.33% 66.66%,#ffce00 66.66%)}
+.dtl-country-flag.flag-in{background:radial-gradient(circle at 50% 50%,#1a5dab 0 8%,transparent 9%),linear-gradient(#ff9933 0 33.33%,#fff 33.33% 66.66%,#138808 66.66%)}
+.dtl-country-flag.flag-ph{background:linear-gradient(#0038a8 0 50%,#ce1126 50%)}
+.language-picker-flag{font-size:0!important;display:grid;place-items:center}
+.language-picker-flag::before{content:"";display:block;width:24px;height:16px;border:1px solid rgba(15,15,15,.12);border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.08);background:#eee}
+[data-lang="en"] .language-picker-flag::before{background:linear-gradient(90deg,transparent 42%,#fff 42% 58%,transparent 58%),linear-gradient(transparent 36%,#fff 36% 64%,transparent 64%),linear-gradient(90deg,transparent 46%,#c8102e 46% 54%,transparent 54%),linear-gradient(transparent 42%,#c8102e 42% 58%,transparent 58%),#21468b}
+[data-lang="es"] .language-picker-flag::before{background:linear-gradient(#aa151b 0 25%,#f1bf00 25% 75%,#aa151b 75%)}
+[data-lang="fil"] .language-picker-flag::before{background:linear-gradient(#0038a8 0 50%,#ce1126 50%)}
+[data-lang="hi"] .language-picker-flag::before{background:radial-gradient(circle at 50% 50%,#1a5dab 0 8%,transparent 9%),linear-gradient(#ff9933 0 33.33%,#fff 33.33% 66.66%,#138808 66.66%)}
+[data-lang="pt"] .language-picker-flag::before{background:linear-gradient(90deg,#046a38 0 40%,#da291c 40%)}
+[data-lang="id"] .language-picker-flag::before{background:linear-gradient(#ce1126 0 50%,#fff 50%)}
+[data-lang="vi"] .language-picker-flag::before{background:radial-gradient(circle at 50% 50%,#ffcd00 0 13%,transparent 14%),#da251d}
+[data-lang="fr"] .language-picker-flag::before{background:linear-gradient(90deg,#0055a4 0 33.33%,#fff 33.33% 66.66%,#ef4135 66.66%)}
+[data-lang="de"] .language-picker-flag::before{background:linear-gradient(#000 0 33.33%,#dd0000 33.33% 66.66%,#ffce00 66.66%)}
+[data-lang="ru"] .language-picker-flag::before{background:linear-gradient(#fff 0 33.33%,#1c57a7 33.33% 66.66%,#d52b1e 66.66%)}
+.dtl-releases-section .section-header{align-items:flex-end}
+.dtl-releases-copy{min-width:0}
+.dtl-releases-copy .subtitle{margin-top:4px}
+.dtl-release-list{display:grid;gap:10px}
+.dtl-release-card{display:grid;grid-template-columns:72px minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;min-width:0;padding:11px;border:1px solid var(--border,#e8e4dc);border-radius:16px;background:var(--surface,#fff);color:inherit;text-align:left;text-decoration:none;cursor:default;transition:transform .16s ease,border-color .16s ease,background .16s ease}
+a.dtl-release-card{cursor:pointer}
+a.dtl-release-card:hover{transform:translateY(-1px);border-color:rgba(168,121,22,.3)}
+.dtl-release-thumb{width:72px;height:72px;border-radius:12px;overflow:hidden;background:var(--gold-soft,#f6edda);display:grid;place-items:center;color:var(--gold,#9b711b)}
+.dtl-release-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.dtl-release-thumb svg{width:22px;height:22px}
+.dtl-release-main{min-width:0;display:grid;gap:5px}
+.dtl-release-main strong{font-size:14px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtl-release-main p{margin:0;color:var(--muted,#777);font-size:12px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dtl-release-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--muted,#777);font-size:11px}
+.dtl-release-open{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--soft,#f4f1eb);font-size:18px}
+.dtl-releases-loading{height:94px;border-radius:16px;background:linear-gradient(90deg,rgba(0,0,0,.035),rgba(0,0,0,.07),rgba(0,0,0,.035));background-size:200% 100%;animation:dtlReleaseShimmer 1.2s linear infinite}
+@keyframes dtlReleaseShimmer{to{background-position:-200% 0}}
+@media(max-width:430px){.dtl-release-card{grid-template-columns:60px minmax(0,1fr) auto;gap:10px}.dtl-release-thumb{width:60px;height:60px}.dtl-release-main p{display:none}}
+@media(min-width:900px){.dtl-release-list{grid-template-columns:repeat(2,minmax(0,1fr))}.dtl-release-card{min-height:96px}}
