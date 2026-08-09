@@ -8,6 +8,7 @@ import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
 import { handlePublicationDiscussionForward, handlePublishingRequest } from './publishing';
+import { guardPublishingRequest } from './publishing-guard';
 import {
   handleReferralApiRequest,
   handleReferralChatMemberUpdate,
@@ -36,6 +37,9 @@ export default {
 
     const adminActionResponse = await handleAdminActionV2(request, env, apiTelegram);
     if (adminActionResponse) return adminActionResponse;
+
+    const publishingGuardResponse = await guardPublishingRequest(request, env);
+    if (publishingGuardResponse) return publishingGuardResponse;
 
     const publishingResponse = await handlePublishingRequest(request, env, apiTelegram, ctx);
     if (publishingResponse) return publishingResponse;
