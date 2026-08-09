@@ -4,6 +4,8 @@ export const REFERRAL_MONTHLY_SLOT_CAP = 3;
 
 export type QuotaState = {
   baseLimit: number;
+  adminAdjustment: number;
+  effectiveBaseLimit: number;
   baseUsed: number;
   referralUsed: number;
   referralAvailable: number;
@@ -11,6 +13,7 @@ export type QuotaState = {
   used: number;
   limit: number;
   remaining: number;
+  unlimited: boolean;
 };
 
 export type SubmissionInsertInput = {
@@ -42,6 +45,11 @@ export type SubmissionInsertResult = {
   referralId: number | null;
 };
 
+type AdminQuotaConfig = {
+  unlimited: boolean;
+  adjustment: number;
+};
+
 export async function getQuotaState(
   env: Env,
   userId: number,
@@ -51,7 +59,7 @@ export async function getQuotaState(
   const monthKey = currentMonthKey(date);
   const now = date.toISOString();
 
-  const [usage, rewards] = await Promise.all([
+  const [usage, rewards, admin] = await Promise.all([
     env.DB.prepare(`
       SELECT
         SUM(CASE WHEN quota_source = 'base' AND slot_returned = 0 THEN 1 ELSE 0 END) AS base_used,
@@ -77,6 +85,7 @@ export async function getQuotaState(
           )
         )
     `).bind(userId, now).first<{ count: number }>(),
+    getAdminQuotaConfig(env, userId, monthKey),
   ]);
 
   const baseUsed = Number(usage?.base_used ?? 0);
@@ -90,18 +99,23 @@ export async function getQuotaState(
     REFERRAL_MONTHLY_SLOT_CAP,
     referralUsed + referralAvailable,
   );
+  const effectiveBaseLimit = Math.max(0, baseLimit + admin.adjustment);
   const used = baseUsed + referralUsed;
-  const limit = baseLimit + referralBonus;
+  const limit = effectiveBaseLimit + referralBonus;
 
   return {
     baseLimit,
+    adminAdjustment: admin.adjustment,
+    effectiveBaseLimit,
     baseUsed,
     referralUsed,
     referralAvailable,
     referralBonus,
     used,
     limit,
-    remaining: Math.max(0, limit - used),
+    // Keep a finite fallback for legacy UI. New UI uses the explicit unlimited flag.
+    remaining: admin.unlimited ? 999 : Math.max(0, limit - used),
+    unlimited: admin.unlimited,
   };
 }
 
@@ -140,21 +154,29 @@ export async function insertSubmissionWithQuota(
     input.adminFileSent ?? 0,
   ];
 
-  const baseInsert = await env.DB.prepare(`
-    INSERT INTO submissions (${commonColumns})
-    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, 'base', NULL, ?, ?
-    WHERE (
-      SELECT COUNT(*) FROM submissions
-      WHERE user_id = ? AND month_key = ? AND quota_source = 'base' AND slot_returned = 0
-    ) < ?
-  `).bind(
-    ...commonValues,
-    input.now,
-    input.now,
-    input.userId,
-    input.monthKey,
-    baseLimit,
-  ).run();
+  const admin = await getAdminQuotaConfig(env, input.userId, input.monthKey);
+  const effectiveBaseLimit = Math.max(0, baseLimit + admin.adjustment);
+
+  const baseInsert = admin.unlimited
+    ? await env.DB.prepare(`
+        INSERT INTO submissions (${commonColumns})
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, 'base', NULL, ?, ?)
+      `).bind(...commonValues, input.now, input.now).run()
+    : await env.DB.prepare(`
+        INSERT INTO submissions (${commonColumns})
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, 'base', NULL, ?, ?
+        WHERE (
+          SELECT COUNT(*) FROM submissions
+          WHERE user_id = ? AND month_key = ? AND quota_source = 'base' AND slot_returned = 0
+        ) < ?
+      `).bind(
+        ...commonValues,
+        input.now,
+        input.now,
+        input.userId,
+        input.monthKey,
+        effectiveBaseLimit,
+      ).run();
 
   if ((baseInsert.meta.changes ?? 0) > 0) {
     return {
@@ -210,6 +232,20 @@ export async function insertSubmissionWithQuota(
     submissionId: Number(referralInsert.meta.last_row_id),
     quotaSource: 'referral',
     referralId: referral.id,
+  };
+}
+
+async function getAdminQuotaConfig(env: Env, userId: number, monthKey: string): Promise<AdminQuotaConfig> {
+  const row = await env.DB.prepare(`
+    SELECT
+      COALESCE(u.quota_unlimited, 0) AS quota_unlimited,
+      COALESCE((SELECT SUM(q.delta) FROM quota_events q WHERE q.user_id = u.telegram_id AND q.month_key = ?), 0) AS adjustment
+    FROM users u
+    WHERE u.telegram_id = ?
+  `).bind(monthKey, userId).first<{ quota_unlimited: number; adjustment: number | null }>();
+  return {
+    unlimited: Number(row?.quota_unlimited ?? 0) === 1,
+    adjustment: Number(row?.adjustment ?? 0),
   };
 }
 
