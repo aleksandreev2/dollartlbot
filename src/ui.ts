@@ -15,6 +15,24 @@ const LOCALE_TAGS: Record<Locale, string> = {
   id: 'id-ID', vi: 'vi-VN', fr: 'fr-FR', de: 'de-DE', ru: 'ru-RU',
 };
 
+const MINI_APP_BUTTON_LABEL: Record<Locale, string> = {
+  en: '📱 Open Dollar TL',
+  es: '📱 Abrir Dollar TL',
+  fil: '📱 Buksan ang Dollar TL',
+  hi: '📱 Dollar TL खोलें',
+  pt: '📱 Abrir Dollar TL',
+  id: '📱 Buka Dollar TL',
+  vi: '📱 Mở Dollar TL',
+  fr: '📱 Ouvrir Dollar TL',
+  de: '📱 Dollar TL öffnen',
+  ru: '📱 Открыть Dollar TL',
+};
+
+function miniAppRow(locale: Locale, telegram: TelegramClient): InlineKeyboardMarkup['inline_keyboard'][number] | null {
+  const url = telegram.env?.MINI_APP_URL;
+  return url ? [{ text: MINI_APP_BUTTON_LABEL[locale], web_app: { url } }] : null;
+}
+
 export async function sendLanguagePicker(
   chatId: number,
   locale: Locale,
@@ -39,16 +57,19 @@ export async function sendWelcome(
   locale: Locale,
   telegram: TelegramClient,
 ): Promise<void> {
+  const rows: InlineKeyboardMarkup['inline_keyboard'] = [];
+  const appRow = miniAppRow(locale, telegram);
+  if (appRow) rows.push(appRow);
+  rows.push(
+    [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
+    [
+      { text: t(locale, 'queue'), callback_data: 'menu:queue' },
+      { text: t(locale, 'guide'), callback_data: 'menu:guide' },
+    ],
+  );
+
   await telegram.sendMessage(chatId, t(locale, 'welcomeText'), {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
-        [
-          { text: t(locale, 'queue'), callback_data: 'menu:queue' },
-          { text: t(locale, 'guide'), callback_data: 'menu:guide' },
-        ],
-      ],
-    },
+    reply_markup: { inline_keyboard: rows },
   });
 }
 
@@ -73,9 +94,10 @@ export async function sendMainMenu(
   telegram: TelegramClient,
 ): Promise<void> {
   const env = telegram.env;
-  const rows: InlineKeyboardMarkup['inline_keyboard'] = [
-    [{ text: t(locale, 'submit'), callback_data: 'menu:submit' }],
-  ];
+  const rows: InlineKeyboardMarkup['inline_keyboard'] = [];
+  const appRow = miniAppRow(locale, telegram);
+  if (appRow) rows.push(appRow);
+  rows.push([{ text: t(locale, 'submit'), callback_data: 'menu:submit' }]);
 
   let text = t(locale, 'menuTitle');
 
