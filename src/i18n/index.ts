@@ -9,12 +9,25 @@ import { vi } from './vi';
 import { fr } from './fr';
 import { de } from './de';
 import { ru } from './ru';
+import { featureTranslations } from './features';
 
 export { SUPPORTED_LANGUAGES, type Locale } from './types';
-export type TranslationKey = keyof typeof en;
 
+const dictionaries = {
+  en: { ...en, ...featureTranslations.en },
+  es: { ...es, ...featureTranslations.es },
+  fil: { ...fil, ...featureTranslations.fil },
+  hi: { ...hi, ...featureTranslations.hi },
+  pt: { ...pt, ...featureTranslations.pt },
+  id: { ...id, ...featureTranslations.id },
+  vi: { ...vi, ...featureTranslations.vi },
+  fr: { ...fr, ...featureTranslations.fr },
+  de: { ...de, ...featureTranslations.de },
+  ru: { ...ru, ...featureTranslations.ru },
+} as const;
+
+export type TranslationKey = keyof typeof dictionaries.en;
 type Dictionary = Partial<Record<TranslationKey, string>>;
-const dictionaries: Record<Locale, Dictionary> = { en, es, fil, hi, pt, id, vi, fr, de, ru };
 
 export function normalizeLocale(value: string | null | undefined): Locale {
   if (value && value in dictionaries) return value as Locale;
@@ -22,5 +35,6 @@ export function normalizeLocale(value: string | null | undefined): Locale {
 }
 
 export function t(locale: Locale, key: TranslationKey): string {
-  return dictionaries[locale]?.[key] ?? en[key];
+  const dictionary = dictionaries[locale] as Dictionary;
+  return dictionary[key] ?? dictionaries.en[key];
 }
