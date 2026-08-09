@@ -7,7 +7,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_notifications_broadcast
 CREATE TABLE IF NOT EXISTS broadcast_recipients (
   broadcast_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'retry', 'sent', 'failed')),
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'retry', 'sent', 'failed', 'skipped')),
   attempts INTEGER NOT NULL DEFAULT 0,
   next_attempt_at TEXT NOT NULL,
   telegram_sent_at TEXT,
