@@ -1,0 +1,104 @@
+.lucide {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  vertical-align: -0.14em;
+}
+
+.nav-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+}
+.nav-icon .lucide {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.75;
+  transition: transform 180ms var(--ease), stroke-width 180ms var(--ease);
+}
+.nav-item.active .nav-icon .lucide {
+  stroke-width: 2.15;
+  transform: translateY(-1px);
+}
+
+.round-icon .lucide,
+.empty-icon .lucide {
+  width: 19px;
+  height: 19px;
+}
+
+.premium-emblem .lucide {
+  width: 32px;
+  height: 32px;
+  stroke-width: 1.7;
+}
+.plan-check .lucide {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.35;
+}
+
+.upload-illustration .lucide {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.65;
+}
+.analysis-icon .lucide {
+  width: 22px;
+  height: 22px;
+}
+
+.icon-button .lucide {
+  width: 22px;
+  height: 22px;
+}
+.back-button .lucide {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.8;
+}
+.chevron .lucide {
+  width: 18px;
+  height: 18px;
+}
+.step-circle .lucide {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+}
+.status-pill.icon-only .lucide {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.3;
+}
+
+.inline-lucide {
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: .34em;
+  vertical-align: -.16em;
+}
+.inline-lucide.trailing {
+  margin-right: 0;
+  margin-left: .32em;
+}
+.primary-button .inline-lucide,
+.secondary-button .inline-lucide,
+.link-button .inline-lucide {
+  stroke-width: 1.9;
+}
+
+.segmented .lucide {
+  width: 17px;
+  height: 17px;
+  margin-right: 6px;
+  vertical-align: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-icon .lucide { transition: none; }
+}
