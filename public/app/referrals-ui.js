@@ -3,6 +3,7 @@
   let data = null;
   let loading = null;
   let pollTimer = null;
+  const POLL_INTERVAL_MS = window.__DTL_LOW_POWER__ ? 90000 : 45000;
 
   const L = {
     en:{title:'Invite & Earn',sub:'Earn up to +3 bonus requests',hero:'Bring a friend to Dollar TL',copy:'Your link opens the Dollar TL bot first. From there, your friend joins our channel and stays for 7 days. Once verified, you receive +1 bonus novel request. Maximum: +3.',yourLink:'Your referral link',copyBtn:'Copy',share:'Share',copied:'Link copied',invited:'Invited',pending:'Pending',available:'Available',rewards:'Referral rewards',progress:'7-day progress',friend:'Friend joined',day:'Day',daysLeft:'days left',bonus:'Referral bonus',back:'Back',empty:'No active referrals yet. Share your link to invite your first friend.'},
@@ -194,15 +195,38 @@
     } catch {}
   }
 
-  function startPolling() {
-    stopPolling();
-    pollTimer = setInterval(async () => {
-      if (!document.querySelector('[data-referral-page]')) { stopPolling(); return; }
+  function schedulePoll(delay=POLL_INTERVAL_MS) {
+    if (document.hidden || !document.querySelector('[data-referral-page]')) return;
+    pollTimer = setTimeout(async () => {
+      pollTimer = null;
+      if (document.hidden || !document.querySelector('[data-referral-page]')) return;
       const fresh = await load(true);
       if (fresh?.enabled) updatePage(fresh);
-    }, 15000);
+      schedulePoll();
+    }, delay);
   }
-  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  function startPolling() {
+    stopPolling();
+    schedulePoll();
+  }
+  function stopPolling() {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) {
+      stopPolling();
+      return;
+    }
+    if (!document.querySelector('[data-referral-page]')) return;
+    const fresh = await load(true);
+    if (fresh?.enabled) updatePage(fresh);
+    startPolling();
+  }, { passive:true });
 
   function progressCard(p) {
     const progress = Math.max(0, Math.min(1, Number(p.progress || 0)));
@@ -242,11 +266,12 @@
   }
 
   function refreshIcons() { if (window.lucide?.createIcons) window.lucide.createIcons({attrs:{'stroke-width':1.8,'aria-hidden':'true'}}); }
-  function esc(v='') { return String(v).replace(/[&<>'\"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c])); }
+  function esc(v='') { return String(v).replace(/[&<>'\"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt',"'":'&#39;','\"':'&quot;'}[c])); }
 
   async function patch(root=document) { await Promise.all([installAccountRow(root), installBonusStrip(root)]); }
   let raf=0;
   const schedule=()=>{ if(raf)return; raf=requestAnimationFrame(()=>{raf=0;patch(document);}); };
-  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
+  const patchRoot = document.getElementById('viewRoot') || document.body;
+  new MutationObserver(schedule).observe(patchRoot,{childList:true,subtree:true});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true}); else schedule();
 })();
