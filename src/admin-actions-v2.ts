@@ -1,6 +1,7 @@
 import { getSubmission } from './db';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
 import { notifySubmissionStatus } from './notifications';
+import { normalizeQueuePositions } from './queue';
 import type { TelegramClient } from './telegram';
 
 export async function handleAdminActionV2(request:Request,env:Env,telegram:TelegramClient):Promise<Response|null>{
@@ -11,7 +12,8 @@ export async function handleAdminActionV2(request:Request,env:Env,telegram:Teleg
   switch(body.action){
     case'accept':
       if(s.status!=='pending')return miniAppJsonError('invalid_state','Request is no longer pending.',409);
-      await env.DB.prepare(`UPDATE submissions SET status='accepted',queue_status='queued',queue_position=(SELECT COALESCE(MAX(queue_position),0)+1 FROM submissions WHERE status='accepted'),queued_at=?,updated_at=? WHERE id=? AND status='pending'`).bind(now,now,id).run();
+      await env.DB.prepare(`UPDATE submissions SET status='accepted',queue_status='queued',queue_position=(SELECT COALESCE(MAX(queue_position),0)+1 FROM submissions WHERE status='accepted' AND queue_status='queued'),queued_at=?,updated_at=? WHERE id=? AND status='pending'`).bind(now,now,id).run();
+      await normalizeQueuePositions(env);
       await notifySubmissionStatus(env,telegram,id,'accepted'); break;
     case'reject':case'return':{
       if(s.status!=='pending')return miniAppJsonError('invalid_state','Request is no longer pending.',409);const returned=body.action==='return'?1:0;
@@ -19,18 +21,21 @@ export async function handleAdminActionV2(request:Request,env:Env,telegram:Teleg
       await notifySubmissionStatus(env,telegram,id,returned?'rejected_returned':'rejected'); break;}
     case'start':
       if(s.status!=='accepted')return miniAppJsonError('invalid_state','Only accepted requests can be started.',409);
-      await env.DB.prepare("UPDATE submissions SET queue_status='in_progress',started_at=COALESCE(started_at,?),updated_at=? WHERE id=?").bind(now,now,id).run();
+      await env.DB.prepare("UPDATE submissions SET queue_status='in_progress',queue_position=NULL,started_at=COALESCE(started_at,?),updated_at=? WHERE id=?").bind(now,now,id).run();
+      await normalizeQueuePositions(env);
       await notifySubmissionStatus(env,telegram,id,'started'); break;
     case'complete':
       if(s.status!=='accepted')return miniAppJsonError('invalid_state','Only accepted requests can be completed.',409);
-      await env.DB.prepare(`UPDATE submissions SET queue_status='completed',completed_at=?,current_chapter=chapter_count,progress_updated_at=?,updated_at=? WHERE id=?`).bind(now,now,now,id).run();
+      await env.DB.prepare(`UPDATE submissions SET queue_status='completed',queue_position=NULL,completed_at=?,current_chapter=chapter_count,progress_updated_at=?,updated_at=? WHERE id=?`).bind(now,now,now,id).run();
+      await normalizeQueuePositions(env);
       await notifySubmissionStatus(env,telegram,id,'completed'); break;
     case'backqueue':
       if(s.status!=='accepted')return miniAppJsonError('invalid_state','Only accepted requests can be returned to queue.',409);
-      await env.DB.prepare("UPDATE submissions SET queue_status='queued',started_at=NULL,updated_at=? WHERE id=?").bind(now,id).run();break;
+      await env.DB.prepare("UPDATE submissions SET queue_status='queued',queue_position=(SELECT COALESCE(MAX(queue_position),0)+1 FROM submissions WHERE status='accepted' AND queue_status='queued'),started_at=NULL,updated_at=? WHERE id=?").bind(now,id).run();
+      await normalizeQueuePositions(env);break;
     case'up':case'down':
       if(s.status!=='accepted'||s.queue_status!=='queued')return miniAppJsonError('invalid_state','Only queued requests can be reordered.',409);
-      await move(id,body.action==='up'?-1:1,env);break;
+      await move(id,body.action==='up'?-1:1,env);await normalizeQueuePositions(env);break;
     case'progress':{
       if(s.status!=='accepted'||s.queue_status!=='in_progress')return miniAppJsonError('invalid_state','Start the translation before setting progress.',409);const chapter=Number(body.current_chapter);
       if(!Number.isInteger(chapter)||chapter<0||chapter>s.chapter_count)return miniAppJsonError('invalid_progress',`Current chapter must be between 0 and ${s.chapter_count}.`,400);
