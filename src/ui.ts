@@ -1,5 +1,5 @@
 import { SUPPORTED_LANGUAGES, t, type Locale } from './i18n/index';
-import { monthlySubmissionCount } from './db';
+import { getSession, monthlySubmissionCount, parseDraft, saveSession } from './db';
 import { getSubscriptionState } from './subscription';
 import { escapeHtml, type InlineKeyboardMarkup, type TelegramClient } from './telegram';
 import {
@@ -178,7 +178,22 @@ export async function sendStep(
     case 'chapter_count':
       await telegram.sendMessage(chatId, t(locale, 'askChapterCount'));
       return;
-    case 'publication_status':
+    case 'publication_status': {
+      const env = telegram.env;
+      if (env) {
+        const session = await getSession(env, chatId);
+        if (session) {
+          const draft = parseDraft(session.data);
+          if ((draft.chapter_count ?? 0) > ABSOLUTE_MAX_CHAPTERS) {
+            delete draft.chapter_count;
+            await saveSession(env, chatId, 'chapter_count', draft);
+            await telegram.sendMessage(chatId, t(locale, 'hardChapterLimit'));
+            await telegram.sendMessage(chatId, t(locale, 'askChapterCount'));
+            return;
+          }
+        }
+      }
+
       await telegram.sendMessage(chatId, t(locale, 'askStatus'), {
         reply_markup: {
           inline_keyboard: [
@@ -191,6 +206,7 @@ export async function sendStep(
         },
       });
       return;
+    }
     case 'source_url':
       await telegram.sendMessage(chatId, t(locale, 'askSource'), {
         reply_markup: {
