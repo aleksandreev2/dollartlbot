@@ -15,6 +15,8 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run typecheck
+      - name: Validate D1 migrations locally
+        run: npx wrangler d1 migrations apply DB --local
       - name: Check Mini App JavaScript syntax
         run: |
           node --check public/app/app.js
