@@ -1,7 +1,14 @@
+import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
 import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
+import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleMiniAppRequest } from './miniapp';
+import {
+  handleReferralApiRequest,
+  handleReferralChatMemberUpdate,
+  runReferralMaintenance,
+} from './referrals';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 
@@ -12,8 +19,18 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    const enhancedMiniAppResponse = await handleEnhancedMiniAppRequest(request, env, ctx);
+    if (enhancedMiniAppResponse) return enhancedMiniAppResponse;
+
+    const coverResponse = await handleCoverRequest(request, env);
+    if (coverResponse) return coverResponse;
+
+    const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+    const referralResponse = await handleReferralApiRequest(request, env, apiTelegram);
+    if (referralResponse) return referralResponse;
+
     const miniAppResponse = await handleMiniAppRequest(request, env, ctx);
-    if (miniAppResponse) return miniAppResponse;
+    if (miniAppResponse) return enhanceMiniAppResponse(request, miniAppResponse, env);
 
     if (request.method === 'GET' && url.pathname === '/') {
       return Response.json({
@@ -55,7 +72,11 @@ export default {
 
       if ((inserted.meta.changes ?? 0) === 0) return new Response('OK');
 
-      await handleUpdate(update, env, telegram, ctx);
+      if (update.chat_member) {
+        await handleReferralChatMemberUpdate(update.chat_member, env);
+      } else {
+        await handleUpdate(update, env, telegram, ctx);
+      }
       return new Response('OK');
     } catch (error) {
       ctx.waitUntil(
@@ -74,6 +95,7 @@ export default {
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     await retryPendingAdminDeliveries(env, telegram);
+    await runReferralMaintenance(env, telegram, new Date(controller.scheduledTime));
 
     const scheduledAt = new Date(controller.scheduledTime);
     if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
