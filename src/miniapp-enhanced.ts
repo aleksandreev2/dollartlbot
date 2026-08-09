@@ -97,7 +97,7 @@ export async function handleEnhancedMiniAppRequest(
   if (!subscription.subscriber && chapterCount > REGULAR_MAX_CHAPTERS) {
     return miniAppJsonError('chapter_limit', `Regular users can suggest novels with up to ${REGULAR_MAX_CHAPTERS} chapters.`, 409);
   }
-  if (quotaBefore.remaining <= 0) {
+  if (!quotaBefore.unlimited && quotaBefore.remaining <= 0) {
     if (subscription.verificationError) {
       return miniAppJsonError('verification_unavailable', 'Boosty verification is temporarily unavailable. Please try again later.', 503);
     }
@@ -168,6 +168,9 @@ export async function handleEnhancedMiniAppRequest(
     quota_source: insert.quotaSource,
     used: quotaAfter.used,
     base_limit: quotaAfter.baseLimit,
+    effective_base_limit: quotaAfter.effectiveBaseLimit,
+    admin_adjustment: quotaAfter.adminAdjustment,
+    unlimited: quotaAfter.unlimited,
     referral_bonus: quotaAfter.referralBonus,
     limit: quotaAfter.limit,
     remaining: quotaAfter.remaining,
@@ -198,6 +201,9 @@ export async function enhanceMiniAppResponse(
     ...data.account,
     used: quota.used,
     base_limit: quota.baseLimit,
+    effective_base_limit: quota.effectiveBaseLimit,
+    admin_adjustment: quota.adminAdjustment,
+    unlimited: quota.unlimited,
     referral_bonus: quota.referralBonus,
     referral_available: quota.referralAvailable,
     referral_used: quota.referralUsed,
