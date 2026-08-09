@@ -1,6 +1,5 @@
 (() => {
   const supported=new Set(['en','es','fil','hi','pt','id','vi','fr','de','ru']);
-  const localeNames={English:'en','Español':'es',Filipino:'fil','हिन्दी':'hi','Português':'pt','Bahasa Indonesia':'id','Tiếng Việt':'vi',Français:'fr',Deutsch:'de','Русский':'ru'};
   const storageKey='dtl_locale';
 
   function normalize(value){
@@ -29,13 +28,8 @@
     try{return normalize(localStorage.getItem(storageKey));}catch{return null;}
   }
 
-  function fromAccount(){
-    const value=document.querySelector('#languageSetting .setting-sub')?.textContent?.trim();
-    return value&&localeNames[value]?localeNames[value]:null;
-  }
-
-  // Use the last saved client-side value for the first paint. The authenticated
-  // bootstrap response below always wins as soon as it arrives.
+  // The last saved client-side locale is only a first-paint hint. The
+  // authenticated /bootstrap response below is the source of truth.
   apply(fromStorage()||fromTelegram()||'en','initial');
 
   const nativeFetch=window.fetch.bind(window);
@@ -75,17 +69,4 @@
     if(!button)return;
     if(!window.Telegram?.WebApp?.initData)apply(button.dataset.lang,'preview-picker');
   },true);
-
-  // Fallback for old/cached app.js builds and for DOM restored by Telegram.
-  let raf=0;
-  const schedule=()=>{
-    if(raf)return;
-    raf=requestAnimationFrame(()=>{
-      raf=0;
-      const locale=fromAccount();
-      if(locale&&locale!==window.__DTL_LOCALE__)apply(locale,'account-fallback');
-    });
-  };
-  const shell=document.getElementById('app')||document.body;
-  new MutationObserver(schedule).observe(shell,{childList:true,subtree:true});
 })();
