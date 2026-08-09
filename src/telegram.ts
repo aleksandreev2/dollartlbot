@@ -72,6 +72,10 @@ export class TelegramApiError extends Error {
   }
 }
 
+function normalizeHtml(text: string): string {
+  return text.replace(/&(?!lt;|gt;|amp;|quot;|#\d+;)/g, '&amp;');
+}
+
 function normalizeChatId(chatId: number | string): number | string {
   if (typeof chatId === 'string' && /^-?\d+$/.test(chatId)) {
     const numeric = Number(chatId);
@@ -116,7 +120,7 @@ export class TelegramClient {
   ): Promise<TelegramMessage> {
     return this.call<TelegramMessage>('sendMessage', {
       chat_id: normalizeChatId(chatId),
-      text,
+      text: normalizeHtml(text),
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: options.disable_web_page_preview ?? true },
       ...(options.reply_markup ? { reply_markup: options.reply_markup } : {}),
@@ -131,7 +135,7 @@ export class TelegramClient {
     return this.call<TelegramMessage>('sendDocument', {
       chat_id: normalizeChatId(chatId),
       document: fileId,
-      ...(caption ? { caption, parse_mode: 'HTML' } : {}),
+      ...(caption ? { caption: normalizeHtml(caption), parse_mode: 'HTML' } : {}),
     });
   }
 
