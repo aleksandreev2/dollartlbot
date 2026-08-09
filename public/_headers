@@ -1,8 +1,11 @@
+/app/index.html
+  Cache-Control: no-cache
+
 /app/*.js
-  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+  Cache-Control: no-cache
 
 /app/*.css
-  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+  Cache-Control: no-cache
 
 /app/*.png
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
