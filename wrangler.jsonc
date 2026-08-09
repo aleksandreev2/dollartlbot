@@ -26,13 +26,19 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/webhook"]
+    "run_worker_first": ["/api/*", "/webhook", "/media/*"]
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "dollartlbot-db",
       "database_id": "419adace-0b70-42f4-b9c1-a298c92b6fd3"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "COVERS",
+      "bucket_name": "dollartl-covers"
     }
   ]
 }
