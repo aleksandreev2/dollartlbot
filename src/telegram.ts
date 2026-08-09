@@ -135,6 +135,7 @@ type SendOptions = {
   disable_web_page_preview?: boolean;
   disable_notification?: boolean;
   reply_to_message_id?: number;
+  has_spoiler?: boolean;
 };
 
 export class TelegramClient {
@@ -241,6 +242,7 @@ export class TelegramClient {
       form.set('parse_mode', 'HTML');
     }
     if (options.disable_notification) form.set('disable_notification', 'true');
+    if (method === 'sendPhoto' && options.has_spoiler) form.set('has_spoiler', 'true');
     if (options.reply_to_message_id) {
       form.set('reply_parameters', JSON.stringify({ message_id: options.reply_to_message_id }));
     }
