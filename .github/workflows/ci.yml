@@ -20,6 +20,7 @@ jobs:
       - name: Check Mini App JavaScript syntax
         run: |
           node --check public/app/app.js
+          node --check public/app/performance.js
           node --check public/app/icons.js
           node --check public/app/locale-sync.js
           node --check public/app/ui-polish.js
