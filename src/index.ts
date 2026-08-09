@@ -36,7 +36,7 @@ export default {
       return new Response('Bad request', { status: 400 });
     }
 
-    const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+    const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
 
     try {
       const inserted = await env.DB.prepare(
@@ -64,7 +64,7 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
-    const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+    const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     await retryPendingAdminDeliveries(env, telegram);
 
     const scheduledAt = new Date(controller.scheduledTime);
