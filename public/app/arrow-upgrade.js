@@ -6,7 +6,7 @@
       if ((span.textContent || '').trim() !== '→') return;
       span.textContent = '';
       const icon = document.createElement('i');
-      icon.setAttribute('data-lucide', 'arrow-right');
+      icon.setAttribute('data-lucide', 'circle-arrow-right');
       icon.setAttribute('aria-hidden', 'true');
       icon.className = 'language-arrow-icon';
       span.appendChild(icon);
