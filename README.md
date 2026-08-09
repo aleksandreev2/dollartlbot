@@ -1,20 +1,48 @@
 # Dollar TL Telegram Bot
 
-A small Telegram bot for collecting novel translation requests directly into the owner's private Telegram chat.
+Telegram bot for collecting novel translation requests, verifying Boosty access, and managing a public translation queue.
 
-## What it does
+## Current rules
 
-- First `/start` asks the user to choose a UI language.
-- Language can be changed later with `/language` without losing an active form.
-- Supported UI languages: English (primary), Spanish, Filipino, Hindi, Portuguese, Indonesian, Vietnamese, French, German, and Russian.
-- Free users: **1 submitted novel per calendar month**, maximum **200 chapters**.
-- Active Boosty subscribers: **5 submitted novels per calendar month**, including novels over 300 chapters.
-- Boosty status is checked through membership in the private `Dollar TL — Subscriber Verification` Telegram group.
-- Completed requests are sent **only to the owner's private Telegram account**.
-- Raw files are not downloaded or stored on Cloudflare. The bot stores the Telegram `file_id` and re-sends the existing Telegram file to the owner.
-- Rejected requests can optionally have their monthly slot returned.
-- The owner can accept, reject, reject + return slot, or send a message to the requester from inline buttons.
-- A Cloudflare Cron Trigger retries any admin summary/file that failed to reach Telegram because of a temporary delivery error.
+- **Regular status:** 1 submitted novel per UTC calendar month.
+- **Regular status:** titles may contain up to **250 chapters**.
+- **Boosty subscriber:** up to 5 submitted novels per UTC calendar month.
+- The **250-chapter restriction does not apply to Boosty subscribers**.
+- Boosty status is verified through membership in `Dollar TL — Subscriber Verification`.
+- A monthly slot is consumed only after **Confirm & Submit** succeeds.
+- `Reject + Return Slot` returns that slot to the requester.
+
+The bot re-checks Boosty membership immediately before final submission. D1 also has a database guard that rejects titles over 250 chapters only when the saved plan is `free`.
+
+## User features
+
+- First `/start` asks for the interface language.
+- Languages: English, Spanish, Filipino, Hindi, Portuguese, Indonesian, Vietnamese, French, German and Russian.
+- `/language` changes language without deleting an active submission.
+- Main menu shows current status, monthly usage, remaining requests and the chapter restriction.
+- Regular users receive a direct Boosty subscription link in the main menu.
+- `/queue` shows the public translation queue.
+- `/requests` shows the user's own requests and statuses.
+- `/guide` explains the workflow.
+- `/limit` shows quota details and reset date.
+
+Accepted requests enter the public queue. Requester identity, raw files, fetish/sexual-content disclosures, sensitive-content disclosures and private notes are never displayed publicly.
+
+## Admin features
+
+Use `/admin` from the Telegram account configured as `ADMIN_TELEGRAM_ID`.
+
+The admin dashboard contains:
+
+- Pending requests
+- Translation queue
+- In-progress titles
+- Completed requests
+- All requests
+
+Admin actions include Accept → Queue, Reject, Reject + Return Slot, Raw File, Message User, Start, Complete, Back to Queue and queue reordering.
+
+See `ADMIN_GUIDE.md` for the full admin workflow.
 
 ## Submission flow
 
@@ -31,150 +59,72 @@ A small Telegram bot for collecting novel translation requests directly into the
 11. Additional notes (optional)
 12. Review and confirm
 
-A monthly slot is consumed only after **Confirm & Submit** succeeds.
+Raw files are not downloaded or stored by Cloudflare. The bot stores Telegram's `file_id` and re-sends the existing Telegram file to the owner.
 
 ## Stack
 
 - Telegram Bot API webhook
 - Cloudflare Workers
 - Cloudflare D1
-- Cloudflare Cron Trigger for delivery retries
+- Cloudflare Cron Trigger
 - TypeScript
-- No runtime npm dependencies
 
 ## Secrets
 
-Never commit real secret values. `.dev.vars` is ignored by Git.
-
-Copy the example file:
-
-```bash
-cp .dev.vars.example .dev.vars
-```
-
-On Windows PowerShell:
+Never commit `.dev.vars`.
 
 ```powershell
 Copy-Item .dev.vars.example .dev.vars
+notepad .dev.vars
 ```
 
-Fill in:
+Required values:
 
 ```dotenv
-TELEGRAM_BOT_TOKEN="your_bot_token"
-TELEGRAM_WEBHOOK_SECRET="a_long_random_secret"
-ADMIN_TELEGRAM_ID="0"
-BOOSTY_GROUP_ID="0"
+TELEGRAM_BOT_TOKEN="..."
+TELEGRAM_WEBHOOK_SECRET="..."
+ADMIN_TELEGRAM_ID="..."
+BOOSTY_GROUP_ID="..."
 ```
 
-Use only letters, numbers, `_` and `-` in `TELEGRAM_WEBHOOK_SECRET`, matching Telegram's webhook secret-token rules.
+## First deployment
 
-`BOOSTY_SUBSCRIPTION_URL` is public configuration and already lives in `wrangler.jsonc`.
-
-## First setup
-
-### 1. Install tools
-
-```bash
+```powershell
 npm install
 npx wrangler login
-```
-
-### 2. Prepare the Telegram verification group
-
-`Dollar TL — Subscriber Verification` should contain:
-
-- your Telegram account as an administrator;
-- `@boosty_to_bot` with the permissions Boosty requires;
-- `@dollartlbot` as an administrator so it can verify members with `getChatMember`.
-
-The group can stay read-only and otherwise empty. Translation requests are **not** sent to this group.
-
-### 3. Discover your Telegram IDs before enabling the webhook
-
-Put the real `TELEGRAM_BOT_TOKEN` in `.dev.vars` first.
-
-Then:
-
-1. Send any message (for example `/id`) to `@dollartlbot` in private chat.
-2. Send `/chatid` in `Dollar TL — Subscriber Verification`.
-3. Run:
-
-```bash
-npm run discover-ids
-```
-
-The script reads pending Telegram updates and prints values similar to:
-
-```text
-ADMIN_TELEGRAM_ID=123456789
-BOOSTY_GROUP_ID=-1001234567890
-```
-
-Copy both values into `.dev.vars`.
-
-### 4. Type-check and deploy
-
-```bash
 npm run typecheck
 npx wrangler deploy --secrets-file .dev.vars
-```
-
-The D1 binding in `wrangler.jsonc` is intentionally declared without an account-specific database ID. Current Wrangler can provision the D1 resource during deployment and keep the local binding linked without committing your Cloudflare resource ID to this public repository.
-
-Apply the schema after the first deployment:
-
-```bash
 npm run db:remote
 ```
 
-### 5. Enable the Telegram webhook
-
-Copy the deployed Worker URL printed by Wrangler, for example:
-
-```text
-https://dollartlbot.<your-subdomain>.workers.dev
-```
-
-Bash/zsh:
-
-```bash
-WEBHOOK_URL="https://dollartlbot.<your-subdomain>.workers.dev" npm run configure-bot
-```
-
-PowerShell:
+Then configure the webhook:
 
 ```powershell
 $env:WEBHOOK_URL="https://dollartlbot.<your-subdomain>.workers.dev"
 npm run configure-bot
 ```
 
-`configure-bot` reads the bot token and webhook secret from `.dev.vars`, registers Telegram commands, and configures `${WEBHOOK_URL}/webhook` with Telegram's secret-token header.
+## Updating the live bot
 
-Now open `@dollartlbot` and send `/start`.
+When new migrations exist, use this order:
 
-## Useful commands
+```powershell
+git pull
+npm install
+npm run db:remote
+npm run typecheck
+npx wrangler deploy --secrets-file .dev.vars
+```
 
-- `/start` — open the main menu; first use starts with language selection
-- `/rules` — view submission rules
-- `/limit` — view current monthly usage and Boosty status
-- `/language` — change interface language
-- `/cancel` — cancel the active form or admin message draft
-- `/id` — show the sender's numeric Telegram ID
-- `/chatid` — show the current chat ID
+If Telegram commands changed, refresh them afterwards:
 
-## Limits and subscriber verification
+```powershell
+$env:WEBHOOK_URL="https://dollartlbot.<your-subdomain>.workers.dev"
+npm run configure-bot
+```
 
-The bot counts submitted requests from the current UTC calendar month. Usage is derived from actual D1 submissions rather than a separate mutable counter.
+## Engagement notifications
 
-- Free: 1 request/month, up to 200 chapters.
-- Boosty subscriber: 5 requests/month; longer novels are allowed.
-- `Reject + Return Slot` marks a request as returned, so it no longer consumes the monthly allowance.
-- Boosty status is checked when starting a submission and again before final submission.
-- Final submission uses one conditional SQL insert so concurrent confirmations cannot exceed the user's current 1/5 request limit.
-
-## Request delivery and retry
-
-Completed requests are sent only to `ADMIN_TELEGRAM_ID` in private Telegram messages. The summary contains the submitter, plan, title, language, chapter count, source, tags, sexual/fetish disclosures, sensitive-content disclosures, and notes. The raw file is re-sent using its Telegram `file_id`; the Worker does not download or store the novel file itself.
-
-D1 separately records whether the admin summary and raw file have been delivered. The Worker tries immediately after submission. A Cron Trigger runs every 10 minutes and retries up to 20 incomplete deliveries per run, sending only whichever part is still marked as missing. The same scheduled maintenance also removes old webhook de-duplication records after seven days.
+- Users who submitted in the previous month can receive one localized notice when their monthly limit resets.
+- Regular users with at least two historical submissions may occasionally receive a Boosty promo.
+- Promo reminders are delayed, rate-limited, not sent to active Boosty subscribers, and include a permanent opt-out button.
