@@ -4,6 +4,7 @@ import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleMiniAppRequest } from './miniapp';
+import { handleOnboardingRequest } from './onboarding';
 import {
   handleReferralApiRequest,
   handleReferralChatMemberUpdate,
@@ -18,6 +19,9 @@ const PROCESSED_UPDATE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    const onboardingResponse = await handleOnboardingRequest(request, env);
+    if (onboardingResponse) return onboardingResponse;
 
     const enhancedMiniAppResponse = await handleEnhancedMiniAppRequest(request, env, ctx);
     if (enhancedMiniAppResponse) return enhancedMiniAppResponse;
