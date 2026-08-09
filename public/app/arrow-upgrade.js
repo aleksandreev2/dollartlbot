@@ -27,7 +27,8 @@
     });
   };
 
-  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  const patchRoot = document.getElementById('viewRoot') || document.body;
+  new MutationObserver(schedule).observe(patchRoot, { childList: true, subtree: true });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once: true });
   else schedule();
 })();
