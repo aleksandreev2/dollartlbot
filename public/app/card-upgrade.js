@@ -43,7 +43,7 @@
 
   function enhanceLanguageFlags(root=document) {
     root.querySelectorAll('.canonical-language[data-language-code]').forEach(el => {
-      if (el.dataset.circleFlagReady === '1') return;
+      if (el.querySelector('.circle-language-flag')) return;
       const code = el.dataset.languageCode;
       const img = flagImg(code);
       if (!img) return;
