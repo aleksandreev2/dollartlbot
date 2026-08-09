@@ -11,12 +11,13 @@ import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-
 import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
-import { handlePublicationDeliveryAdminRequest, runPublicationDeliveryMaintenance } from './publication-delivery';
+import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
 import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handlePublishingRequest } from './publishing';
 import { handlePublishingV2Request } from './publishing-v2';
 import { guardPublishingRequest } from './publishing-guard';
+import { normalizeQueuePositions } from './queue';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
@@ -95,6 +96,7 @@ export default {
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+    await normalizeQueuePositions(env);
     await retryPendingAdminDeliveries(env, telegram);
     await runReferralMaintenance(env, telegram, new Date(controller.scheduledTime));
     await runBroadcastMaintenance(env, telegram, 2);
