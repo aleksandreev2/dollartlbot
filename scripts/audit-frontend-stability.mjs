@@ -32,6 +32,12 @@ need(index, 'card-upgrade.js?v=20260810-stableflags1', 'cache-busted Circle Flag
 need(index, 'home-v2.js?v=20260810-stableflags1', 'cache-busted home runtime');
 forbid(index, 'language-flags-bridge.js', 'Mini App runtime');
 forbid(index, 'arrow-upgrade.js', 'Mini App runtime');
+forbid(index, 'language-display-fix.js', 'Mini App runtime');
+
+const removedShim = new URL('../public/app/language-display-fix.js', import.meta.url);
+if (fs.existsSync(removedShim)) {
+  throw new Error('Dead language-display-fix.js shim must not be reintroduced.');
+}
 
 for (const country of ['kr','jp','cn','gb','ru','es','pt','id','vn','fr','de','in','ph']) {
   const path = new URL(`../public/app/flags/${country}.svg`, import.meta.url);
