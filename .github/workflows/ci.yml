@@ -35,5 +35,7 @@ jobs:
           node --check public/app/referrals-ui.js
           node --check public/app/onboarding-ui.js
           node --check public/app/onboarding-interactions-fix.js
+          node --check public/app/admin-v2.js
+          node --check public/app/notifications-ui.js
       - name: Audit Mini App localization coverage
         run: node scripts/audit-miniapp-i18n.mjs
