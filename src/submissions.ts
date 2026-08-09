@@ -1,5 +1,10 @@
 import { normalizeLocale, t, type Locale } from './i18n/index';
 import {
+  FREE_MONTHLY_REQUEST_LIMIT,
+  REGULAR_MAX_CHAPTERS,
+  SUBSCRIBER_MONTHLY_REQUEST_LIMIT,
+} from './domain';
+import {
   clearSession,
   currentMonthKey,
   errorText,
@@ -30,7 +35,7 @@ export async function beginSubmission(
   const count = await monthlySubmissionCount(env, userId);
   const subscription = await getSubscriptionState(userId, env, telegram);
 
-  if (subscription.verificationError && count >= 1) {
+  if (subscription.verificationError && count >= FREE_MONTHLY_REQUEST_LIMIT) {
     await telegram.sendMessage(userId, t(locale, 'verificationUnavailable'), {
       reply_markup: {
         inline_keyboard: [
@@ -42,7 +47,9 @@ export async function beginSubmission(
     return;
   }
 
-  const limit = subscription.subscriber ? 5 : 1;
+  const limit = subscription.subscriber
+    ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
+    : FREE_MONTHLY_REQUEST_LIMIT;
   if (count >= limit) {
     await sendLimitReached(userId, locale, subscription.subscriber, env, telegram);
     return;
@@ -78,7 +85,10 @@ export async function finalizeSubmission(
   const count = await monthlySubmissionCount(env, user.id);
   const subscription = await getSubscriptionState(user.id, env, telegram);
 
-  if (subscription.verificationError && (count >= 1 || draft.chapter_count > 200)) {
+  if (
+    subscription.verificationError &&
+    (count >= FREE_MONTHLY_REQUEST_LIMIT || draft.chapter_count > REGULAR_MAX_CHAPTERS)
+  ) {
     await telegram.sendMessage(user.id, t(locale, 'verificationUnavailable'), {
       reply_markup: {
         inline_keyboard: [[{ text: t(locale, 'retryVerification'), callback_data: 'form:confirm' }]],
@@ -87,7 +97,7 @@ export async function finalizeSubmission(
     return;
   }
 
-  if (!subscription.subscriber && draft.chapter_count > 200) {
+  if (!subscription.subscriber && draft.chapter_count > REGULAR_MAX_CHAPTERS) {
     await telegram.sendMessage(user.id, t(locale, 'freeChapterLimit'), {
       reply_markup: {
         inline_keyboard: [[{ text: t(locale, 'subscribe'), url: env.BOOSTY_SUBSCRIPTION_URL }]],
@@ -97,7 +107,9 @@ export async function finalizeSubmission(
   }
 
   const plan: 'free' | 'subscriber' = subscription.subscriber ? 'subscriber' : 'free';
-  const limit = plan === 'subscriber' ? 5 : 1;
+  const limit = plan === 'subscriber'
+    ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT
+    : FREE_MONTHLY_REQUEST_LIMIT;
   const monthKey = currentMonthKey();
   const now = new Date().toISOString();
 
@@ -184,7 +196,7 @@ export async function deliverSubmissionToAdmin(
       `<b>User:</b> ${displayName} ${username}`,
       `<b>Telegram ID:</b> <code>${submission.user_id}</code>`,
       `<b>Plan:</b> ${submission.plan === 'subscriber' ? '⭐ Boosty Subscriber' : 'Free'}`,
-      `<b>Monthly usage:</b> ${await monthlySubmissionCount(env, submission.user_id)} / ${submission.plan === 'subscriber' ? 5 : 1}`,
+      `<b>Monthly usage:</b> ${await monthlySubmissionCount(env, submission.user_id)} / ${submission.plan === 'subscriber' ? SUBSCRIBER_MONTHLY_REQUEST_LIMIT : FREE_MONTHLY_REQUEST_LIMIT}`,
       '',
       `<b>Title:</b> ${escapeHtml(submission.title)}`,
       `<b>Original language:</b> ${escapeHtml(submission.original_language)}`,
