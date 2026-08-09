@@ -72,6 +72,8 @@ export type SubmissionRow = {
   queued_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  current_chapter: number | null;
+  progress_updated_at: string | null;
 };
 
 export type SubscriptionState = {
@@ -88,3 +90,6 @@ export const FREE_MONTHLY_REQUEST_LIMIT = 1;
 export const SUBSCRIBER_MONTHLY_REQUEST_LIMIT = 5;
 export const REGULAR_MAX_CHAPTERS = 250;
 export const MAX_REASONABLE_CHAPTERS = 10_000_000;
+
+export const MINI_APP_MAX_UPLOAD_BYTES = 45 * 1024 * 1024;
+export const MINI_APP_ALLOWED_FILE_EXTENSIONS = ['txt', 'epub'] as const;
