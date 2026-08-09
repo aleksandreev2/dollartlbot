@@ -7,7 +7,8 @@ import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-
 import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
-import { handlePublicationDiscussionForward, handlePublishingRequest } from './publishing';
+import { handlePublishingRequest } from './publishing';
+import { handlePublicationDiscussionForwardV2, handlePublishingV2Request } from './publishing-v2';
 import { guardPublishingRequest } from './publishing-guard';
 import {
   handleReferralApiRequest,
@@ -37,6 +38,9 @@ export default {
 
     const adminActionResponse = await handleAdminActionV2(request, env, apiTelegram);
     if (adminActionResponse) return adminActionResponse;
+
+    const publishingV2Response = await handlePublishingV2Request(request, env, apiTelegram, ctx);
+    if (publishingV2Response) return publishingV2Response;
 
     const publishingGuardResponse = await guardPublishingRequest(request, env);
     if (publishingGuardResponse) return publishingGuardResponse;
@@ -75,7 +79,7 @@ export default {
       if ((inserted.meta.changes ?? 0) === 0) return new Response('OK');
 
       if (update.chat_member) await handleReferralChatMemberUpdate(update.chat_member, env);
-      else if (update.message && await handlePublicationDiscussionForward(update.message, env, telegram, ctx)) {
+      else if (update.message && await handlePublicationDiscussionForwardV2(update.message, env, telegram, ctx)) {
         // handled by publishing center
       } else await handleUpdate(update, env, telegram, ctx);
       return new Response('OK');
