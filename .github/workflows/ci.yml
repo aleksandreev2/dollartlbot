@@ -23,6 +23,8 @@ jobs:
         run: node scripts/audit-backend-safety.mjs
       - name: Audit frontend stability invariants
         run: node scripts/audit-frontend-stability.mjs
+      - name: Audit notification center UX
+        run: node scripts/audit-notification-ui.mjs
       - name: Audit modular Mini App shell
         run: node scripts/audit-app-modules.mjs
       - name: Audit shared Mini App i18n runtime
@@ -109,6 +111,8 @@ jobs:
           grep -q '/app/referrals-ui.js?v=20260810-runtime4' public/app/index.html
           grep -q '/app/onboarding-ui.js?v=20260810-runtime4' public/app/index.html
           grep -q '/app/home-v2.js?v=20260810-runtime4' public/app/index.html
+          grep -q '/app/notifications-ui.css?v=20260810-notify2' public/app/index.html
+          grep -q '/app/notifications-ui.js?v=20260810-notify2' public/app/index.html
           ! grep -q '/app/onboarding-interactions-fix.js' public/app/index.html
           grep -q '/app/admin-console.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-tools.css?v=20260810-app1' public/app/index.html
