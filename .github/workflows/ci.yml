@@ -29,6 +29,8 @@ jobs:
         run: node scripts/audit-admin-activity.mjs
       - name: Audit Users control center
         run: node scripts/audit-admin-users-control.mjs
+      - name: Audit request operations and publication stability
+        run: node scripts/audit-request-ops-publication-stability.mjs
       - name: Audit canonical Mini App auth and publication templates
         run: node scripts/audit-miniapp-auth-publication-template.mjs
       - name: Audit notification center UX
@@ -84,9 +86,11 @@ jobs:
           node --check public/app/admin-cache.js
           node --check public/app/admin-console.js
           node --check public/app/admin-tools.js
+          node --check public/app/admin-request-ops.js
           node --check public/app/admin-activity.js
           node --check public/app/publication-template-ui.js
           node --check public/app/admin-publishing.js
+          node --check public/app/publication-stability-ui.js
           node --check public/app/quota-unlimited-ui.js
           node --check public/app/home-v2.js
       - name: Verify publishing, desktop and locale assets
@@ -94,11 +98,15 @@ jobs:
           test -f public/app/admin-console.css
           test -f public/app/admin-tools.css
           test -f public/app/admin-users-control.css
+          test -f public/app/admin-request-ops.css
+          test -f public/app/admin-request-ops.js
           test -f public/app/admin-activity.css
           test -f public/app/admin-activity.js
           test -f public/app/admin-publishing.css
           test -f public/app/publication-template-ui.css
           test -f public/app/publication-template-ui.js
+          test -f public/app/publication-stability-ui.css
+          test -f public/app/publication-stability-ui.js
           test -f public/app/access-admin-ui.css
           test -f public/app/access-admin-ui.js
           test -f public/app/access-gate-ui.css
@@ -168,11 +176,15 @@ jobs:
           grep -q '/app/admin-console.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-tools.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-users-control.css?v=20260810-users1' public/app/index.html
+          grep -q '/app/admin-request-ops.css?v=20260810-ops1' public/app/index.html
+          grep -q '/app/admin-request-ops.js?v=20260810-ops1' public/app/index.html
           grep -q '/app/admin-activity.css?v=20260810-adminactivity1' public/app/index.html
           grep -q '/app/admin-activity.js?v=20260810-adminactivity1' public/app/index.html
           grep -q '/app/admin-publishing.css?v=20260810-app1' public/app/index.html
           grep -q '/app/publication-template-ui.css?v=20260810-pubtemplate1' public/app/index.html
-          grep -q '/app/publication-template-ui.js?v=20260810-pubtemplate1' public/app/index.html
+          grep -q '/app/publication-template-ui.js?v=20260810-pubtemplate2' public/app/index.html
+          grep -q '/app/publication-stability-ui.css?v=20260810-pubstable1' public/app/index.html
+          grep -q '/app/publication-stability-ui.js?v=20260810-pubstable1' public/app/index.html
           grep -q '/app/admin-console.js?v=20260810-admin1' public/app/index.html
           grep -q '/app/admin-tools.js?v=20260810-users1' public/app/index.html
           grep -q '/app/admin-publishing.js?v=20260810-admin1' public/app/index.html
@@ -206,6 +218,7 @@ jobs:
           test -f migrations/0018_release_broadcast_dedupe.sql
           test -f migrations/0019_admin_events.sql
           test -f migrations/0020_user_control_center.sql
+          test -f migrations/0021_request_operations.sql
       - name: Audit Mini App localization coverage
         run: |
           node scripts/audit-miniapp-i18n.mjs
