@@ -1,6 +1,6 @@
 INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES
-  ('access_channel_id', '', datetime('now')),
-  ('access_channel_url', '', datetime('now'));
+  ('access_channel_id', '@dollartranslate', datetime('now')),
+  ('access_channel_url', 'https://t.me/dollartranslate', datetime('now'));
 
 CREATE TABLE IF NOT EXISTS access_membership_cache (
   user_id INTEGER NOT NULL,
