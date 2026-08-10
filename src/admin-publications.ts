@@ -23,8 +23,7 @@ export async function handleAdminPublicationsRequest(request:Request,env:Env,tel
     const updated={...p,body_html:text};
     const caption=await composeManaged(updated,env,telegram);
     if(p.image_key&&caption.length>1024)return miniAppJsonError('caption_too_long',`После автоматических строк Telegram caption занимает ${caption.length} / 1024 символов. Сократите основной текст.`,400);
-    const now=new Date().toISOString();
-    await env.DB.prepare('UPDATE publications SET body_html=?,updated_at=? WHERE id=?').bind(text,now,id).run();
+
     if(p.status==='published'&&p.channel_message_id&&!p.telegram_deleted_at){
       try{
         if(p.image_key){
@@ -33,9 +32,16 @@ export async function handleAdminPublicationsRequest(request:Request,env:Env,tel
           await telegram.call('editMessageText',{chat_id:normalizeChatId(channel),message_id:p.channel_message_id,text:caption,parse_mode:'HTML',link_preview_options:{is_disabled:true}});
         }
       }catch(error){
-        await log(env,id,'error','post_edit_failed','Основной текст сохранён в Dollar TL, но Telegram не смог обновить опубликованный пост.',String(error));
-        return miniAppJsonError('telegram_edit_failed','Текст сохранён, но Telegram не обновил пост: '+friendly(error),502);
+        await log(env,id,'error','post_edit_failed','Telegram не обновил опубликованный пост; основной текст Dollar TL оставлен без изменений.',String(error));
+        return miniAppJsonError('telegram_edit_failed','Telegram не обновил пост, поэтому сохранение отменено: '+friendly(error),502);
       }
+    }
+
+    const now=new Date().toISOString();
+    const saved=await env.DB.prepare('UPDATE publications SET body_html=?,updated_at=? WHERE id=?').bind(text,now,id).run();
+    if(Number(saved.meta.changes??0)!==1){
+      await log(env,id,'error','post_edit_persist_failed','Telegram был обновлён, но Dollar TL не подтвердил сохранение текста в D1. Требуется проверка.');
+      return miniAppJsonError('publication_persist_failed','Telegram обновлён, но Dollar TL не подтвердил запись в базе. Проверьте публикацию перед повторным действием.',500);
     }
     await audit(env,auth.telegramUser.id,'publication_edit',id,{length:text.length,managed_caption_length:caption.length});
     await log(env,id,'success','post_edited','Текст публикации обновлён с сохранением служебных строк Files/Requested by.');
