@@ -1,5 +1,5 @@
 (() => {
-  const ALLOWED_VIEWS=new Set(['home','queue','suggest','requests','account']);
+  const ALLOWED_VIEWS=new Set(['home','queue','suggest','requests','account','admin']);
   let pendingRequestId=0;
   let initialHandled=false;
 
