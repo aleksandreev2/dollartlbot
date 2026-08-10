@@ -40,8 +40,6 @@ jobs:
           node --check public/app/telegram-desktop.js
           node --check public/app/icons.js
           node --check public/app/i18n-core.js
-          node --check public/app/ui-polish.js
-          node --check public/app/i18n-complete.js
           node --check public/app/i18n-runtime-v2.js
           node --check public/app/novel-presenter.js
           node --check public/app/interaction-upgrade.js
@@ -75,7 +73,6 @@ jobs:
           test -f public/app/publication-management.css
           test -f public/app/notifications-ui.css
           test -f public/app/i18n-core.js
-          test -f public/app/i18n-complete.js
           test -f public/app/i18n-runtime-v2.js
           test -f public/app/language-switch.css
           test -f public/app/novel-presenter.js
@@ -90,13 +87,16 @@ jobs:
           grep -q '/app/publication-management.js' public/app/index.html
           grep -q '/app/publication-management.css' public/app/index.html
           grep -q '/app/i18n-core.js' public/app/index.html
-          grep -q '/app/i18n-complete.js' public/app/index.html
           grep -q '/app/i18n-runtime-v2.js' public/app/index.html
           grep -q '/app/language-switch.css' public/app/index.html
           grep -q '/app/novel-presenter.js' public/app/index.html
           grep -q '/app/home-v2.js' public/app/index.html
           grep -q '/app/home-v2.css' public/app/index.html
           test ! -e public/app/i18n-wizard.js
+          test ! -e public/app/i18n-complete.js
+          test ! -e public/app/ui-polish.js
+          ! grep -q '/app/i18n-complete.js' public/app/index.html
+          ! grep -q '/app/ui-polish.js' public/app/index.html
           test -f migrations/0008_admin_publishing_notifications.sql
           test -f migrations/0009_publication_image_spoiler.sql
           test -f migrations/0010_publication_logs.sql
