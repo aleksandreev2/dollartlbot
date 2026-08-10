@@ -1,6 +1,6 @@
 (() => {
   const runtime = window.DTL_RUNTIME;
-  if (!runtime?.registerFetchMiddleware) throw new Error('DTL runtime core must load before admin-performance-v3.js');
+  if (!runtime?.registerFetchMiddleware) throw new Error('DTL runtime core must load before admin-cache.js');
 
   const cache = new Map();
   const pending = new Map();
@@ -26,39 +26,25 @@
   }
 
   function materialize(entry) {
-    return new Response(entry.body.slice(0), {
-      status: entry.status,
-      statusText: entry.statusText,
-      headers: entry.headers,
-    });
+    return new Response(entry.body.slice(0), { status: entry.status, statusText: entry.statusText, headers: entry.headers });
   }
 
   async function snapshot(response) {
-    return {
-      body: await response.clone().arrayBuffer(),
-      status: response.status,
-      statusText: response.statusText,
-      headers: [...response.headers.entries()],
-      at: Date.now(),
-    };
+    return { body: await response.clone().arrayBuffer(), status: response.status, statusText: response.statusText, headers: [...response.headers.entries()], at: Date.now() };
   }
 
   runtime.registerFetchMiddleware(async (input, init = {}, next) => {
     const { path, method, headers } = requestMeta(input, init);
     const isAdmin = path.startsWith('/api/app/admin/');
     if (!isAdmin) return next(input, init);
-
     if (method !== 'GET') {
-      cache.clear();
-      pending.clear();
+      cache.clear(); pending.clear();
       return next(input, init);
     }
-
     const key = keyFor(path, headers);
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < TTL) return materialize(hit);
     if (pending.has(key)) return pending.get(key).then(materialize);
-
     const job = (async () => {
       const response = await next(input, init);
       const entry = await snapshot(response);
@@ -95,8 +81,5 @@
     setTimeout(() => button.classList.remove('dtl-admin-pressed'), 140);
   }, true);
 
-  window.__DTL_ADMIN_CACHE__ = {
-    clear() { cache.clear(); pending.clear(); },
-    prefetch: prefetchAdmin,
-  };
+  window.__DTL_ADMIN_CACHE__ = Object.freeze({ clear() { cache.clear(); pending.clear(); }, prefetch: prefetchAdmin });
 })();

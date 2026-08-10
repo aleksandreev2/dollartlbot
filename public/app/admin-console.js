@@ -1,5 +1,8 @@
 (() => {
   const tg = window.Telegram?.WebApp;
+  const runtime = window.DTL_RUNTIME;
+  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before admin-console.js');
+
   const state = { section:'overview', kind:'pending', busy:false, publishing:null, image:null, files:[] };
   const A = {
     overview:['layout-dashboard','Обзор'], requests:['inbox','Заявки'], queue:['list-ordered','Очередь'],
@@ -21,8 +24,8 @@
   function activateAdminClass(on=true){document.documentElement.classList.toggle('admin-console-active',on);document.body.classList.toggle('admin-console-active',on);}
   function bindShellNavigation(root){
     root.querySelectorAll('[data-admin-section]').forEach(b=>{
-      if(b.dataset.adminV2Bound==='1')return;
-      b.dataset.adminV2Bound='1';
+      if(b.dataset.adminConsoleBound==='1')return;
+      b.dataset.adminConsoleBound='1';
       b.addEventListener('click',()=>{state.section=b.dataset.adminSection;render();});
     });
   }
@@ -56,6 +59,7 @@
     }
     document.querySelector('[data-nav="admin"] span:last-child')?.replaceChildren(document.createTextNode('Админ'));
     refreshIcons();
+    document.dispatchEvent(new CustomEvent('dtl:adminrender',{detail:{section:state.section}}));
   }
 
   async function render(){
@@ -132,7 +136,9 @@
   function errorBox(t){return `<div class="admin-panel admin-error">${icon('triangle-alert')}<strong>Не удалось выполнить действие</strong><span>${esc(t)}</span></div>`;}
   function date(v){if(!v)return'—';try{return new Intl.DateTimeFormat('ru-RU',{dateStyle:'medium',timeStyle:'short'}).format(new Date(v));}catch{return v;}}
 
-  function scheduleAdminRender(){setTimeout(()=>{const old=document.querySelector('#viewRoot .admin-stats');if(old&&!document.querySelector('.admin-v2'))render();},0);}
+  function scheduleAdminRender(){setTimeout(()=>{const root=document.getElementById('viewRoot');const old=root?.querySelector('.admin-stats');if(old&&!root.querySelector('.admin-v2'))render();},0);}
   document.addEventListener('click',e=>{const nav=e.target.closest?.('[data-nav]');if(!nav)return;if(nav.dataset.nav==='admin')scheduleAdminRender();else activateAdminClass(false);},true);
-  const root=document.getElementById('viewRoot');if(root)new MutationObserver(()=>{if(root.querySelector('.admin-stats')&&!root.querySelector('.admin-v2'))scheduleAdminRender();}).observe(root,{childList:true,subtree:false});
+  runtime.registerPatcher(()=>{const root=document.getElementById('viewRoot');if(root?.querySelector('.admin-stats')&&!root.querySelector('.admin-v2'))scheduleAdminRender();});
+
+  window.DTL_ADMIN_CONSOLE=Object.freeze({render,open:()=>{state.section='overview';return render();},section:()=>state.section});
 })();

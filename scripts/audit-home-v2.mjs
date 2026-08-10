@@ -10,11 +10,13 @@ if (start < 0 || end < 0) throw new Error('Could not locate home-v2 localization
 const objectSource = `{${source.slice(start + startMarker.length, end).trim().replace(/;$/, '')}`;
 const copy = vm.runInNewContext(`(${objectSource})`, Object.create(null), { timeout: 1000 });
 const expected = ['en','es','fil','hi','pt','id','vi','fr','de','ru'];
-const keys = ['title','subtitle','empty','open','files'];
+const keys = ['greeting','reader','title','subtitle','empty','open','files'];
 for (const locale of expected) {
   if (!copy[locale]) throw new Error(`home-v2: missing locale ${locale}`);
   for (const key of keys) if (copy[locale][key] === undefined) throw new Error(`home-v2/${locale}: missing ${key}`);
+  const sample=copy[locale].greeting('$');
+  if(!sample.includes('$')||!sample.includes('👋'))throw new Error(`home-v2/${locale}: dynamic greeting is invalid`);
 }
 const extras = Object.keys(copy).filter(locale => !expected.includes(locale));
 if (extras.length) throw new Error(`home-v2: unexpected locales ${extras.join(', ')}`);
-console.log(`Home translated-chapters localization passed for ${expected.length} locales.`);
+console.log(`Home localization passed for ${expected.length} locales, including dynamic greeting.`);
