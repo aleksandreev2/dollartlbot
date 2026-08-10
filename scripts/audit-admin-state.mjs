@@ -53,9 +53,12 @@ for (const legacy of [
 }
 
 const v2 = index.indexOf('handleAdminActionV2(request, env, apiTelegram)');
-const legacyMini = index.indexOf('handleMiniAppRequest(request, env, ctx)');
-if (v2 < 0 || legacyMini < 0 || v2 > legacyMini) {
-  throw new Error('index.ts: strict admin action handler must run before legacy Mini App routing');
+const core = index.indexOf('handleMiniAppCoreRequest(request, env)');
+if (v2 < 0 || core < 0 || v2 > core) {
+  throw new Error('index.ts: strict admin action handler must run before canonical Mini App core routing');
+}
+if (index.includes('handleMiniAppRequest(request, env, ctx)')) {
+  throw new Error('index.ts: legacy Mini App router must not return after canonical core migration');
 }
 
 console.log('Admin state-machine audit passed.');
