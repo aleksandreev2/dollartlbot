@@ -38,6 +38,10 @@ export async function denyBlockedPrivateBotUpdate(
   if (!actor || isAdmin(actor.id, env)) return false;
   if (!(await isUserAdministrativelyBlocked(env, actor.id))) return false;
 
+  if (update.callback_query) {
+    await telegram.answerCallbackQuery(update.callback_query.id).catch(() => undefined);
+  }
+
   const user = await getUser(env, actor.id).catch(() => null);
   const locale = normalizeLocale(user?.language);
   await telegram.sendMessage(actor.id, `<b>${t(locale, 'accessRestrictedTitle')}</b>\n\n${t(locale, 'accessRestrictedText')}`)
