@@ -3,6 +3,10 @@
   const storageKey = 'dtl_locale';
   const patchers = new Set();
   const responseHandlers = new Set();
+  const requestWords = {en:'Request',ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage'};
+  const requestPattern = /(?:Request|Заявка|Solicitud|Kahilingan|अनुरोध|Pedido|Permintaan|Yêu cầu|Demande|Anfrage)\s+#(\d+)/giu;
+  const positionPattern = /(?:Position|Позиция|Posición|Puwesto|स्थान|Posição|Posisi|Vị trí|Anfrageposition)\s+#(\d+)/giu;
+  const chapterPattern = /(\d+)\s+(?:chapters?|глав(?:а|ы)?|capítulos?|kabanata|अध्याय|bab|chương|chapitres?|Kapitel)/giu;
   let catalog = null;
   let raf = 0;
 
@@ -57,7 +61,34 @@
     return aliases[short] || null;
   }
 
+  function patchInlineCopy() {
+    if (!catalog) return;
+    const l = locale();
+    const fallback = catalog.uiFallback?.[l] || {};
+    const chapterWord = fallback.chapters || 'chapters';
+    const positionWord = fallback.Position || 'Position';
+    const requestWord = requestWords[l] || requestWords.en;
+    const root = document.getElementById('app');
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest('script,style,textarea,input')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }});
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    for(const node of nodes){
+      const raw=node.nodeValue||'';
+      const next=raw
+        .replace(requestPattern,(_,n)=>`${requestWord} #${n}`)
+        .replace(positionPattern,(_,n)=>`${positionWord} #${n}`)
+        .replace(chapterPattern,(_,n)=>`${n} ${chapterWord}`);
+      if(next!==raw)node.nodeValue=next;
+    }
+  }
+
   function runPatchers() {
+    try { patchInlineCopy(); }
+    catch (error) { console.error('[DTL runtime] inline copy patch failed', error); }
     for (const patcher of [...patchers]) {
       try { patcher(); }
       catch (error) { console.error('[DTL runtime] patcher failed', error); }
