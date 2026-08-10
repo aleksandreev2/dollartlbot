@@ -27,6 +27,7 @@
     de:{next:'Weiter',back:'Zurück',enter:'Dollar TL öffnen',notAdult:'Ich bin noch nicht volljährig',loading:'Dollar TL wird vorbereitet…',error:'Der Willkommensleitfaden konnte nicht geladen werden. Tippe zum Wiederholen.',retry:'Erneut versuchen',s1t:'Willkommen bei Dollar TL',s1b:'Ein übersichtlicher Ort, um Romane vorzuschlagen, die öffentliche Übersetzungswarteschlange zu verfolgen und alle Anfragen zusammenzuhalten.',s2t:'Intelligentere Einreichungen',s2b:'Lade TXT oder EPUB hoch. Wir können die Datei analysieren, Originalsprache und Kapitelzahl vorschlagen und vorhandene EPUB-Cover verwenden.',s3t:'Immer auf dem Laufenden',s3b:'Verfolge Prüfung und Übersetzung, erhalte Telegram-Benachrichtigungen und lade Freunde für bis zu +3 Bonus-Anfragen ein.',s4t:'Bevor du fortfährst',s4b:'Dollar TL kann fiktionale Inhalte für Erwachsene, sexuelle oder fetischbezogene Inhalte, Gewalt oder andere sensible Themen enthalten oder besprechen.',adult:'Ich bestätige, dass ich in meinem Land oder in meiner Rechtsordnung volljährig bin.',adultHelp:'Dies ist eine Selbstauskunft. Dollar TL bestimmt weder dein Alter noch die für dich geltenden lokalen rechtlichen Anforderungen.'},
   };
 
+  const ACCESS_CODES = new Set(['membership_required','access_check_unavailable']);
   const icons = ['book-open','wand-sparkles','bell-ring','shield-check'];
   const TAP_SELECTOR = '#onboardNext,#onboardBack,[data-onboard-dot],#underageButton,#onboardingRetry,.adult-confirm';
   let current = 0;
@@ -35,6 +36,8 @@
   let touchX = 0;
   let touchY = 0;
   let touchTarget = null;
+  let initPromise = null;
+  let onboardingResolved = false;
 
   function inferLocale() {
     const raw = String(tg?.initDataUnsafe?.user?.language_code || 'en').toLowerCase();
@@ -45,17 +48,46 @@
   const tr = (key) => COPY[locale]?.[key] || COPY.en[key] || key;
 
   async function init() {
+    if (onboardingResolved) return;
+    if (window.DTL_APP?.state?.accessLocked) {
+      removeOverlay();
+      return;
+    }
+    if (initPromise) return initPromise;
+    initPromise = loadOnboarding();
+    try {
+      await initPromise;
+    } finally {
+      initPromise = null;
+    }
+  }
+
+  async function loadOnboarding() {
     showLoading();
     try {
       const response = await fetch('/api/app/onboarding', {cache:'no-store', headers:{'x-telegram-init-data':tg.initData}});
-      if (!response.ok) throw new Error('onboarding unavailable');
-      const info = await response.json();
+      const info = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (ACCESS_CODES.has(info?.error?.code)) {
+          removeOverlay();
+          return;
+        }
+        throw new Error('onboarding unavailable');
+      }
       locale = COPY[info.locale] ? info.locale : locale;
       document.documentElement.lang = locale;
-      if (!info.required) { removeOverlay(); return; }
+      if (!info.required) {
+        onboardingResolved = true;
+        removeOverlay();
+        return;
+      }
       current = 0;
       render();
     } catch {
+      if (window.DTL_APP?.state?.accessLocked) {
+        removeOverlay();
+        return;
+      }
       showError();
     }
   }
@@ -167,10 +199,22 @@
         headers:{'content-type':'application/json','x-telegram-init-data':tg.initData},
         body:JSON.stringify({adult_confirmed:true}),
       });
-      if (!response.ok) throw new Error('confirmation failed');
+      const info = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (ACCESS_CODES.has(info?.error?.code)) {
+          removeOverlay();
+          return;
+        }
+        throw new Error('confirmation failed');
+      }
+      onboardingResolved = true;
       overlay.classList.add('onboarding-leave');
       setTimeout(removeOverlay,420);
     } catch {
+      if (window.DTL_APP?.state?.accessLocked) {
+        removeOverlay();
+        return;
+      }
       if (button) { button.disabled=false; button.classList.remove('loading'); }
       const card=overlay?.querySelector('.onboarding-card');
       if(card){card.classList.remove('shake');void card.offsetWidth;card.classList.add('shake');}
@@ -183,5 +227,6 @@
   function refreshIcons(){ if(window.lucide?.createIcons)window.lucide.createIcons({attrs:{'stroke-width':1.75,'aria-hidden':'true'}}); }
   function esc(v=''){return String(v).replace(/[&<>'"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+  document.addEventListener('dtl:accesslocked', removeOverlay);
+  document.addEventListener('dtl:accessready', () => void init());
 })();
