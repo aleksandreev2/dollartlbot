@@ -44,13 +44,12 @@ type ActivationUser = {
 const activationMemo = new Set<number>();
 
 /**
- * Marks the first successful, non-admin use of Dollar TL and creates exactly one
- * durable admin event. Existing users are backfilled as activated by migration
- * 0019, so deployment cannot produce a notification storm.
+ * Marks the first successful, non-admin use of Dollar TL and queues exactly one
+ * durable admin event. Delivery is intentionally not awaited here: access to the
+ * bot/Mini App must never depend on the admin notification transport.
  */
 export async function markUserActivated(
   env: Env,
-  telegram: TelegramClient,
   userId: number,
   source: ActivationSource = 'bot',
 ): Promise<void> {
@@ -79,7 +78,7 @@ export async function markUserActivated(
   const dedupeKey = `new_user:${userId}`;
   const details = JSON.stringify({ source, language: user.language || 'en' });
 
-  const [eventInsert] = await env.DB.batch([
+  await env.DB.batch([
     env.DB.prepare(`
       INSERT OR IGNORE INTO admin_events (
         type, severity, user_id, title, body, action_url, dedupe_key, details,
@@ -100,20 +99,6 @@ export async function markUserActivated(
   ]);
 
   rememberActivated(userId);
-  if ((eventInsert.meta.changes ?? 0) === 0) return;
-
-  const eventId = Number(eventInsert.meta.last_row_id);
-  if (!Number.isSafeInteger(eventId) || eventId <= 0) return;
-
-  // Immediate delivery keeps the alert useful. The durable state below means a
-  // Telegram/network failure is retried later by the scheduled maintenance job.
-  await deliverAdminEventById(env, telegram, eventId).catch((error) => {
-    console.warn(JSON.stringify({
-      event: 'admin_event_immediate_delivery_failed',
-      admin_event_id: eventId,
-      error: errorText(error),
-    }));
-  });
 }
 
 export async function enqueueAdminEvent(
