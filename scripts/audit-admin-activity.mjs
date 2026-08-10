@@ -42,6 +42,7 @@ for(const token of [
   'ADMIN_EVENT_MAX_ATTEMPTS = 5',
   "web_app: { url: actionUrl }",
   'build && !target.searchParams.has(\'build\')',
+  'if (isAdminEventsSchemaMissing(error)) return;',
 ])need(store,token,'admin event store');
 forbid(store,'await deliverAdminEventById(env, telegram, eventId).catch','activation must not block access on Telegram delivery');
 
@@ -59,8 +60,14 @@ need(access,"import { markUserActivated } from './admin-events'",'access activat
 need(access,"activationSource?: 'bot' | 'miniapp'",'activation source');
 need(access,"await markUserActivated(env, userId, options.activationSource ?? 'bot')",'non-admin activation');
 need(auth,"activationSource: 'miniapp'",'Mini App activation source');
-need(db,'last_seen_at = excluded.last_seen_at','last-seen tracking');
-need(db,'created_at, updated_at, activated_at, activated_via, last_seen_at','user activation read model');
+for(const token of [
+  'last_seen_at = excluded.last_seen_at',
+  'created_at, updated_at, activated_at, activated_via, last_seen_at',
+  'export function isAdminEventsSchemaMissing(',
+  'if (!isAdminEventsSchemaMissing(error)) throw error;',
+  'Migration 0019 must not become a hard dependency',
+  'created_at, updated_at\n    )',
+])need(db,token,'migration-safe user persistence');
 need(users,'u.activated_at,u.activated_via,u.last_seen_at','admin user activation metadata');
 
 for(const token of [
@@ -92,4 +99,4 @@ need(html,'/app/admin-activity.css?v=20260810-adminactivity1','admin activity CS
 need(html,'/app/admin-activity.js?v=20260810-adminactivity1','admin activity JS asset');
 need(html,'/app/notification-deeplink.js?v=20260810-notify2','fresh notification deep link');
 
-console.log('Admin activity audit passed: legacy users are backfilled without alert spam, first real access creates one deduped durable event, Telegram delivery is non-blocking with bounded retries, and the Admin Activity Center has unread/problem filters and deep links.');
+console.log('Admin activity audit passed: legacy users are backfilled without alert spam, first real access creates one deduped durable event, Telegram delivery is non-blocking with bounded retries, public auth survives a temporarily unapplied 0019 migration, and the Admin Activity Center has unread/problem filters and deep links.');

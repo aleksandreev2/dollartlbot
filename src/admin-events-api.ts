@@ -1,4 +1,5 @@
 import { retryAdminEventDelivery } from './admin-events';
+import { isAdminEventsSchemaMissing } from './db';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
 import type { TelegramClient } from './telegram';
 
@@ -18,41 +19,52 @@ export async function handleAdminEventsRequest(
   if (auth instanceof Response) return auth;
   if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
 
-  if (request.method === 'GET' && url.pathname === '/api/app/admin/events') {
-    return listEvents(url, env);
-  }
-
-  if (request.method === 'POST' && url.pathname === '/api/app/admin/events/read') {
-    const body = await readJson<{ id?: number; all?: boolean }>(request);
-    const now = new Date().toISOString();
-    if (body.all === true) {
-      await env.DB.prepare('UPDATE admin_events SET read_at=COALESCE(read_at,?) WHERE read_at IS NULL')
-        .bind(now).run();
-      return miniAppJson({ ok: true, read_all: true, summary: await eventSummary(env) });
+  try {
+    if (request.method === 'GET' && url.pathname === '/api/app/admin/events') {
+      return listEvents(url, env);
     }
-    const id = Number(body.id);
-    if (!Number.isSafeInteger(id) || id <= 0) {
-      return miniAppJsonError('invalid_event', 'Invalid admin event.', 400);
-    }
-    await env.DB.prepare('UPDATE admin_events SET read_at=COALESCE(read_at,?) WHERE id=?')
-      .bind(now, id).run();
-    return miniAppJson({ ok: true, id, summary: await eventSummary(env) });
-  }
 
-  const retryMatch = /^\/api\/app\/admin\/events\/(\d+)\/retry$/.exec(url.pathname);
-  if (request.method === 'POST' && retryMatch) {
-    const id = Number(retryMatch[1]);
-    const exists = await env.DB.prepare('SELECT telegram_status FROM admin_events WHERE id=?')
-      .bind(id).first<{ telegram_status: string }>();
-    if (!exists) return miniAppJsonError('not_found', 'Admin event not found.', 404);
-    if (exists.telegram_status !== 'failed') {
-      return miniAppJsonError('invalid_state', 'Only a failed Telegram alert can be retried.', 409);
+    if (request.method === 'POST' && url.pathname === '/api/app/admin/events/read') {
+      const body = await readJson<{ id?: number; all?: boolean }>(request);
+      const now = new Date().toISOString();
+      if (body.all === true) {
+        await env.DB.prepare('UPDATE admin_events SET read_at=COALESCE(read_at,?) WHERE read_at IS NULL')
+          .bind(now).run();
+        return miniAppJson({ ok: true, read_all: true, summary: await eventSummary(env) });
+      }
+      const id = Number(body.id);
+      if (!Number.isSafeInteger(id) || id <= 0) {
+        return miniAppJsonError('invalid_event', 'Invalid admin event.', 400);
+      }
+      await env.DB.prepare('UPDATE admin_events SET read_at=COALESCE(read_at,?) WHERE id=?')
+        .bind(now, id).run();
+      return miniAppJson({ ok: true, id, summary: await eventSummary(env) });
     }
-    const retried = await retryAdminEventDelivery(env, telegram, id);
-    return miniAppJson({ ok: retried, id, event: await eventById(env, id), summary: await eventSummary(env) });
-  }
 
-  return miniAppJsonError('not_found', 'Admin event route not found.', 404);
+    const retryMatch = /^\/api\/app\/admin\/events\/(\d+)\/retry$/.exec(url.pathname);
+    if (request.method === 'POST' && retryMatch) {
+      const id = Number(retryMatch[1]);
+      const exists = await env.DB.prepare('SELECT telegram_status FROM admin_events WHERE id=?')
+        .bind(id).first<{ telegram_status: string }>();
+      if (!exists) return miniAppJsonError('not_found', 'Admin event not found.', 404);
+      if (exists.telegram_status !== 'failed') {
+        return miniAppJsonError('invalid_state', 'Only a failed Telegram alert can be retried.', 409);
+      }
+      const retried = await retryAdminEventDelivery(env, telegram, id);
+      return miniAppJson({ ok: retried, id, event: await eventById(env, id), summary: await eventSummary(env) });
+    }
+
+    return miniAppJsonError('not_found', 'Admin event route not found.', 404);
+  } catch (error) {
+    if (isAdminEventsSchemaMissing(error)) {
+      return miniAppJsonError(
+        'admin_events_schema_pending',
+        'Admin Activity is waiting for D1 migration 0019. Public bot access remains available.',
+        503,
+      );
+    }
+    throw error;
+  }
 }
 
 async function listEvents(url: URL, env: Env): Promise<Response> {
