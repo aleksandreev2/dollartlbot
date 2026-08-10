@@ -10,7 +10,7 @@ import { handleUpdate } from './handlers';
 import { handleHomeReleasesRequest } from './home-releases';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleMiniAppRequest } from './miniapp';
-import { handleNotificationApiRequest, runBroadcastMaintenance } from './notifications';
+import { handleNotificationApiRequest, runBroadcastMaintenance, runNotificationMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
 import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
 import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
@@ -118,6 +118,7 @@ export default {
     await runScheduledTask('queue_normalize', () => normalizeQueuePositions(env));
     await runScheduledTask('admin_delivery_retry', () => retryPendingAdminDeliveries(env, telegram));
     await runScheduledTask('referral_maintenance', () => runReferralMaintenance(env, telegram, scheduledAt));
+    await runScheduledTask('notification_maintenance', () => runNotificationMaintenance(env, telegram));
     await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenance(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
 
