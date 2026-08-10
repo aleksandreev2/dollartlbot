@@ -52,10 +52,9 @@
     if (!body) return;
     const settings = data.settings || {};
     const diagnostics = data.diagnostics || {};
-    const inherited = Boolean(settings.inherited_from_publishing);
     body.innerHTML = `<label class="admin-field"><span>Канал обязательного доступа</span>
-        <input id="accessChannelId" value="${esc(settings.access_channel_id || '')}" placeholder="Оставьте пустым, чтобы использовать канал публикации">
-        <small>${inherited && settings.effective_channel_id ? `Сейчас используется канал публикации: ${esc(settings.effective_channel_id)}` : 'Можно указать @username или числовой chat ID.'}</small>
+        <input id="accessChannelId" value="${esc(settings.access_channel_id || '')}" placeholder="@channelusername или chat ID">
+        <small>Этот канал независим от канала публикации. Пустое значение отключает ограничение доступа.</small>
       </label>
       <label class="admin-field"><span>Ссылка для вступления</span>
         <input id="accessChannelUrl" value="${esc(settings.access_channel_url || '')}" placeholder="https://t.me/channel или invite-ссылка">
