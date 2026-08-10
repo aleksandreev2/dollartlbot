@@ -1,6 +1,12 @@
+import {
+  accessErrorCode,
+  accessErrorDetails,
+  accessErrorMessage,
+  checkBotAccess,
+} from './access-gate';
 import { getUser, isAdmin, upsertUser } from './db';
 import { normalizeLocale } from './i18n/index';
-import type { TelegramUser } from './telegram';
+import { TelegramClient, type TelegramUser } from './telegram';
 
 const INIT_DATA_MAX_AGE_SECONDS = 24 * 60 * 60;
 
@@ -81,10 +87,24 @@ export async function authenticateMiniAppRequest(
 
   await upsertUser(env, telegramUser);
   const dbUser = await getUser(env, telegramUser.id);
+  const locale = normalizeLocale(dbUser?.language);
+  const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+  const access = await checkBotAccess(telegramUser.id, env, telegram, {
+    force: request.headers.get('x-access-recheck') === '1',
+  });
+  if (!access.allowed) {
+    return miniAppJsonError(
+      accessErrorCode(access),
+      accessErrorMessage(locale, access),
+      access.reason === 'check_unavailable' ? 503 : 403,
+      accessErrorDetails(locale, access),
+    );
+  }
+
   return {
     telegramUser,
     dbUser,
-    locale: normalizeLocale(dbUser?.language),
+    locale,
     admin: isAdmin(telegramUser.id, env),
   };
 }
@@ -99,8 +119,13 @@ export function miniAppJson(data: unknown, status = 200): Response {
   });
 }
 
-export function miniAppJsonError(code: string, message: string, status: number): Response {
-  return miniAppJson({ error: { code, message } }, status);
+export function miniAppJsonError(
+  code: string,
+  message: string,
+  status: number,
+  details?: Record<string, unknown>,
+): Response {
+  return miniAppJson({ error: { code, message, ...(details ? { details } : {}) } }, status);
 }
 
 function getInitDataHeader(request: Request): string {
