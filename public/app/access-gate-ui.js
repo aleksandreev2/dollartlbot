@@ -9,7 +9,6 @@
   let initialized = false;
   let heartbeat = 0;
   let checking = false;
-  let lastPayload = null;
 
   function isAccessPayload(data) {
     return ACCESS_CODES.has(data?.error?.code);
@@ -32,12 +31,22 @@
     try { window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } }); } catch {}
   }
 
+  function setChromeLocked(locked) {
+    app.root.classList.toggle('access-locked', locked);
+    app.bottomNav.hidden = locked;
+    const bell = document.getElementById('notificationButton');
+    if (bell) bell.disabled = locked;
+    if (locked) {
+      app.sheetRoot.innerHTML = '';
+      try { document.activeElement?.blur?.(); } catch {}
+    }
+  }
+
   function renderLocked(payload) {
     if (!isAccessPayload(payload)) return;
-    lastPayload = payload;
     app.state.accessLocked = true;
     app.root.setAttribute('aria-busy', 'false');
-    app.bottomNav.hidden = true;
+    setChromeLocked(true);
 
     const error = payload.error || {};
     const details = error.details || {};
@@ -91,8 +100,7 @@
       }
 
       app.state.accessLocked = false;
-      app.bottomNav.hidden = false;
-      lastPayload = null;
+      setChromeLocked(false);
       if (!initialized) {
         initialized = true;
         await originalInit();
