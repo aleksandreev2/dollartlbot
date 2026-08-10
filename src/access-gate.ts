@@ -1,3 +1,4 @@
+import { markUserActivated } from './admin-events';
 import { errorText, isAdmin } from './db';
 import { t, type Locale } from './i18n/index';
 import { getSubscriptionState } from './subscription';
@@ -48,7 +49,10 @@ export type AccessDecision = {
   joinUrl: string | null;
 };
 
-type AccessOptions = { force?: boolean };
+type AccessOptions = {
+  force?: boolean;
+  activationSource?: 'bot' | 'miniapp';
+};
 
 let configCache: { value: AccessConfig; expiresAt: number } | null = null;
 
@@ -65,7 +69,7 @@ export async function checkBotAccess(
   if (isAdmin(userId, env)) return decision(true, 'admin', null);
 
   const config = await getAccessConfig(env);
-  if (!config.intended) return decision(true, 'not_configured', config);
+  if (!config.intended) return allowDecision(userId, env, options, 'not_configured', config);
   if (!config.configured || !config.channelId || !config.channelKey) {
     return decision(false, 'check_unavailable', config);
   }
@@ -74,7 +78,13 @@ export async function checkBotAccess(
   const cached = await readCache(env, userId, config.channelKey);
   if (!options.force && cached && Date.parse(cached.expires_at) > now) {
     if (cached.is_member === 1) {
-      return decision(true, cached.source === 'entitlement' ? 'entitlement' : 'cache', config);
+      return allowDecision(
+        userId,
+        env,
+        options,
+        cached.source === 'entitlement' ? 'entitlement' : 'cache',
+        config,
+      );
     }
     if (cached.source === 'denied') return decision(false, 'membership_required', config);
   }
@@ -84,7 +94,7 @@ export async function checkBotAccess(
     const member = await telegram.getChatMember(config.channelId, userId);
     if (isActiveChatMember(member)) {
       await writeCache(env, userId, config.channelKey, true, 'channel', POSITIVE_TTL_MS, STALE_POSITIVE_GRACE_MS);
-      return decision(true, 'channel', config);
+      return allowDecision(userId, env, options, 'channel', config);
     }
   } catch (error) {
     channelCheckFailed = true;
@@ -96,7 +106,7 @@ export async function checkBotAccess(
   const subscription = await getSubscriptionState(userId, env, telegram);
   if (subscription.subscriber) {
     await writeCache(env, userId, config.channelKey, true, 'entitlement', POSITIVE_TTL_MS, STALE_POSITIVE_GRACE_MS);
-    return decision(true, 'entitlement', config);
+    return allowDecision(userId, env, options, 'entitlement', config);
   }
 
   if (
@@ -105,7 +115,7 @@ export async function checkBotAccess(
     && cached.source === 'entitlement'
     && Date.parse(cached.stale_until) > now
   ) {
-    return decision(true, 'cache', config);
+    return allowDecision(userId, env, options, 'cache', config);
   }
 
   if (channelCheckFailed) {
@@ -114,7 +124,7 @@ export async function checkBotAccess(
       && cached.source !== 'entitlement'
       && Date.parse(cached.stale_until) > now
     ) {
-      return decision(true, 'cache', config);
+      return allowDecision(userId, env, options, 'cache', config);
     }
     return decision(false, 'check_unavailable', config);
   }
@@ -246,6 +256,26 @@ export async function getAccessGateDiagnostics(env: Env, telegram: TelegramClien
       join_url: config.joinUrl,
     };
   }
+}
+
+async function allowDecision(
+  userId: number,
+  env: Env,
+  options: AccessOptions,
+  reason: AccessDecisionReason,
+  config: AccessConfig,
+): Promise<AccessDecision> {
+  try {
+    await markUserActivated(env, userId, options.activationSource ?? 'bot');
+  } catch (error) {
+    // Admin telemetry must never become part of the user's access decision.
+    console.warn(JSON.stringify({
+      event: 'user_activation_event_failed',
+      user_id: userId,
+      error: errorText(error),
+    }));
+  }
+  return decision(true, reason, config);
 }
 
 async function getAccessConfig(env: Env, force = false): Promise<AccessConfig> {
