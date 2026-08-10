@@ -1,16 +1,16 @@
 (() => {
   const tg = window.Telegram?.WebApp;
+  const runtime = window.DTL_RUNTIME;
   const app = document.getElementById('app');
   const viewRoot = document.getElementById('viewRoot');
   const bottomNav = document.getElementById('bottomNav');
-  const sheetRoot = document.getElementById('sheetRoot');
+  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before interaction-upgrade.js');
   if (!app || !viewRoot || !bottomNav) return;
 
   let detailOrigin = 'queue';
   let lastMainNav = 'home';
   let nativeBackBound = false;
   let pointer = null;
-  let raf = 0;
 
   const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const interactiveSelector = 'button,a,input,textarea,select,label,[role="button"],.filter-row,.segmented,.timeline,.tag-list,.quick-tags';
@@ -107,23 +107,13 @@
         if (index === 0 && name === 'circle-x') step.classList.add('rejected-step');
       });
     });
-    try {
-      window.lucide?.createIcons?.({ attrs:{ 'stroke-width':1.8, 'aria-hidden':'true' } });
-    } catch {}
+    try { window.lucide?.createIcons?.({ attrs:{ 'stroke-width':1.8, 'aria-hidden':'true' } }); } catch {}
   }
 
   function patch() {
     decorateBackButton();
     upgradeTimelines(document);
     syncNativeBack();
-  }
-
-  function schedulePatch() {
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
-      raf = 0;
-      patch();
-    });
   }
 
   // Track the page that opened a novel detail view before app.js changes its internal state.
@@ -153,7 +143,6 @@
       t:performance.now(),
       target:event.target,
       edgeLeft:event.clientX <= 30,
-      edgeRight:event.clientX >= window.innerWidth - 30,
       sheetHandle:Boolean(event.target.closest?.('.sheet-handle,.sheet-title')),
     };
   }, { passive:true });
@@ -213,8 +202,5 @@
   // Android/WebView browser-back fallback where popstate is delivered to the page.
   window.addEventListener('popstate', () => { if (canGoBack()) smartBack(); });
 
-  const observer = new MutationObserver(schedulePatch);
-  observer.observe(document.body, { childList:true, subtree:true, attributes:true, attributeFilter:['class'] });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedulePatch, { once:true });
-  else schedulePatch();
+  runtime.registerPatcher(patch);
 })();
