@@ -55,15 +55,12 @@ export async function handleAccessAdminRequest(
 async function readSettings(env: Env) {
   const rows = await env.DB.prepare(`
     SELECT key,value FROM app_settings
-    WHERE key IN ('access_channel_id','access_channel_url','publish_channel_id')
+    WHERE key IN ('access_channel_id','access_channel_url')
   `).all<{ key: string; value: string }>();
   const map = Object.fromEntries(rows.results.map((row) => [row.key, String(row.value || '')]));
   return {
     access_channel_id: map.access_channel_id || '',
     access_channel_url: map.access_channel_url || '',
-    publish_channel_id: map.publish_channel_id || '',
-    effective_channel_id: map.access_channel_id || map.publish_channel_id || '',
-    inherited_from_publishing: !map.access_channel_id && Boolean(map.publish_channel_id),
   };
 }
 
