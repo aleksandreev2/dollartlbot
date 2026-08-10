@@ -21,8 +21,8 @@ const html = read('public/app/index.html');
 const wrangler = read('wrangler.jsonc');
 
 for (const token of [
-  "'access_channel_id'",
-  "'access_channel_url'",
+  "('access_channel_id', '@dollartranslate'",
+  "('access_channel_url', 'https://t.me/dollartranslate'",
   'CREATE TABLE IF NOT EXISTS access_membership_cache',
   'PRIMARY KEY (user_id, channel_key)',
   'expires_at TEXT NOT NULL',
@@ -33,8 +33,7 @@ for (const token of [
   'POSITIVE_TTL_MS = 3 * 60 * 1000',
   'NEGATIVE_TTL_MS = 15 * 1000',
   'STALE_POSITIVE_GRACE_MS = 30 * 60 * 1000',
-  "values.access_channel_id",
-  "values.publish_channel_id",
+  "WHERE key IN ('access_channel_id','access_channel_url')",
   'getSubscriptionState(userId, env, telegram)',
   "cached.source === 'denied'",
   "cached.source === 'entitlement'",
@@ -50,6 +49,7 @@ for (const token of [
   'getAccessGateDiagnostics',
   'invalidateAccessConfigCache',
 ]) need(gate, token, 'access gate');
+forbid(gate, 'publish_channel_id', 'access gate channel ownership');
 
 need(telegram, 'export function isActiveChatMember(', 'Telegram membership semantics');
 need(auth, 'checkBotAccess(telegramUser.id, env, telegram', 'Mini App shared auth gate');
@@ -63,6 +63,8 @@ for (const token of [
   "data === 'access:retry'",
   'checkBotAccess(userId, env, telegram, { force: true })',
   'sendAccessGate(',
+  'const referralHandled = await handleReferralBotStart(',
+  'if (referralHandled)',
 ]) need(handlers, token, 'Telegram bot gate');
 
 for (const token of [
@@ -88,11 +90,14 @@ for (const token of [
   'getAccessGateDiagnostics',
   'invalidateAccessConfigCache',
   'cleanTelegramJoinUrl',
+  "WHERE key IN ('access_channel_id','access_channel_url')",
 ]) need(adminApi, token, 'Access admin API');
+forbid(adminApi, 'publish_channel_id', 'Access admin independence');
 for (const token of [
   "api('/api/app/admin/access'",
   'Канал обязательного доступа',
   'Ссылка для вступления',
+  'Пустое значение отключает ограничение доступа',
   'Сохранить доступ',
 ]) need(adminUi, token, 'Access admin UI');
 
@@ -110,4 +115,4 @@ need(wrangler, '?build=20260810-access1', 'fresh Mini App URL');
 new Function(gateUi);
 new Function(adminUi);
 
-console.log('Channel access gate audit passed: backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, localized bot/Mini App UX, admin diagnostics, and live rechecks are wired.');
+console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, referral-safe onboarding, localized bot/Mini App UX, admin diagnostics, and live rechecks are wired.');
