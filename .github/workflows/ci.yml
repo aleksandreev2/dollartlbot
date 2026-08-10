@@ -56,7 +56,7 @@ jobs:
           node --check public/app/view-queue.js
           node --check public/app/view-suggest.js
           node --check public/app/suggest-content-picker.js
-          node --check public/app/suggest-content-activation.js
+          node --check public/app/suggest-content-api.js
           node --check public/app/view-requests-account.js
           node --check public/app/view-admin.js
           node --check public/app/performance.js
@@ -104,7 +104,8 @@ jobs:
           test -f public/app/view-queue.js
           test -f public/app/view-suggest.js
           test -f public/app/suggest-content-picker.js
-          test -f public/app/suggest-content-activation.js
+          test -f public/app/suggest-content-api.js
+          test ! -e public/app/suggest-content-activation.js
           test -f public/app/suggest-content-picker.css
           test -f public/app/view-requests-account.js
           test -f public/app/view-admin.js
@@ -117,15 +118,16 @@ jobs:
           test ! -e public/app/onboarding-interactions-fix.js
           grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
           grep -q '/app/app-update.js?v=20260810-update1' public/app/index.html
-          grep -q '/app/file-picked-fix.css?v=20260810-file1' public/app/index.html
+          grep -q '/app/file-picked-fix.css?v=20260810-file2' public/app/index.html
           grep -q '/app/notification-deeplink.js?v=20260810-notify1' public/app/index.html
           grep -q '/app/view-i18n.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-home.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-queue.js?v=20260810-app3' public/app/index.html
-          grep -q '/app/view-suggest.js?v=20260810-app2' public/app/index.html
-          grep -q '/app/suggest-content-picker.css?v=20260810-content3' public/app/index.html
-          grep -q '/app/suggest-content-picker.js?v=20260810-content3' public/app/index.html
-          grep -q '/app/suggest-content-activation.js?v=20260810-content3' public/app/index.html
+          grep -q '/app/view-suggest.js?v=20260810-app4' public/app/index.html
+          grep -q '/app/suggest-content-picker.css?v=20260810-content4' public/app/index.html
+          grep -q '/app/suggest-content-picker.js?v=20260810-content4' public/app/index.html
+          grep -q '/app/suggest-content-api.js?v=20260810-content4' public/app/index.html
+          ! grep -q '/app/suggest-content-activation.js' public/app/index.html
           grep -q '/app/view-requests-account.js?v=20260810-app3' public/app/index.html
           grep -q '/app/view-admin.js?v=20260810-app1' public/app/index.html
           grep -q '/app/novel-presenter.js?v=20260810-runtime4' public/app/index.html
