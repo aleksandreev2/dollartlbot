@@ -29,15 +29,15 @@ for(const token of [
   'denyBlockedPrivateBotUpdate',
   'parseAdminTags',
   'normalizeAdminTags',
-  "accessRestrictedTitle",
-  "accessRestrictedText",
+  'accessRestrictedTitle',
+  'accessRestrictedText',
 ])need(controls+accessCopy,token,'user control service/copy');
 
 for(const token of [
-  "'/control$'",
-  '/message$',
-  '/refresh-telegram$',
-  '/recheck$',
+  'const controlMatch =',
+  'const messageMatch =',
+  'const refreshMatch =',
+  'const recheckMatch =',
   'user_admin_controls',
   'user_admin_messages',
   "filter === 'blocked'",
@@ -47,7 +47,7 @@ for(const token of [
   "sort = String(url.searchParams.get('sort')",
   'telegram.sendMessage(userId, escapeHtml(text))',
   "telegram.call<{ id: number; type: string; username?: string; first_name?: string }>('getChat'",
-  "telegram.getChatMember(normalizeChatId(channelId), userId)",
+  'telegram.getChatMember(normalizeChatId(channelId), userId)',
   "auditStatement(env, adminUserId, 'user_message_sent'",
   "auditStatement(env, adminUserId, 'user_access_recheck'",
   'buildTimeline(',
@@ -75,11 +75,11 @@ for(const token of [
   'sendUserMessage',
   'recheckUser',
   'refreshTelegramUser',
-  'adminUserNotes',
+  'userAdminNotes',
   'adminUserMessageText',
   'admin-user-timeline',
 ])need(adminUi,token,'Users control center UI');
-forbid(adminUi,"window.prompt(",'Users control center must not use prompt dialogs');
+forbid(adminUi,'window.prompt(','Users control center must not use prompt dialogs');
 
 for(const token of [
   '.admin-control-summary',
