@@ -1,7 +1,12 @@
 (() => {
   const tg = window.Telegram?.WebApp;
+  const runtime = window.DTL_RUNTIME;
+  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before cover-ui.js');
+
   let lastNovelId = null;
-  let coverRevision = 0;
+  let manifestLoaded = false;
+  let manifestLoading = null;
+  const assigned = new Map();
 
   const strings = {
     en:{cover:'Cover',replace:'Replace cover',remove:'Remove cover',auto:'Real cover or branded fallback',updated:'Cover updated',removed:'Cover removed',failed:'Could not update the cover'},
@@ -17,17 +22,8 @@
   };
 
   function locale() {
-    const lang = (document.documentElement.lang || 'en').toLowerCase();
-    if (lang.startsWith('ru')) return 'ru';
-    if (lang.startsWith('es')) return 'es';
-    if (lang.startsWith('fil') || lang.startsWith('tl')) return 'fil';
-    if (lang.startsWith('hi')) return 'hi';
-    if (lang.startsWith('pt')) return 'pt';
-    if (lang.startsWith('id')) return 'id';
-    if (lang.startsWith('vi')) return 'vi';
-    if (lang.startsWith('fr')) return 'fr';
-    if (lang.startsWith('de')) return 'de';
-    return 'en';
+    const value = runtime.locale();
+    return strings[value] ? value : 'en';
   }
   const tr = (key) => strings[locale()]?.[key] || strings.en[key] || key;
 
@@ -35,23 +31,88 @@
     return { 'x-telegram-init-data': tg?.initData || '', ...extra };
   }
 
+  function coverToken(id) {
+    return encodeURIComponent(String(assigned.get(Number(id)) || '1'));
+  }
+
   function coverUrl(id) {
-    return `/media/covers/${id}${coverRevision ? `?v=${coverRevision}` : ''}`;
+    return `/media/covers/${id}?cover=${coverToken(id)}`;
+  }
+
+  async function loadManifest(force = false) {
+    if (!tg?.initData) {
+      manifestLoaded = true;
+      return;
+    }
+    if (manifestLoaded && !force) return;
+    if (manifestLoading) return manifestLoading;
+    manifestLoading = fetch('/api/app/cover-manifest', {
+      cache:'no-store',
+      headers:authHeaders(),
+    })
+      .then(async response => {
+        if (!response.ok) throw new Error('cover manifest unavailable');
+        const data = await response.json();
+        assigned.clear();
+        for (const row of data.covers || []) assigned.set(Number(row.id), String(row.cover_updated_at || '1'));
+        manifestLoaded = true;
+      })
+      .catch(() => {
+        // Fail closed for this foreground session instead of creating a request loop.
+        manifestLoaded = true;
+      })
+      .finally(() => {
+        manifestLoading = null;
+        runtime.schedule();
+      });
+    return manifestLoading;
+  }
+
+  function clearRealCover(cover) {
+    if (!cover) return;
+    cover.classList.remove('has-real-cover');
+    cover.querySelectorAll('.real-cover-image').forEach(img => img.remove());
   }
 
   function installRealCover(cover, id) {
-    if (!cover || !id || cover.dataset.realCoverChecked === String(coverRevision)) return;
-    cover.dataset.realCoverChecked = String(coverRevision);
+    id = Number(id);
+    if (!cover || !id || !manifestLoaded) return;
+    if (!assigned.has(id)) {
+      clearRealCover(cover);
+      cover.dataset.realCoverChecked = 'none';
+      delete cover.dataset.coverFailures;
+      return;
+    }
+
+    const stamp = String(assigned.get(id) || '1');
+    const failures = Number(cover.dataset.coverFailures || 0);
+    if (cover.dataset.realCoverChecked === stamp && cover.querySelector('.real-cover-image')) return;
+    if (cover.dataset.realCoverChecked === stamp && failures >= 3) return;
+    cover.dataset.realCoverChecked = stamp;
+    clearRealCover(cover);
+
     const img = document.createElement('img');
     img.className = 'real-cover-image';
     img.alt = '';
     img.decoding = 'async';
     img.loading = 'lazy';
     img.src = coverUrl(id);
-    img.addEventListener('load', () => cover.classList.add('has-real-cover'), { once:true });
+    img.addEventListener('load', () => {
+      cover.dataset.coverFailures = '0';
+      cover.classList.add('has-real-cover');
+    }, { once:true });
     img.addEventListener('error', () => {
-      cover.classList.remove('has-real-cover');
       img.remove();
+      cover.classList.remove('has-real-cover');
+      const nextFailures = Number(cover.dataset.coverFailures || 0) + 1;
+      cover.dataset.coverFailures = String(nextFailures);
+      if (nextFailures < 3) {
+        setTimeout(() => {
+          if (!cover.isConnected || !assigned.has(id) || cover.classList.contains('has-real-cover')) return;
+          delete cover.dataset.realCoverChecked;
+          runtime.schedule();
+        }, 500 * nextFailures);
+      }
     }, { once:true });
     cover.appendChild(img);
   }
@@ -82,50 +143,77 @@
     return i;
   }
 
+  function syncAdminToolsCopy(tools) {
+    const title = tools.querySelector('.admin-cover-title');
+    const sub = tools.querySelector('.admin-cover-sub');
+    const replace = tools.querySelector('[data-cover-action="replace"]');
+    const remove = tools.querySelector('[data-cover-action="remove"]');
+    if (title) title.textContent = tr('cover');
+    if (sub) sub.textContent = tr('auto');
+    if (replace) { replace.title = tr('replace'); replace.setAttribute('aria-label', tr('replace')); }
+    if (remove) { remove.title = tr('remove'); remove.setAttribute('aria-label', tr('remove')); }
+  }
+
+  function syncAdminPreview(tools, id) {
+    const preview = tools.querySelector('.admin-cover-preview');
+    if (!preview) return;
+    const existing = preview.querySelector('img');
+    if (!assigned.has(id)) {
+      existing?.remove();
+      return;
+    }
+    const src = coverUrl(id);
+    if (existing?.getAttribute('src') === src) return;
+    existing?.remove();
+    const img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.src = src;
+    img.addEventListener('error', () => img.remove(), { once:true });
+    preview.appendChild(img);
+  }
+
   function installAdminTools(card) {
-    if (card.dataset.coverToolsReady === '1') return;
     const id = adminId(card);
     if (!id) return;
-    card.dataset.coverToolsReady = '1';
+    let tools = card.querySelector('.admin-cover-tools');
+    if (tools) {
+      syncAdminToolsCopy(tools);
+      syncAdminPreview(tools, id);
+      return;
+    }
 
-    const tools = document.createElement('div');
+    tools = document.createElement('div');
     tools.className = 'admin-cover-tools';
+    tools.dataset.coverId = String(id);
     tools.innerHTML = `
       <div class="admin-cover-preview"></div>
       <div class="admin-cover-copy">
-        <div class="admin-cover-title">${escapeHtml(tr('cover'))}</div>
-        <div class="admin-cover-sub">${escapeHtml(tr('auto'))}</div>
+        <div class="admin-cover-title"></div>
+        <div class="admin-cover-sub"></div>
       </div>
       <div class="admin-cover-actions"></div>`;
-
-    const preview = tools.querySelector('.admin-cover-preview');
-    const previewImg = document.createElement('img');
-    previewImg.alt = '';
-    previewImg.loading = 'lazy';
-    previewImg.decoding = 'async';
-    previewImg.src = coverUrl(id);
-    previewImg.addEventListener('error', () => previewImg.remove(), { once:true });
-    preview.appendChild(previewImg);
 
     const actions = tools.querySelector('.admin-cover-actions');
     const replace = document.createElement('button');
     replace.type = 'button';
     replace.className = 'admin-cover-action';
-    replace.title = tr('replace');
-    replace.setAttribute('aria-label', tr('replace'));
+    replace.dataset.coverAction = 'replace';
     replace.appendChild(makeIcon('image-up'));
 
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'admin-cover-action danger';
-    remove.title = tr('remove');
-    remove.setAttribute('aria-label', tr('remove'));
+    remove.dataset.coverAction = 'remove';
     remove.appendChild(makeIcon('trash-2'));
     actions.append(replace, remove);
 
     replace.addEventListener('click', () => chooseCover(id, tools));
     remove.addEventListener('click', () => removeCover(id, tools));
     card.appendChild(tools);
+    syncAdminToolsCopy(tools);
+    syncAdminPreview(tools, id);
   }
 
   async function chooseCover(id, tools) {
@@ -144,8 +232,9 @@
           method: 'POST', headers: authHeaders(), body: form,
         });
         if (!response.ok) throw new Error('upload failed');
-        coverRevision = Date.now();
-        refreshAdminPreview(tools, id);
+        assigned.set(id, String(Date.now()));
+        manifestLoaded = true;
+        syncAdminPreview(tools, id);
         refreshVisibleCovers(id);
         toast(tr('updated'));
       } catch {
@@ -163,42 +252,37 @@
         method: 'DELETE', headers: authHeaders(),
       });
       if (!response.ok) throw new Error('delete failed');
-      coverRevision = Date.now();
-      tools.querySelector('.admin-cover-preview img')?.remove();
+      assigned.delete(id);
+      manifestLoaded = true;
+      syncAdminPreview(tools, id);
       document.querySelectorAll(`[data-novel="${id}"] .novel-cover`).forEach((cover) => {
-        cover.classList.remove('has-real-cover');
-        cover.querySelector('.real-cover-image')?.remove();
-        delete cover.dataset.realCoverChecked;
+        clearRealCover(cover);
+        cover.dataset.realCoverChecked = 'none';
+        delete cover.dataset.coverFailures;
       });
+      if (lastNovelId === id) {
+        const detail = document.querySelector('.detail-hero .novel-cover');
+        if (detail) clearRealCover(detail);
+      }
       toast(tr('removed'));
     } catch {
       toast(tr('failed'), true);
     }
   }
 
-  function refreshAdminPreview(tools, id) {
-    const preview = tools.querySelector('.admin-cover-preview');
-    preview.innerHTML = '';
-    const img = document.createElement('img');
-    img.alt = '';
-    img.decoding = 'async';
-    img.src = coverUrl(id);
-    preview.appendChild(img);
-  }
-
   function refreshVisibleCovers(id) {
     document.querySelectorAll(`[data-novel="${id}"] .novel-cover`).forEach((cover) => {
-      cover.querySelector('.real-cover-image')?.remove();
-      cover.classList.remove('has-real-cover');
+      clearRealCover(cover);
       delete cover.dataset.realCoverChecked;
+      delete cover.dataset.coverFailures;
       installRealCover(cover, id);
     });
     if (lastNovelId === id) {
       const detail = document.querySelector('.detail-hero .novel-cover');
       if (detail) {
-        detail.querySelector('.real-cover-image')?.remove();
-        detail.classList.remove('has-real-cover');
+        clearRealCover(detail);
         delete detail.dataset.realCoverChecked;
+        delete detail.dataset.coverFailures;
         installRealCover(detail, id);
       }
     }
@@ -214,13 +298,10 @@
     setTimeout(() => el.remove(), 2600);
   }
 
-  function escapeHtml(value='') {
-    return String(value).replace(/[&<>'\"]/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[ch]));
-  }
-
   function patch(root = document) {
+    if (!manifestLoaded && !manifestLoading) loadManifest();
     patchCovers(root);
-    root.querySelectorAll('.admin-request').forEach(installAdminTools);
+    if (manifestLoaded) root.querySelectorAll('.admin-request').forEach(installAdminTools);
     if (window.lucide?.createIcons) window.lucide.createIcons({ attrs:{'stroke-width':1.8,'aria-hidden':'true'} });
   }
 
@@ -229,13 +310,17 @@
     if (novel?.dataset.novel) lastNovelId = Number(novel.dataset.novel);
   }, true);
 
-  let raf = 0;
-  const schedule = () => {
-    if (raf) return;
-    raf = requestAnimationFrame(() => { raf = 0; patch(document); });
-  };
-  const patchRoot = document.getElementById('viewRoot') || document.body;
-  new MutationObserver(schedule).observe(patchRoot, { childList:true, subtree:true });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once:true });
-  else schedule();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    document.querySelectorAll('.novel-cover').forEach(cover => {
+      if (!cover.classList.contains('has-real-cover')) {
+        delete cover.dataset.realCoverChecked;
+        delete cover.dataset.coverFailures;
+      }
+    });
+    manifestLoaded = false;
+    loadManifest(true);
+  });
+
+  runtime.registerPatcher(() => patch(document));
 })();

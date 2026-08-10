@@ -1,8 +1,12 @@
 (() => {
   const tg = window.Telegram?.WebApp;
-  const view = document.getElementById('viewRoot');
-  let request = null;
-  let scheduled = false;
+  const runtime = window.DTL_RUNTIME;
+  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before home-v2.js');
+
+  let owner = null;
+  let releases = null;
+  let loading = null;
+  let generation = 0;
 
   const copy = {
     en:{title:'Translated Chapters',subtitle:'The latest chapters released by Dollar TL.',empty:'No translated chapters have been published yet.',open:'Open release',files:n=>`${n} file${n===1?'':'s'}`},
@@ -18,7 +22,7 @@
   };
 
   function locale(){
-    const value = String(window.__DTL_LOCALE__ || document.documentElement.lang || tg?.initDataUnsafe?.user?.language_code || 'en').toLowerCase();
+    const value = runtime.locale();
     return copy[value] ? value : 'en';
   }
   function t(){ return copy[locale()] || copy.en; }
@@ -30,16 +34,28 @@
     try{return new Intl.DateTimeFormat(tags[locale()]||'en-US',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value));}catch{return String(value);}
   }
 
-  async function getReleases(){
-    if(request) return request;
-    if(!tg?.initData) return [];
-    request=fetch('/api/app/releases',{
+  function resetForOwner(nextOwner){
+    if(owner===nextOwner)return;
+    owner=nextOwner;
+    releases=null;
+    loading=null;
+    generation+=1;
+  }
+
+  function loadReleases(){
+    if(releases) return Promise.resolve(releases);
+    if(loading) return loading;
+    if(!tg?.initData){releases=[];return Promise.resolve(releases);}
+    const token=generation;
+    loading=fetch('/api/app/releases',{
       cache:'no-store',
       headers:{'x-telegram-init-data':tg.initData},
     })
       .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error?.message||`HTTP ${r.status}`);return Array.isArray(d.releases)?d.releases:[];})
-      .finally(()=>{request=null;});
-    return request;
+      .then(rows=>{if(token===generation)releases=rows;return rows;})
+      .catch(()=>{if(token===generation)releases=[];return[];})
+      .finally(()=>{if(token===generation)loading=null;runtime.schedule();});
+    return loading;
   }
 
   function releaseCard(row){
@@ -58,50 +74,41 @@
   function ensureSection(){
     const requestsButton=document.getElementById('homeRequests');
     const queueButton=document.getElementById('homeQueue');
-    if(!requestsButton||!queueButton) return null;
+    if(!requestsButton||!queueButton){owner=null;return null;}
     const requestsSection=requestsButton.closest('.section');
-    if(!requestsSection) return null;
+    if(!requestsSection){owner=null;return null;}
+    resetForOwner(requestsSection);
     let section=document.querySelector('.dtl-releases-section');
     if(!section){
       section=document.createElement('section');
       section.className='section dtl-releases-section';
-      section.innerHTML='<div class="dtl-releases-loading" aria-hidden="true"></div>';
       requestsSection.parentNode.insertBefore(section,requestsSection);
     }
     return section;
   }
 
-  async function renderReleases(){
-    const section=ensureSection(); if(!section) return;
+  function renderSection(section){
     const c=t();
-    if(!section.dataset.loaded){
+    const stateKey=`${locale()}:${releases===null?'loading':releases.length}:${generation}`;
+    if(section.dataset.releaseState===stateKey)return;
+    section.dataset.releaseState=stateKey;
+    if(releases===null){
       section.innerHTML=`<div class="section-header"><div class="dtl-releases-copy"><h2>${esc(c.title)}</h2><p class="subtitle">${esc(c.subtitle)}</p></div></div><div class="dtl-releases-loading" aria-hidden="true"></div>`;
-    }else{
-      const h=section.querySelector('h2'),p=section.querySelector('.subtitle');if(h)h.textContent=c.title;if(p)p.textContent=c.subtitle;
+      loadReleases();
+      return;
     }
-    try{
-      const rows=await getReleases();
-      if(!section.isConnected) return;
-      section.dataset.loaded='1';
-      section.innerHTML=`<div class="section-header"><div class="dtl-releases-copy"><h2>${esc(c.title)}</h2><p class="subtitle">${esc(c.subtitle)}</p></div></div>${rows.length?`<div class="dtl-release-list">${rows.slice(0,4).map(releaseCard).join('')}</div>`:`<div class="surface-card empty-state"><div class="empty-icon">✓</div><p>${esc(c.empty)}</p></div>`}`;
-      try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}
-    }catch{
-      section.dataset.loaded='1';
-      section.innerHTML=`<div class="section-header"><div class="dtl-releases-copy"><h2>${esc(c.title)}</h2><p class="subtitle">${esc(c.subtitle)}</p></div></div><div class="surface-card empty-state"><div class="empty-icon">◇</div><p>${esc(c.empty)}</p></div>`;
-    }
+    section.innerHTML=`<div class="section-header"><div class="dtl-releases-copy"><h2>${esc(c.title)}</h2><p class="subtitle">${esc(c.subtitle)}</p></div></div>${releases.length?`<div class="dtl-release-list">${releases.slice(0,4).map(releaseCard).join('')}</div>`:`<div class="surface-card empty-state"><div class="empty-icon">✓</div><p>${esc(c.empty)}</p></div>`}`;
   }
 
-  function enhance(){
-    if(document.getElementById('homeQueue')&&document.getElementById('homeRequests')) renderReleases();
+  function patch(){
+    const section=ensureSection();
+    if(section)renderSection(section);
   }
-  function schedule(){if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;enhance();});}
 
   document.addEventListener('click',event=>{
     const link=event.target.closest?.('.dtl-release-link');
-    if(link&&tg?.openTelegramLink){event.preventDefault();tg.openTelegramLink(link.href);return;}
-    if(event.target.closest?.('[data-nav="home"],.brand')) setTimeout(schedule,0);
+    if(link&&tg?.openTelegramLink){event.preventDefault();tg.openTelegramLink(link.href);}
   },true);
-  document.addEventListener('dtl:localechange',schedule);
-  if(view)new MutationObserver(schedule).observe(view,{childList:true,subtree:false});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
+
+  runtime.registerPatcher(patch);
 })();

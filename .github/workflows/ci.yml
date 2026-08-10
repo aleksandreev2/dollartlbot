@@ -44,7 +44,6 @@ jobs:
           node --check public/app/novel-presenter.js
           node --check public/app/interaction-upgrade.js
           node --check public/app/cover-ui.js
-          node --check public/app/cover-reliability.js
           node --check public/app/referrals-ui.js
           node --check public/app/onboarding-ui.js
           node --check public/app/onboarding-interactions-fix.js
@@ -81,7 +80,9 @@ jobs:
           grep -q '/app/desktop-v2.css' public/app/index.html
           grep -q '/app/admin-v3.js' public/app/index.html
           grep -q '/app/admin-performance-v3.js' public/app/index.html
-          grep -q '/app/cover-reliability.js' public/app/index.html
+          grep -q '/app/cover-ui.js' public/app/index.html
+          test ! -e public/app/cover-reliability.js
+          ! grep -q '/app/cover-reliability.js' public/app/index.html
           grep -q '/app/quota-unlimited-ui.js' public/app/index.html
           grep -q '/app/publishing-comments-ui.js' public/app/index.html
           grep -q '/app/publication-management.js' public/app/index.html
