@@ -39,7 +39,8 @@ function assertSameKeys(obj,label,reference='en'){
     if(missing.length||extra.length)throw new Error(`${label}/${locale}: key mismatch${missing.length?`\n  missing: ${missing.join(', ')}`:''}${extra.length?`\n  extra: ${extra.join(', ')}`:''}`);
   }
 }
-function normalizeText(value){return String(value).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');}
+function need(source,needle,label){if(!source.includes(needle))throw new Error(`${label}: missing ${needle}`);}
+function forbid(source,needle,label){if(source.includes(needle))throw new Error(`${label}: hardcoded render-time copy remains: ${needle}`);}
 
 const runtime=read('public/app/i18n-runtime-v2.js');
 const runtimeLanguages=evalObject(between(runtime,'const languageLabels=',';\n\n  const tags='),'runtime language labels');
@@ -60,6 +61,9 @@ for(const locale of allLocales){
   if(!Array.isArray(runtimeRules[locale]?.required)||runtimeRules[locale].required.length!==4)throw new Error(`runtime rules/${locale}: required list mismatch`);
   if(!Array.isArray(runtimeRules[locale]?.blocked)||runtimeRules[locale].blocked.length<10)throw new Error(`runtime rules/${locale}: blocked list unexpectedly short`);
 }
+const requiredCopyKeys=['thanks','regular','guideSub','rulesSub','chatSub','boostySub','progress','noRequests','noMatching','edit','reader','justNow','minAgo','hourAgo','dayAgo','epubRead','epubEntry','epubCompression','completeDetails','addTag','describeSex','notifications'];
+for(const locale of allLocales)for(const key of requiredCopyKeys)if(runtimeCopy[locale]?.[key]===undefined)throw new Error(`runtime copy/${locale}: missing render-time key ${key}`);
+for(const tag of ['Fantasy','Romance','Adventure','Academy','Isekai','Reincarnation','Magic','Strong MC','Harem','Slice of Life','Time Travel','System','Villainess','Slow Burn'])for(const locale of allLocales)if(!runtimeTags[locale]?.[tag])throw new Error(`Popular tag ${tag}: missing ${locale} label`);
 
 const referrals=read('public/app/referrals-ui.js');
 const referralCopy=evalObject(between(referrals,'const L = ',';\n\n  function locale'),'referrals-ui copy');
@@ -82,21 +86,24 @@ const merged={};for(const locale of allLocales)merged[locale]=Object.assign({},b
 assertSameKeys(merged,'Final Telegram bot dictionaries');
 for(const locale of allLocales)for(const [key,value] of Object.entries(merged[locale]))if(typeof value!=='string'||!value.trim())throw new Error(`Final Telegram bot dictionaries/${locale}: empty value for ${key}`);
 
-const app=read('public/app/app.js');
 const i18nCore=read('public/app/i18n-core.js');
 const presenter=read('public/app/novel-presenter.js');
-const corpus=[i18nCore,runtime,presenter,referrals,onboarding,notifications,quota].join('\n');
-const normalizedCorpus=normalizeText(corpus);
-const literalHardcoded=['Thank you for supporting novel translations!','Chapter Progress','No requests yet.','No matching requests.','Nothing here.','Complete the novel details.','Add at least one genre or tag.','Describe the sexual content or fetishes.','Request #','Edit','Could not read EPUB structure.','Bad EPUB entry','EPUB compression is not supported on this device.','just now'];
-for(const phrase of literalHardcoded){if(!app.includes(phrase))continue;if(!corpus.includes(phrase)&&!normalizedCorpus.includes(normalizeText(phrase)))throw new Error(`Hardcoded Mini App phrase is not covered by centralized localization: ${phrase}`);}
-const semanticPatches=[
-  ['Dollar TL submission flow','guideSetting:t.guideSub'],
-  ['Submission and content rules','rulesSetting:t.rulesSub'],
-  ['5 requests/month · no 250-chapter restriction','boostySetting:t.boostySub'],
-  ['Telegram bot notifications are enabled for request status updates.','notifications:'],
-];
-for(const [phrase,evidence] of semanticPatches)if(app.includes(phrase)&&!runtime.includes(evidence))throw new Error(`Hardcoded Mini App phrase has no centralized semantic patch: ${phrase}`);
-for(const tag of ['Fantasy','Romance','Adventure','Academy','Isekai','Reincarnation','Magic','Strong MC','Harem','Slice of Life','Time Travel','System','Villainess','Slow Burn'])for(const locale of allLocales)if(!runtimeTags[locale]?.[tag])throw new Error(`Popular tag ${tag}: missing ${locale} label`);
+const viewI18n=read('public/app/view-i18n.js');
+const home=read('public/app/view-home.js');
+const queue=read('public/app/view-queue.js');
+const suggest=read('public/app/view-suggest.js');
+const account=read('public/app/view-requests-account.js');
+
+for(const required of ['runtime.copy','runtime.table','runtime.table(\'uiFallback\'','app.tr=tr','app.languageName=languageName','app.tagLabel=tagLabel','app.relativeTime=relativeTime','app.requestLabel=requestLabel','copy(\'notifications\')'])need(viewI18n,required,'render-time view localization helper');
+for(const required of ["copy('thanks')","copy('regular'","copy('noRequests')","copy('progress')",'languageName(row.original_language)',"languageName('English')"])need(home,required,'Home render-time localization');
+for(const required of ["copy('progress')",'languageName(novel.original_language)',"languageName('English')"])need(queue,required,'Queue/detail render-time localization');
+for(const required of ["copy('epubRead')","copy('epubEntry')","copy('epubCompression')","copy('completeDetails')","copy('addTag')","copy('describeSex')","copy('edit')",'tagLabel(tag)','languageName(state.draft.original_language)','requestLabel(data.submission_id)'])need(suggest,required,'Suggest render-time localization');
+for(const required of ["copy('noMatching')","copy('guideSub')","copy('rulesSub')","copy('chatSub')","copy('boostySub')","i18nTable('guide')","i18nTable('rules')",'languageName(r.original_language)'])need(account,required,'Requests/Account render-time localization');
+
+for(const phrase of ['Thank you for supporting novel translations!','Chapter Progress','No requests yet.','No matching requests.','Complete the novel details.','Add at least one genre or tag.','Describe the sexual content or fetishes.','>Edit<','Request #','Could not read EPUB structure.','Bad EPUB entry','EPUB compression is not supported on this device.']){
+  for(const [name,source] of Object.entries({home,queue,suggest,account}))forbid(source,phrase,name);
+}
+for(const phrase of ['Dollar TL submission flow','Submission and content rules','5 requests/month · no 250-chapter restriction','1. Suggest a novel. 2. We review it manually.','Do not hide important tags, sexual/fetish content'])forbid(account,phrase,'Account');
 
 for(const required of ["'/api/app/bootstrap'","'/api/app/language'",'window.__DTL_LOCALE__','dtl:localechange','setCatalog','detectLanguage','languageLabel','registerPatcher','registerResponseHandler'])if(!i18nCore.includes(required))throw new Error(`i18n-core is missing authoritative shared hook: ${required}`);
 if(runtime.includes('new MutationObserver'))throw new Error('Centralized i18n catalog must not create its own MutationObserver.');
@@ -106,8 +113,9 @@ if(presenter.includes('new MutationObserver'))throw new Error('Novel presenter m
 if(!presenter.includes('runtime.registerPatcher'))throw new Error('Novel presenter is not registered with the shared scheduler.');
 
 const index=read('public/app/index.html');
-for(const asset of ['/app/i18n-core.js','/app/i18n-runtime-v2.js','/app/novel-presenter.js','/app/language-switch.css'])if(!index.includes(asset))throw new Error(`index.html does not load ${asset}`);
+for(const asset of ['/app/i18n-core.js','/app/i18n-runtime-v2.js','/app/novel-presenter.js','/app/view-i18n.js','/app/language-switch.css'])if(!index.includes(asset))throw new Error(`index.html does not load ${asset}`);
+if(index.indexOf('/app/view-i18n.js')>index.indexOf('/app/view-home.js'))throw new Error('Render-time view localization must load before view modules.');
 for(const legacy of ['/app/locale-sync.js','/app/i18n-inline-fixes.js','/app/i18n-wizard.js','/app/i18n-complete.js','/app/ui-polish.js','/app/language-display-fix.js'])if(index.includes(legacy))throw new Error(`Legacy localization runtime must not be loaded: ${legacy}`);
 for(const removed of ['public/app/i18n-wizard.js','public/app/i18n-complete.js','public/app/ui-polish.js'])if(fs.existsSync(new URL(`../${removed}`,import.meta.url)))throw new Error(`Legacy localization runtime must be removed: ${removed}`);
 
-console.log(`Localization audit passed for ${allLocales.length} locales with one catalog, scheduler and response pipeline.`);
+console.log(`Localization audit passed for ${allLocales.length} locales with render-time modular view copy, localized language/tag labels, full Guide/Rules content, one catalog, scheduler and response pipeline.`);
