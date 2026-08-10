@@ -28,7 +28,7 @@ for(const [name,path] of Object.entries(sharedModules)){
   const source=read(path);
   if(source.includes('new MutationObserver'))throw new Error(`${name} must not create a MutationObserver.`);
   if(/window\.fetch\s*=/.test(source))throw new Error(`${name} must not wrap fetch directly.`);
-  if(name!=='i18n-runtime-v2'&&!source.includes('DTL_RUNTIME'))throw new Error(`${name} must consume DTL_RUNTIME.`);
+  if(name!=='i18n-runtime-v2'&&!source.includes('DTL_RUNTIME')&&!source.includes('DTL_I18N'))throw new Error(`${name} must consume the shared runtime API.`);
 }
 
 for(const token of ['DTL_I18N.setCatalog(catalog)','DTL_I18N.registerPatcher(patch)','DTL_I18N.registerResponseHandler(localizeApiError)'])if(!i18nRuntime.includes(token))throw new Error(`i18n-runtime-v2 missing shared registration: ${token}`);
