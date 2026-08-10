@@ -1,6 +1,6 @@
 (() => {
   const runtime = window.DTL_I18N;
-  if (!runtime?.registerPatcher || !runtime?.detectLanguage || !runtime?.languageLabel) {
+  if (!runtime?.detectLanguage || !runtime?.languageLabel) {
     throw new Error('DTL runtime core must load before novel-presenter.js');
   }
 
@@ -199,12 +199,12 @@
   }
 
   function titleForCover(cover) {
-    const scope = cover.closest('.list-row,.novel-card,.request-card,.detail-hero,.admin-request') || cover.parentElement;
-    return scope?.querySelector('.list-title,.novel-title,.detail-title,.card-title')?.textContent?.trim() || cover.textContent.trim() || 'Dollar TL';
+    const scope = cover.closest('.list-row,.novel-card,.request-card,.detail-hero,.admin-request-card,.admin-request') || cover.parentElement;
+    return scope?.querySelector('.list-title,.novel-title,.detail-title,.card-title,h3')?.textContent?.trim() || cover.textContent.trim() || 'Dollar TL';
   }
 
   function languageForCover(cover) {
-    const scope = cover.closest('.list-row,.novel-card,.request-card,.detail-hero,.admin-request') || cover.parentElement;
+    const scope = cover.closest('.list-row,.novel-card,.request-card,.detail-hero,.admin-request-card,.admin-request') || cover.parentElement;
     return findLanguageCode(scope);
   }
 
@@ -274,5 +274,13 @@
     normalizeChapterChunk(root);
   }
 
-  runtime.registerPatcher(() => patch(document));
+  function patchView(){
+    const root=document.getElementById('viewRoot');
+    if(root)patch(root);
+  }
+
+  document.addEventListener('dtl:viewrender',patchView);
+  document.addEventListener('dtl:adminrender',patchView);
+  document.addEventListener('dtl:sheetopen',event=>patch(event.detail?.root || document.getElementById('sheetRoot') || document));
+  document.addEventListener('dtl:localechange',()=>{patchView();const sheet=document.getElementById('sheetRoot');if(sheet?.childElementCount)patch(sheet);});
 })();
