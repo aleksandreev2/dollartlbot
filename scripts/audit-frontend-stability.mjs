@@ -53,7 +53,8 @@ need(homeCss,'.page .simple-list{display:block!important','compact My Requests l
 
 need(covers,"'/api/app/cover-manifest'",'cover manifest ownership');
 need(covers,'const assigned = new Map()','cover manifest cache');
-need(covers,'failures < 3','bounded real-cover retries');
+need(covers,'failures >= 3','bounded real-cover retry stop');
+need(covers,'nextFailures < 3','bounded real-cover retry scheduling');
 forbid(index,'cover-reliability.js','superseded cover runtime');
 if(fs.existsSync(new URL('../public/app/cover-reliability.js',import.meta.url)))throw new Error('Superseded cover-reliability.js must be removed.');
 
