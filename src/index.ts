@@ -2,6 +2,8 @@ import { handleAccessAdminRequest } from './access-admin';
 import { handleAccessChatMemberUpdate, runAccessGateMaintenance } from './access-gate';
 import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
+import { handleAdminEventsRequest } from './admin-events-api';
+import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminPublicationsRequest } from './admin-publications';
 import { handleAdminUsersRequest } from './admin-users';
 import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
@@ -48,6 +50,8 @@ export default {
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
     if (accessAdminResponse) return accessAdminResponse;
+    const adminEventsResponse = await handleAdminEventsRequest(request, env, apiTelegram);
+    if (adminEventsResponse) return adminEventsResponse;
     const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
     if (adminUsersResponse) return adminUsersResponse;
     const adminAnalyticsResponse = await handleAdminAnalyticsRequest(request, env);
@@ -74,7 +78,12 @@ export default {
     const referralResponse = await handleReferralApiRequest(request, env, apiTelegram);
     if (referralResponse) return referralResponse;
     const baseMiniAppAccessResponse = await handleBaseMiniAppAccess(request, env);
-    if (baseMiniAppAccessResponse) return baseMiniAppAccessResponse;
+    if (baseMiniAppAccessResponse) {
+      // A first successful access may have just queued a new-user admin event.
+      // Deliver it in the background so user-facing access never waits on Telegram.
+      ctx.waitUntil(runAdminEventMaintenance(env, apiTelegram, 4));
+      return baseMiniAppAccessResponse;
+    }
     const miniAppCoreResponse = await handleMiniAppCoreRequest(request, env);
     if (miniAppCoreResponse) return enhanceMiniAppResponse(request, miniAppCoreResponse, env);
 
@@ -112,6 +121,7 @@ export default {
       } else {
         await handleUpdate(update, env, telegram, ctx);
       }
+      ctx.waitUntil(runAdminEventMaintenance(env, telegram, 4));
       return new Response('OK');
     } catch (error) {
       ctx.waitUntil(
@@ -133,6 +143,7 @@ export default {
     await runScheduledTask('admin_delivery_retry', () => retryPendingAdminDeliveries(env, telegram));
     await runScheduledTask('referral_maintenance', () => runReferralMaintenance(env, telegram, scheduledAt));
     await runScheduledTask('access_gate_maintenance', () => runAccessGateMaintenance(env, scheduledAt));
+    await runScheduledTask('admin_event_maintenance', () => runAdminEventMaintenance(env, telegram));
     await runScheduledTask('notification_maintenance', () => runNotificationMaintenance(env, telegram));
     await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenanceWithLease(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
