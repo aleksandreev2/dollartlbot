@@ -32,10 +32,18 @@
     try{return new Intl.DateTimeFormat(tags[locale()]||'en-US',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value));}catch{return String(value);}
   }
 
+  function rerenderIfHome(){
+    if(window.DTL_APP?.state?.view==='home')renderHomeReleaseSection();
+  }
+
   function loadReleases(){
     if(releases) return Promise.resolve(releases);
     if(loading) return loading;
-    if(!tg?.initData){releases=[];return Promise.resolve(releases);}
+    if(!tg?.initData){
+      releases=[];
+      queueMicrotask(rerenderIfHome);
+      return Promise.resolve(releases);
+    }
     loading=fetch('/api/app/releases',{
       cache:'no-store',
       headers:{'x-telegram-init-data':tg.initData},
@@ -43,7 +51,7 @@
       .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error?.message||`HTTP ${r.status}`);return Array.isArray(d.releases)?d.releases:[];})
       .then(rows=>{releases=rows;return rows;})
       .catch(()=>{releases=[];return[];})
-      .finally(()=>{loading=null;if(window.DTL_APP?.state?.view==='home')renderHomeReleaseSection();});
+      .finally(()=>{loading=null;rerenderIfHome();});
     return loading;
   }
 
@@ -95,7 +103,7 @@
   }
 
   document.addEventListener('dtl:home',renderHomeReleaseSection);
-  document.addEventListener('dtl:localechange',()=>{if(window.DTL_APP?.state?.view==='home')renderHomeReleaseSection();});
+  document.addEventListener('dtl:localechange',rerenderIfHome);
   document.addEventListener('click',event=>{
     const link=event.target.closest?.('.dtl-release-link');
     if(link&&tg?.openTelegramLink){event.preventDefault();tg.openTelegramLink(link.href);}
