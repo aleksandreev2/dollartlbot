@@ -69,6 +69,13 @@ export interface TelegramChatMember {
   is_member?: boolean;
 }
 
+export function isActiveChatMember(member: Pick<TelegramChatMember, 'status' | 'is_member'>): boolean {
+  return member.status === 'creator'
+    || member.status === 'administrator'
+    || member.status === 'member'
+    || (member.status === 'restricted' && member.is_member === true);
+}
+
 export interface TelegramChatMemberUpdated {
   chat: TelegramChat;
   from: TelegramUser;
