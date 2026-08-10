@@ -1,7 +1,7 @@
 (() => {
   const tg = window.Telegram?.WebApp;
   const runtime = window.DTL_RUNTIME;
-  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before referrals-ui.js');
+  if (!runtime?.locale) throw new Error('DTL runtime core must load before referrals-ui.js');
 
   let data = null;
   let loading = null;
@@ -56,7 +56,7 @@
     const languageRow = root.querySelector('#languageSetting');
     if (!languageRow || root.querySelector('#referralSetting')) return;
     const info = await load();
-    if (!info?.enabled) return;
+    if (!info?.enabled || !languageRow.isConnected) return;
 
     const row = document.createElement('button');
     row.type = 'button';
@@ -74,6 +74,7 @@
     if (!card) return;
     const existing = card.querySelector('.referral-bonus-strip');
     const info = await load();
+    if (!card.isConnected) return;
     const bonus = Number(info?.quota?.bonus || 0);
     if (!info?.enabled || bonus <= 0) {
       existing?.remove();
@@ -237,8 +238,7 @@
 
   function goBack() {
     stopPolling();
-    const account = document.querySelector('[data-nav="account"]');
-    if (account instanceof HTMLElement) account.click();
+    window.DTL_APP?.navigate?.('account');
   }
 
   function installSwipeBack(page) {
@@ -266,9 +266,10 @@
   }
 
   function refreshIcons() { if (window.lucide?.createIcons) window.lucide.createIcons({attrs:{'stroke-width':1.8,'aria-hidden':'true'}}); }
-  function esc(v='') { return String(v).replace(/[&<>'\"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt',"'":'&#39;','\"':'&quot;'}[c])); }
+  function esc(v='') { return String(v).replace(/[&<>'\"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c])); }
 
-  async function patch(root=document) { await Promise.all([installAccountRow(root), installBonusStrip(root)]); }
+  async function mountAccount(root=document) { await Promise.all([installAccountRow(root), installBonusStrip(root)]); }
+  async function mountHome(root=document) { await installBonusStrip(root); }
   function refreshLocalizedUi(){
     const row=document.getElementById('referralSetting');
     if(row){const title=row.querySelector('.setting-title'),sub=row.querySelector('.setting-sub');if(title)title.textContent=tr('title');if(sub)sub.textContent=tr('sub');}
@@ -277,6 +278,8 @@
     if(page&&data?.enabled){const root=document.getElementById('viewRoot');if(root)renderPage(root,data);}
   }
 
-  runtime.registerPatcher(()=>{void patch(document);});
+  document.addEventListener('dtl:account',()=>{const root=document.getElementById('viewRoot');if(root)void mountAccount(root);});
+  document.addEventListener('dtl:home',()=>{const root=document.getElementById('viewRoot');if(root)void mountHome(root);});
+  document.addEventListener('dtl:viewchange',event=>{if(event.detail?.view!=='account')stopPolling();});
   document.addEventListener('dtl:localechange',refreshLocalizedUi);
 })();
