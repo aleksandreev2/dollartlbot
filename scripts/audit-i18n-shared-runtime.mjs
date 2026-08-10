@@ -19,4 +19,9 @@ for(const token of ['DTL_I18N.setCatalog(catalog)','DTL_I18N.registerPatcher(pat
 if(!presenter.includes('runtime.registerPatcher'))throw new Error('novel-presenter is not registered with the shared scheduler.');
 for(const legacy of ['/app/i18n-wizard.js','/app/i18n-complete.js','/app/ui-polish.js'])if(index.includes(legacy))throw new Error(`Legacy localization runtime must not be loaded: ${legacy}`);
 for(const removed of ['public/app/i18n-wizard.js','public/app/i18n-complete.js','public/app/ui-polish.js'])if(fs.existsSync(new URL(`../${removed}`,import.meta.url)))throw new Error(`Legacy localization runtime must be removed: ${removed}`);
-console.log('Shared Mini App runtime audit passed: one observer, one fetch wrapper, one localization catalog.');
+
+const order=['/app/i18n-core.js','/app/i18n-runtime-v2.js','/app/novel-presenter.js','/app/app.js'];
+let previous=-1;
+for(const asset of order){const at=index.indexOf(asset);if(at<0)throw new Error(`Missing runtime asset: ${asset}`);if(at<=previous)throw new Error(`Runtime asset order is invalid around ${asset}`);previous=at;}
+
+console.log('Shared Mini App runtime audit passed: one observer, one fetch wrapper, one localization catalog, deterministic load order.');
