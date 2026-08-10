@@ -31,6 +31,10 @@
     try { window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } }); } catch {}
   }
 
+  function emitAccessLifecycle(name, detail = {}) {
+    document.dispatchEvent(new CustomEvent(name, { detail }));
+  }
+
   function setChromeLocked(locked) {
     app.root.classList.toggle('access-locked', locked);
     app.bottomNav.hidden = locked;
@@ -44,13 +48,15 @@
 
   function renderLocked(payload) {
     if (!isAccessPayload(payload)) return;
+    const wasLocked = Boolean(app.state.accessLocked);
+    const error = payload.error || {};
+    const details = error.details || {};
+    const unavailable = error.code === 'access_check_unavailable';
+
     app.state.accessLocked = true;
     app.root.setAttribute('aria-busy', 'false');
     setChromeLocked(true);
 
-    const error = payload.error || {};
-    const details = error.details || {};
-    const unavailable = error.code === 'access_check_unavailable';
     const title = details.title || (unavailable ? 'Access check is temporarily unavailable' : 'Join the Dollar TL channel');
     const message = error.message || 'Join our Telegram channel and check again.';
     const joinLabel = details.join_label || 'Join channel';
@@ -82,6 +88,10 @@
     });
     document.getElementById('accessGateRetry')?.addEventListener('click', retryAccess);
     refreshIcons();
+
+    if (!wasLocked) {
+      emitAccessLifecycle('dtl:accesslocked', { code: error.code || 'membership_required' });
+    }
   }
 
   async function retryAccess() {
@@ -99,6 +109,7 @@
         return;
       }
 
+      const restored = Boolean(app.state.accessLocked);
       app.state.accessLocked = false;
       setChromeLocked(false);
       if (!initialized) {
@@ -110,6 +121,7 @@
         app.renderNav();
         app.render();
       }
+      emitAccessLifecycle('dtl:accessready', { restored });
     } catch {
       if (note) note.textContent = 'Try again in a moment.';
     } finally {
@@ -140,6 +152,7 @@
     if (app.state.preview) {
       initialized = true;
       await originalInit();
+      emitAccessLifecycle('dtl:accessready', { preview: true, restored: false });
       return;
     }
     try {
@@ -154,6 +167,7 @@
     initialized = true;
     await originalInit();
     startHeartbeat();
+    emitAccessLifecycle('dtl:accessready', { restored: false });
   };
 
   runtime.registerResponseHandler(async (response, context) => {
