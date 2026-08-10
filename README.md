@@ -28,6 +28,20 @@ The bot re-checks Boosty membership immediately before final submission. D1 also
 
 Accepted requests enter the public queue. Requester identity, raw files, fetish/sexual-content disclosures, sensitive-content disclosures and private notes are never displayed publicly.
 
+## Required channel access
+
+Normal bot and Mini App use is gated by membership in the configured Telegram channel. Migration `0016_channel_access_gate.sql` seeds the public Dollar TL channel as `@dollartranslate` with `https://t.me/dollartranslate` as the join URL.
+
+Operational requirements:
+
+- the bot must be an administrator of the required channel so Telegram can reliably verify other users and deliver `chat_member` join/leave updates;
+- the webhook must include `chat_member` in `allowed_updates` (`npm run configure-bot` already does this);
+- Admin → Settings → **Доступ к боту** shows the current channel, join link, bot permission status and a live diagnostic;
+- leaving the channel invalidates cached channel access immediately; normal interactions and Mini App API calls are server-gated, while an open Mini App also rechecks while visible;
+- if the required channel is changed to a numeric/private channel ID, configure an HTTPS Telegram invite URL so blocked users have a working **Join channel** button.
+
+The access channel is intentionally independent from the publication channel so changing publishing destinations cannot accidentally lock users in or out.
+
 ## Admin features
 
 Use `/admin` from the Telegram account configured as `ADMIN_TELEGRAM_ID`.
