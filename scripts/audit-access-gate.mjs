@@ -120,7 +120,8 @@ need(configure, "allowed_updates: ['message', 'callback_query', 'chat_member']",
 need(html, '/app/access-gate-ui.css?v=20260810-access1', 'access gate CSS asset');
 need(html, '/app/access-gate-ui.js?v=20260810-access1', 'access gate JS asset');
 need(html, '/app/access-admin-ui.js?v=20260810-access1', 'access admin JS asset');
-need(wrangler, '?build=20260810-access1', 'fresh Mini App URL');
+need(wrangler, 'MINI_APP_URL', 'fresh Mini App URL');
+if (!/\/app\/\?build=[A-Za-z0-9._-]+/.test(wrangler)) throw new Error('Mini App URL must retain a versioned build query.');
 
 new Function(gateUi);
 new Function(adminUi);

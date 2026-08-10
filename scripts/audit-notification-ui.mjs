@@ -43,6 +43,6 @@ forbid(css,'grid-template-columns:1fr 1fr','notification center two-column feed'
 
 need(index,'/app/notifications-ui.css?v=20260810-notify3','notification CSS cache bust');
 need(index,'/app/notifications-ui.js?v=20260810-notify3','notification JS cache bust');
-need(index,'/app/notification-deeplink.js?v=20260810-notify1','notification deep-link runtime');
+need(index,'/app/notification-deeplink.js?v=20260810-notify2','notification deep-link runtime');
 
 console.log('Notification center UX audit passed: feed-first layout, autosave preferences, compact cards, semantic body hierarchy, and actionable deep links.');
