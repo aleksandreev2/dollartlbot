@@ -49,10 +49,6 @@ const completeRules=evalObject(between(complete,'const rules = ','\n\n  function
 assertLocales(completeUi,'i18n-complete ui');assertLocales(completeRules,'i18n-complete rules');
 assertSameKeys(completeUi,'i18n-complete ui','ru');assertSameKeys(completeRules,'i18n-complete rules','ru');
 
-const wizard=read('public/app/i18n-wizard.js');
-const wizardMaps=evalObject(between(wizard,'const maps=','\n  function locale'),'i18n-wizard maps');
-assertLocales(wizardMaps,'i18n-wizard maps');assertSameKeys(wizardMaps,'i18n-wizard maps','ru');
-
 const polish=read('public/app/ui-polish.js');
 const languageNames=evalObject(between(polish,'const languageNames = ','\n\n  const copy = '),'ui-polish languageNames');
 const polishCopy=evalObject(between(polish,'const copy = ','\n\n  const prohibited = '),'ui-polish copy');
@@ -60,10 +56,10 @@ assertLocales(languageNames,'ui-polish languageNames',true);assertLocales(polish
 assertSameKeys(languageNames,'ui-polish languageNames');assertSameKeys(polishCopy,'ui-polish copy');
 
 const runtime=read('public/app/i18n-runtime-v2.js');
-const runtimeCopy=evalObject(between(runtime,'const copy=',';\n\n  const languageLabels='),'i18n-runtime-v2 copy');
-const runtimeLanguages=evalObject(between(runtime,'const languageLabels=',';\n\n  const tags='),'i18n-runtime-v2 language labels');
-const runtimeTags=evalObject(between(runtime,'const tags=',';\n\n  const apiErrors='),'i18n-runtime-v2 tags');
-const runtimeErrors=evalObject(between(runtime,'const apiErrors=',';\n\n  function locale'),'i18n-runtime-v2 API errors');
+const runtimeCopy=evalObject(between(runtime,'const copy=',';\n\n  const languageLabels='),'i18n-runtime copy');
+const runtimeLanguages=evalObject(between(runtime,'const languageLabels=',';\n\n  const tags='),'i18n-runtime language labels');
+const runtimeTags=evalObject(between(runtime,'const tags=',';\n\n  const apiErrors='),'i18n-runtime tags');
+const runtimeErrors=evalObject(between(runtime,'const apiErrors=',';\n\n  function locale'),'i18n-runtime API errors');
 for(const [obj,label] of [[runtimeCopy,'runtime copy'],[runtimeLanguages,'runtime languages'],[runtimeTags,'runtime tags'],[runtimeErrors,'runtime API errors']]){assertExactLocaleSet(obj,label);assertSameKeys(obj,label);}
 
 const referrals=read('public/app/referrals-ui.js');
@@ -89,7 +85,7 @@ for(const locale of allLocales)for(const [key,value] of Object.entries(merged[lo
 
 const app=read('public/app/app.js');
 const i18nCore=read('public/app/i18n-core.js');
-const corpus=[complete,wizard,polish,i18nCore,runtime,referrals,onboarding,notifications,quota].join('\n');
+const corpus=[complete,polish,i18nCore,runtime,referrals,onboarding,notifications,quota].join('\n');
 const normalizedCorpus=normalizeText(corpus);
 const literalHardcoded=['Thank you for supporting novel translations!','Chapter Progress','No requests yet.','No matching requests.','Nothing here.','Complete the novel details.','Add at least one genre or tag.','Describe the sexual content or fetishes.','Request #','Edit','Could not read EPUB structure.','Bad EPUB entry','EPUB compression is not supported on this device.','just now'];
 for(const phrase of literalHardcoded){if(!app.includes(phrase))continue;if(!corpus.includes(phrase)&&!normalizedCorpus.includes(normalizeText(phrase)))throw new Error(`Hardcoded Mini App phrase is not covered by localization layers: ${phrase}`);}
@@ -97,14 +93,20 @@ const semanticPatches=[
   ['Dollar TL submission flow','guideSetting:t.guideSub'],
   ['Submission and content rules','rulesSetting:t.rulesSub'],
   ['5 requests/month · no 250-chapter restriction','boostySetting:t.boostySub'],
-  ['Telegram bot notifications are enabled for request status updates.','stopImmediatePropagation'],
+  ['Telegram bot notifications are enabled for request status updates.','patchHardcodedMessages'],
 ];
 for(const [phrase,evidence] of semanticPatches)if(app.includes(phrase)&&!corpus.includes(evidence))throw new Error(`Hardcoded Mini App phrase has no semantic localization patch: ${phrase}`);
 for(const tag of ['Fantasy','Romance','Adventure','Academy','Isekai','Reincarnation','Magic','Strong MC','Harem','Slice of Life','Time Travel','System','Villainess','Slow Burn'])for(const locale of allLocales)if(!runtimeTags[locale]?.[tag])throw new Error(`Popular tag ${tag}: missing ${locale} label`);
 
-for(const required of ["'/api/app/bootstrap'","'/api/app/language'",'window.__DTL_LOCALE__','dtl:localechange','patchInlineCopy'])if(!i18nCore.includes(required))throw new Error(`i18n-core is missing authoritative switching/inline hook: ${required}`);
-const index=read('public/app/index.html');
-for(const asset of ['/app/i18n-core.js','/app/i18n-runtime-v2.js','/app/language-switch.css'])if(!index.includes(asset))throw new Error(`index.html does not load ${asset}`);
-for(const legacy of ['/app/locale-sync.js','/app/i18n-inline-fixes.js','/app/language-display-fix.js'])if(index.includes(legacy))throw new Error(`Legacy i18n runtime must not be loaded: ${legacy}`);
+for(const required of ["'/api/app/bootstrap'","'/api/app/language'",'window.__DTL_LOCALE__','dtl:localechange','patchInlineCopy','registerPatcher','registerResponseHandler'])if(!i18nCore.includes(required))throw new Error(`i18n-core is missing authoritative shared hook: ${required}`);
+if(complete.includes('new MutationObserver'))throw new Error('i18n-complete must use the shared i18n scheduler, not create its own MutationObserver.');
+if(runtime.includes('new MutationObserver'))throw new Error('i18n runtime must use the shared i18n scheduler, not create its own MutationObserver.');
+if(runtime.includes('window.fetch=' )||runtime.includes('window.fetch ='))throw new Error('i18n runtime must register a response handler instead of wrapping fetch.');
+for(const required of ['DTL_I18N.registerPatcher(patch)','DTL_I18N.registerResponseHandler(localizeApiError)'])if(!runtime.includes(required))throw new Error(`i18n runtime is missing shared registration: ${required}`);
 
-console.log(`Localization audit passed for ${allLocales.length} locales across Mini App, feature pages, API errors and final classic-bot dictionaries.`);
+const index=read('public/app/index.html');
+for(const asset of ['/app/i18n-core.js','/app/i18n-complete.js','/app/i18n-runtime-v2.js','/app/language-switch.css'])if(!index.includes(asset))throw new Error(`index.html does not load ${asset}`);
+for(const legacy of ['/app/locale-sync.js','/app/i18n-inline-fixes.js','/app/i18n-wizard.js','/app/language-display-fix.js'])if(index.includes(legacy))throw new Error(`Legacy i18n runtime must not be loaded: ${legacy}`);
+if(fs.existsSync(new URL('../public/app/i18n-wizard.js',import.meta.url)))throw new Error('Empty legacy i18n-wizard.js must not be reintroduced.');
+
+console.log(`Localization audit passed for ${allLocales.length} locales with one shared Mini App i18n scheduler/fetch pipeline.`);
