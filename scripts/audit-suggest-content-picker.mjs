@@ -21,9 +21,9 @@ for(const token of [
   "function openBlocked(",
   "app.i18nTable('rules')",
   "rules.blocked",
-  "data-lucide=\"shield-check\"",
-  "data-lucide=\"eye\"",
-  "data-lucide=\"alert-triangle\"",
+  "choice('none','shield-check'",
+  "choice('suggestive','eye'",
+  "choice('explicit','alert-triangle'",
   "document.addEventListener('dtl:suggest'",
 ]) need(js,token,'suggest content picker');
 
