@@ -56,8 +56,7 @@
   };
 
   function locale(){
-    const raw=String(window.__DTL_LOCALE__||document.documentElement.lang||'en').toLowerCase().split('-')[0];
-    return supported.includes(raw)?raw:raw==='tl'?'fil':'en';
+    return window.DTL_I18N?.locale?.() || 'en';
   }
   function current(){return copy[locale()]||copy.en;}
   function inAdmin(node){return Boolean(node?.parentElement?.closest?.('.admin-v2,.admin-v3'))||document.documentElement.classList.contains('admin-console-active');}
@@ -136,12 +135,8 @@
     patchAccount();patchLanguages();patchTags();patchText();decorateLanguagePicker();
   }
 
-  // Localize API errors before feature code turns them into toasts/messages.
-  const previousFetch=window.fetch.bind(window);
-  window.fetch=async function dtlI18nFetch(input,init){
-    const response=await previousFetch(input,init);if(response.ok)return response;
-    let pathname='';try{const raw=typeof input==='string'?input:input instanceof Request?input.url:String(input||'');pathname=new URL(raw,location.href).pathname;}catch{}
-    if(!pathname.startsWith('/api/app/'))return response;
+  async function localizeApiError(response,{pathname=''}){
+    if(response.ok||!pathname.startsWith('/api/app/'))return response;
     try{
       const payload=await response.clone().json();const code=payload?.error?.code;
       const table=apiErrors[locale()]||apiErrors.en;let message=table[code];
@@ -154,7 +149,7 @@
       const headers=new Headers(response.headers);headers.set('content-type','application/json; charset=utf-8');headers.delete('content-length');
       return new Response(JSON.stringify(payload),{status:response.status,statusText:response.statusText,headers});
     }catch{return response;}
-  };
+  }
 
   document.addEventListener('click',(event)=>{
     const button=event.target.closest?.('#sheetRoot [data-lang]');if(!button)return;
@@ -162,12 +157,10 @@
     queueMicrotask(()=>{sheet.classList.add('is-saving');sheet.dataset.savingText=current().saving;});
   },true);
   document.addEventListener('dtl:languageerror',()=>document.querySelector('.language-picker-sheet')?.classList.remove('is-saving'));
-  document.addEventListener('dtl:localechange',()=>{requestAnimationFrame(patch);});
 
-  let raf=0;const schedule=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;patch();});};
-  const view=document.getElementById('viewRoot'),sheet=document.getElementById('sheetRoot'),toasts=document.getElementById('toastRegion');
-  if(view)new MutationObserver(schedule).observe(view,{childList:true,subtree:true,characterData:true});
-  if(sheet)new MutationObserver(schedule).observe(sheet,{childList:true,subtree:true,characterData:true});
-  if(toasts)new MutationObserver(schedule).observe(toasts,{childList:true,subtree:true,characterData:true});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
+  if (!window.DTL_I18N?.registerPatcher || !window.DTL_I18N?.registerResponseHandler) {
+    throw new Error('DTL i18n core must load before i18n-runtime-v2.js');
+  }
+  window.DTL_I18N.registerPatcher(patch);
+  window.DTL_I18N.registerResponseHandler(localizeApiError);
 })();

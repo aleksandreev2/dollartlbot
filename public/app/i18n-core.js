@@ -7,6 +7,10 @@
   const positionWords = {ru:'Позиция',es:'Posición',fil:'Puwesto',hi:'स्थान',pt:'Posição',id:'Posisi',vi:'Vị trí',fr:'Position',de:'Position'};
   const repostTitles = {ru:'Правила переводов и репостов',es:'Reglas de traducción y republicación',fil:'Mga tuntunin sa pagsasalin at muling paglalathala',hi:'अनुवाद और पुनर्प्रकाशन के नियम',pt:'Regras de tradução e republicação',id:'Aturan terjemahan dan publikasi ulang',vi:'Quy định dịch và đăng lại',fr:'Règles de traduction et de republication',de:'Regeln für Übersetzungen und Wiederveröffentlichung'};
 
+  const patchers = new Set();
+  const responseHandlers = new Set();
+  let raf = 0;
+
   function normalize(value) {
     const raw = String(value || '').toLowerCase().replace('_', '-').split('-')[0];
     if (raw === 'tl') return 'fil';
@@ -15,37 +19,6 @@
 
   function locale() {
     return normalize(window.__DTL_LOCALE__ || document.documentElement.lang) || 'en';
-  }
-
-  function scheduleInlineCopy() {
-    if (scheduleInlineCopy.raf) return;
-    scheduleInlineCopy.raf = requestAnimationFrame(() => {
-      scheduleInlineCopy.raf = 0;
-      patchInlineCopy();
-    });
-  }
-  scheduleInlineCopy.raf = 0;
-
-  function apply(localeValue, source = 'unknown') {
-    const next = normalize(localeValue);
-    if (!next) return false;
-    const previous = normalize(document.documentElement.lang) || 'en';
-    window.__DTL_LOCALE__ = next;
-    document.documentElement.lang = next;
-    try { localStorage.setItem(storageKey, next); } catch {}
-    if (previous !== next) {
-      document.dispatchEvent(new CustomEvent('dtl:localechange', { detail: { locale: next, previous, source } }));
-      scheduleInlineCopy();
-    }
-    return true;
-  }
-
-  function fromTelegram() {
-    return normalize(window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code);
-  }
-
-  function fromStorage() {
-    try { return normalize(localStorage.getItem(storageKey)); } catch { return null; }
   }
 
   function patchInlineCopy() {
@@ -69,13 +42,73 @@
     if (title && repostTitles[l] && title.textContent !== repostTitles[l]) title.textContent = repostTitles[l];
   }
 
+  patchers.add(patchInlineCopy);
+
+  function runPatchers() {
+    for (const patcher of [...patchers]) {
+      try { patcher(); } catch (error) { console.error('[DTL i18n] patcher failed', error); }
+    }
+  }
+
+  function schedule() {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      runPatchers();
+    });
+  }
+
+  function registerPatcher(patcher) {
+    if (typeof patcher !== 'function') return () => {};
+    patchers.add(patcher);
+    schedule();
+    return () => patchers.delete(patcher);
+  }
+
+  function registerResponseHandler(handler) {
+    if (typeof handler !== 'function') return () => {};
+    responseHandlers.add(handler);
+    return () => responseHandlers.delete(handler);
+  }
+
+  function apply(localeValue, source = 'unknown') {
+    const next = normalize(localeValue);
+    if (!next) return false;
+    const previous = normalize(document.documentElement.lang) || 'en';
+    window.__DTL_LOCALE__ = next;
+    document.documentElement.lang = next;
+    try { localStorage.setItem(storageKey, next); } catch {}
+    if (previous !== next) {
+      document.dispatchEvent(new CustomEvent('dtl:localechange', { detail: { locale: next, previous, source } }));
+      schedule();
+    }
+    return true;
+  }
+
+  function fromTelegram() {
+    return normalize(window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code);
+  }
+
+  function fromStorage() {
+    try { return normalize(localStorage.getItem(storageKey)); } catch { return null; }
+  }
+
+  window.DTL_I18N = Object.freeze({
+    locale,
+    normalize,
+    apply,
+    schedule,
+    registerPatcher,
+    registerResponseHandler,
+  });
+
   // The last saved client-side locale is only a first-paint hint. The
   // authenticated /bootstrap response remains the source of truth.
   apply(fromStorage() || fromTelegram() || 'en', 'initial');
 
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async function dtlLocaleAwareFetch(input, init) {
-    const response = await nativeFetch(input, init);
+    let response = await nativeFetch(input, init);
     let pathname = '';
     try {
       const raw = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input || '');
@@ -101,6 +134,15 @@
         document.dispatchEvent(new CustomEvent('dtl:languageerror', { detail: { status: response.status } }));
       }
     }
+
+    for (const handler of [...responseHandlers]) {
+      try {
+        const next = await handler(response, { pathname, input, init });
+        if (next instanceof Response) response = next;
+      } catch (error) {
+        console.error('[DTL i18n] response handler failed', error);
+      }
+    }
     return response;
   };
 
@@ -111,9 +153,9 @@
     if (!window.Telegram?.WebApp?.initData) apply(button.dataset.lang, 'preview-picker');
   }, true);
 
-  const observer = new MutationObserver(scheduleInlineCopy);
+  const observer = new MutationObserver(schedule);
   observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  document.addEventListener('dtl:localechange', scheduleInlineCopy);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleInlineCopy, { once: true });
-  else scheduleInlineCopy();
+  document.addEventListener('dtl:localechange', schedule);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once: true });
+  else schedule();
 })();
