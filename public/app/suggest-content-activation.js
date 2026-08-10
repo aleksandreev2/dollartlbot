@@ -17,6 +17,12 @@
     requestAnimationFrame(ensureEnhancedSuggest);
   }
 
+  // view-suggest.js renders wizard step changes locally instead of going through
+  // DTL_APP.render(), so dtl:viewrender/dtl:suggest are not emitted for 2 -> 3.
+  // Watch only direct replacements of #viewRoot to bridge those local renders.
+  const viewObserver = new MutationObserver(schedule);
+  viewObserver.observe(app.viewRoot, { childList: true });
+
   document.addEventListener('dtl:viewrender', schedule);
   document.addEventListener('dtl:suggest', event => {
     if (event?.detail?.source === 'activation-fallback') return;
