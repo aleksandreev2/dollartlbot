@@ -14,6 +14,8 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - name: Prepare pinned frontend vendor assets
+        run: npm run prepare:vendor
       - run: npm run typecheck
       - name: Audit admin submission state machine
         run: node scripts/audit-admin-state.mjs
@@ -38,6 +40,7 @@ jobs:
           node --check public/app/app.js
           node --check public/app/performance.js
           node --check public/app/telegram-desktop.js
+          node --check public/app/vendor/lucide.min.js
           node --check public/app/icons.js
           node --check public/app/i18n-core.js
           node --check public/app/i18n-runtime-v2.js
@@ -53,7 +56,6 @@ jobs:
           node --check public/app/admin-performance-v3.js
           node --check public/app/quota-unlimited-ui.js
           node --check public/app/publishing-fixes.js
-          node --check public/app/publishing-comments-ui.js
           node --check public/app/publication-management.js
           node --check public/app/home-v2.js
       - name: Verify publishing, desktop and locale assets
@@ -67,7 +69,7 @@ jobs:
           test -f public/app/telegram-desktop.css
           test -f public/app/publishing-fixes.css
           test -f public/app/publishing-fixes.js
-          test -f public/app/publishing-comments-ui.js
+          test ! -e public/app/publishing-comments-ui.js
           test -f public/app/publication-management.js
           test -f public/app/publication-management.css
           test -f public/app/notifications-ui.css
@@ -77,6 +79,12 @@ jobs:
           test -f public/app/novel-presenter.js
           test -f public/app/home-v2.js
           test -f public/app/home-v2.css
+          test -f public/app/vendor/lucide.min.js
+          grep -q '@license lucide v1.27.0' public/app/vendor/lucide.min.js
+          grep -q '"lucide": "1.27.0"' package.json
+          grep -q 'node scripts/prepare-vendor.mjs' wrangler.jsonc
+          grep -q '/app/vendor/lucide.min.js?v=1.27.0' public/app/index.html
+          ! grep -q 'unpkg.com/lucide' public/app/index.html
           grep -q '/app/desktop-v2.css' public/app/index.html
           grep -q '/app/admin-v3.js' public/app/index.html
           grep -q '/app/admin-performance-v3.js' public/app/index.html
@@ -84,7 +92,8 @@ jobs:
           test ! -e public/app/cover-reliability.js
           ! grep -q '/app/cover-reliability.js' public/app/index.html
           grep -q '/app/quota-unlimited-ui.js' public/app/index.html
-          grep -q '/app/publishing-comments-ui.js' public/app/index.html
+          ! grep -q '/app/publishing-comments-ui.js' public/app/index.html
+          grep -q '/app/publishing-fixes.js' public/app/index.html
           grep -q '/app/publication-management.js' public/app/index.html
           grep -q '/app/publication-management.css' public/app/index.html
           grep -q '/app/i18n-core.js' public/app/index.html
