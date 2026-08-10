@@ -138,7 +138,7 @@ jobs:
           test -f src/miniapp-core.ts
           grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
           grep -q '/app/access-gate-ui.css?v=20260810-access1' public/app/index.html
-          grep -q '/app/access-gate-ui.js?v=20260810-access2' public/app/index.html
+          grep -q '/app/access-gate-ui.js?v=20260810-access3' public/app/index.html
           grep -q '/app/access-admin-ui.css?v=20260810-access1' public/app/index.html
           grep -q '/app/access-admin-ui.js?v=20260810-access1' public/app/index.html
           grep -q '/app/app-update.js?v=20260810-update1' public/app/index.html
