@@ -6,7 +6,7 @@ const runtime=read('public/app/i18n-runtime-v2.js');
 const presenter=read('public/app/novel-presenter.js');
 const index=read('public/app/index.html');
 
-for(const token of ['setCatalog','detectLanguage','languageLabel','registerPatcher','registerResponseHandler','const patchers = new Set()','const responseHandlers = new Set()','new MutationObserver(schedule)']){
+for(const token of ['setCatalog','detectLanguage','languageLabel','patchInlineCopy','requestPattern','positionPattern','chapterPattern','registerPatcher','registerResponseHandler','const patchers = new Set()','const responseHandlers = new Set()','new MutationObserver(schedule)']){
   if(!core.includes(token))throw new Error(`i18n-core missing shared runtime primitive: ${token}`);
 }
 if((core.match(/new MutationObserver/g)||[]).length!==1)throw new Error('i18n-core must own exactly one MutationObserver.');
@@ -24,4 +24,4 @@ const order=['/app/i18n-core.js','/app/i18n-runtime-v2.js','/app/novel-presenter
 let previous=-1;
 for(const asset of order){const at=index.indexOf(asset);if(at<0)throw new Error(`Missing runtime asset: ${asset}`);if(at<=previous)throw new Error(`Runtime asset order is invalid around ${asset}`);previous=at;}
 
-console.log('Shared Mini App runtime audit passed: one observer, one fetch wrapper, one localization catalog, deterministic load order.');
+console.log('Shared Mini App runtime audit passed: one observer, one fetch wrapper, one localization catalog, dynamic counters and deterministic load order.');
