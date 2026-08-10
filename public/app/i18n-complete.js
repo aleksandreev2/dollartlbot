@@ -1,6 +1,6 @@
 (() => {
   const supported = new Set(['en','es','fil','hi','pt','id','vi','fr','de','ru']);
-  const localeNames = {English:'en','Español':'es',Filipino:'fil','हिन्दी':'hi','Português':'pt','Bahasa Indonesia':'id','Tiếng Việt':'vi','Français':'fr','Deutsch':'de','Русский':'ru'};
+  const localeNames = {English:'en','Español':'es',Filipino:'fil','हिन्दी':'hi','Português':'pt','Bahasa Indonesia':'id','Tiếng Việt':'vi',Français:'fr',Deutsch:'de','Русский':'ru'};
 
   const ui = {
     ru:{
@@ -45,6 +45,8 @@
   };
 
   function locale(){
+    const shared = window.DTL_I18N?.locale?.();
+    if (shared) return shared;
     const html = String(document.documentElement.lang || '').toLowerCase().split('-')[0];
     if (supported.has(html)) return html;
     const setting = document.querySelector('#languageSetting .setting-sub')?.textContent?.trim();
@@ -57,16 +59,7 @@
     const original = node.nodeValue || '';
     const trimmed = original.trim();
     if (!trimmed) return;
-    let next = map[trimmed];
-    if (!next) {
-      const chapter = trimmed.match(/^(\d+)\s+chapters$/i);
-      if (chapter) {
-        const units={ru:'глав',es:'capítulos',fil:'kabanata',hi:'अध्याय',pt:'capítulos',id:'bab',vi:'chương',fr:'chapitres',de:'Kapitel'};
-        next = `${chapter[1]} ${units[locale()] || 'chapters'}`;
-      }
-      const req = trimmed.match(/^Request #(\d+)$/i);
-      if(req){const labels={ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage'};next=`${labels[locale()]||'Request'} #${req[1]}`;}
-    }
+    const next = map[trimmed];
     if (!next || next === trimmed) return;
     const lead = original.match(/^\s*/)?.[0] || '';
     const tail = original.match(/\s*$/)?.[0] || '';
@@ -100,8 +93,6 @@
     const note=document.querySelector('.sheet-copy.rich-sheet .rule-note');
     if(note){
       const strong=note.querySelector('strong');
-      const title=strong?.textContent||'';
-      const wanted=title ? `<strong>${strong.outerHTML.replace(/^<strong>|<\/strong>$/g,'')}</strong><br>${data.repost}` : data.repost;
       const currentCopy=note.childNodes[note.childNodes.length-1]?.textContent?.trim();
       if(currentCopy!==data.repost){
         if(strong){note.innerHTML=`${strong.outerHTML}<br>${data.repost}`;} else note.textContent=data.repost;
@@ -126,8 +117,6 @@
   }
 
   function patch(){patchText();patchRules();patchHardcodedMessages();}
-  let raf=0;
-  const schedule=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;patch();});};
-  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});else schedule();
+  if (!window.DTL_I18N?.registerPatcher) throw new Error('DTL i18n core must load before i18n-complete.js');
+  window.DTL_I18N.registerPatcher(patch);
 })();
