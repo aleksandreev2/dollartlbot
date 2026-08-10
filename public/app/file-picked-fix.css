@@ -26,3 +26,83 @@
 .file-picked > .status-pill {
   justify-self: end;
 }
+
+.suggest-wizard-page .round-icon svg,
+.suggest-wizard-page .analysis-icon svg,
+.suggest-wizard-page .status-pill svg,
+.suggest-wizard-page .step-dot svg,
+.suggest-wizard-page button svg,
+.suggest-wizard-page label svg,
+.suggest-wizard-page .suggest-inline-note svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.suggest-wizard-page .upload-illustration svg {
+  width: 36px;
+  height: 36px;
+}
+
+.suggest-wizard-page .step-circle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.suggest-inline-note,
+.suggest-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.review-file-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 460px) {
+  .suggest-wizard-page .wizard-head {
+    margin-bottom: 14px;
+  }
+
+  .suggest-wizard-page .wizard-title-row h1 {
+    font-size: clamp(27px, 8vw, 34px);
+  }
+
+  .suggest-wizard-page .stepper {
+    margin-top: 14px;
+  }
+
+  .suggest-wizard-page .step-node {
+    gap: 5px;
+    font-size: 9px;
+  }
+
+  .suggest-wizard-page .step-circle {
+    width: 29px;
+    height: 29px;
+  }
+
+  .suggest-wizard-page .upload-zone {
+    min-height: 280px;
+    padding: 28px 16px;
+  }
+
+  .suggest-wizard-page .detected-row,
+  .suggest-wizard-page .review-row {
+    gap: 9px;
+  }
+
+  .suggest-wizard-page .review-row {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    padding: 12px;
+  }
+
+  .suggest-wizard-page .review-row > div:nth-child(2),
+  .suggest-wizard-page .detected-row > div:nth-child(2) {
+    min-width: 0;
+  }
+}

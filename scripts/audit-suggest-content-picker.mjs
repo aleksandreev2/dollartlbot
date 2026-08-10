@@ -1,12 +1,15 @@
 import fs from 'node:fs';
 
 const read=(path)=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
+const exists=(path)=>fs.existsSync(new URL(`../${path}`,import.meta.url));
 const need=(source,needle,label)=>{if(!source.includes(needle))throw new Error(`${label}: missing ${needle}`);};
 const forbid=(source,needle,label)=>{if(source.includes(needle))throw new Error(`${label}: forbidden ${needle}`);};
 
 const js=read('public/app/suggest-content-picker.js');
-const activation=read('public/app/suggest-content-activation.js');
+const api=read('public/app/suggest-content-api.js');
+const view=read('public/app/view-suggest.js');
 const css=read('public/app/suggest-content-picker.css');
+const wizardCss=read('public/app/file-picked-fix.css');
 const index=read('public/app/index.html');
 const headers=read('public/_headers');
 const wrangler=read('wrangler.jsonc');
@@ -50,30 +53,64 @@ for(const token of [
 ]) need(css,token,'suggest content picker CSS');
 
 for(const token of [
-  "app.state.view !== 'suggest'",
-  'app.state.wizardStep !== 3',
+  'window.DTL_SUGGEST_CONTENT = Object.freeze({ render })',
+  "source: 'canonical-content-api'",
+  "event.stopImmediatePropagation()",
   ".querySelector('.suggest-content-page')",
-  "source: 'activation-fallback'",
-  'new MutationObserver(schedule)',
-  'viewObserver.observe(app.viewRoot, { childList: true })',
-  "document.addEventListener('dtl:viewrender'",
-  "document.addEventListener('visibilitychange'",
-  "window.addEventListener('pageshow'",
-]) need(activation,token,'suggest picker activation');
-new Function(activation);
+]) need(api,token,'canonical Suggest content API');
+new Function(api);
 
-need(index,'/app/suggest-content-picker.css?v=20260810-content3','suggest picker CSS asset');
-need(index,'/app/suggest-content-picker.js?v=20260810-content3','suggest picker JS asset');
-need(index,'/app/suggest-content-activation.js?v=20260810-content3','suggest activation asset');
-const view=index.indexOf('/app/view-suggest.js?v=20260810-app2');
-const picker=index.indexOf('/app/suggest-content-picker.js?v=20260810-content3');
-const activationIndex=index.indexOf('/app/suggest-content-activation.js?v=20260810-content3');
+for(const token of [
+  'function renderCanonicalContent()',
+  'window.DTL_SUGGEST_CONTENT',
+  'if(state.wizardStep===3)return renderCanonicalContent()',
+  "ico('upload')",
+  "ico('lock')",
+  "ico('languages')",
+  "ico('book-open')",
+  "ico('shield')",
+  "ico('send')",
+]) need(view,token,'canonical Suggest view');
+
+for(const bad of [
+  'function renderContentStep()',
+  'data-add-tag',
+  'data-remove-tag',
+  "['none','◇'",
+  "['suggestive','♢'",
+  '⇧',
+  '◇',
+  '✦',
+  '▤',
+  '🌐',
+  '▱',
+  '▣',
+]) forbid(view,bad,'legacy Suggest view');
+
+for(const token of [
+  '.suggest-wizard-page .upload-illustration svg',
+  '.suggest-inline-note',
+  '.review-file-name',
+  '@media (max-width: 460px)',
+]) need(wizardCss,token,'Suggest wizard polish CSS');
+
+if(exists('public/app/suggest-content-activation.js'))throw new Error('Temporary Suggest activation bridge must be removed.');
+need(index,'/app/file-picked-fix.css?v=20260810-file2','Suggest wizard polish asset');
+need(index,'/app/suggest-content-picker.css?v=20260810-content4','Suggest picker CSS asset');
+need(index,'/app/view-suggest.js?v=20260810-app4','canonical Suggest view asset');
+need(index,'/app/suggest-content-picker.js?v=20260810-content4','Suggest picker JS asset');
+need(index,'/app/suggest-content-api.js?v=20260810-content4','canonical Suggest content API asset');
+forbid(index,'suggest-content-activation.js','legacy Suggest activation asset');
+
+const viewIndex=index.indexOf('/app/view-suggest.js?v=20260810-app4');
+const pickerIndex=index.indexOf('/app/suggest-content-picker.js?v=20260810-content4');
+const apiIndex=index.indexOf('/app/suggest-content-api.js?v=20260810-content4');
 const bootstrap=index.indexOf('/app/app.js?v=20260810-app1');
-if(view<0||picker<0||activationIndex<0||bootstrap<0||picker<=view||activationIndex<=picker||activationIndex>=bootstrap)throw new Error('Suggest picker and local-render activation bridge must load after the canonical Suggest view and before app bootstrap');
+if(viewIndex<0||pickerIndex<0||apiIndex<0||bootstrap<0||pickerIndex<=viewIndex||apiIndex<=pickerIndex||apiIndex>=bootstrap)throw new Error('Canonical Suggest picker/API must load after the Suggest view and before app bootstrap.');
 
 need(headers,'/app/\n  Cache-Control: no-store, max-age=0','Mini App document cache policy');
 need(headers,'/app/index.html\n  Cache-Control: no-store, max-age=0','Mini App index cache policy');
 need(wrangler,'MINI_APP_URL','versioned Mini App URL');
-need(wrangler,'?build=20260810-content3','versioned Mini App URL');
+need(wrangler,'?build=20260810-content4','versioned Mini App URL');
 
-console.log('Suggest content picker audit passed: expanded content picker, local wizard-render activation bridge, fresh document URL, and no-store Mini App shell caching.');
+console.log('Suggest content picker audit passed: one canonical step-3 renderer, no temporary DOM activation bridge, Lucide wizard icons, mobile polish, and fresh Mini App assets.');

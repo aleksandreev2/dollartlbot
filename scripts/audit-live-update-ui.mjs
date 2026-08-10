@@ -5,6 +5,7 @@ const need=(source,needle,label)=>{if(!source.includes(needle))throw new Error(`
 
 const css=read('public/app/file-picked-fix.css');
 const update=read('public/app/app-update.js');
+const suggest=read('public/app/view-suggest.js');
 const index=read('public/app/index.html');
 
 for(const token of [
@@ -12,7 +13,9 @@ for(const token of [
   'text-overflow: ellipsis',
   'white-space: nowrap',
   'min-width: 0',
+  '.review-file-name',
 ]) need(css,token,'uploaded filename CSS');
+need(suggest,'review-file-name','review filename clamp');
 
 for(const token of [
   "const SHELL_URL = '/app/index.html'",
@@ -24,7 +27,7 @@ for(const token of [
   'location.reload()',
 ]) need(update,token,'Mini App update watcher');
 
-need(index,'/app/file-picked-fix.css?v=20260810-file1','filename CSS asset');
+need(index,'/app/file-picked-fix.css?v=20260810-file2','filename CSS asset');
 need(index,'/app/app-update.js?v=20260810-update1','update watcher asset');
 
-console.log('Live-update UI audit passed: long filenames ellipsize inside the card and open Mini App sessions detect newer deployed shells without discarding an in-progress Suggest form.');
+console.log('Live-update UI audit passed: long filenames ellipsize in Upload and Review, while open Mini App sessions detect newer deployed shells without discarding an in-progress Suggest form.');

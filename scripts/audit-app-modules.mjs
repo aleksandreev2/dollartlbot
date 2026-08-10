@@ -11,6 +11,7 @@ const viewI18n=read('public/app/view-i18n.js');
 const home=read('public/app/view-home.js');
 const queue=read('public/app/view-queue.js');
 const suggest=read('public/app/view-suggest.js');
+const suggestApi=read('public/app/suggest-content-api.js');
 const account=read('public/app/view-requests-account.js');
 const admin=read('public/app/view-admin.js');
 const index=read('public/app/index.html');
@@ -36,13 +37,17 @@ need(home,"registerView('home'",'Home view registration');
 need(queue,"registerView('queue'",'Queue view registration');
 need(queue,"registerView('detail'",'Novel detail registration');
 need(suggest,"registerView('suggest'",'Suggest view registration');
+need(suggest,'window.DTL_SUGGEST_CONTENT','canonical Suggest content API usage');
+forbid(suggest,'function renderContentStep()','legacy Suggest content renderer');
+need(suggestApi,'window.DTL_SUGGEST_CONTENT = Object.freeze({ render })','canonical Suggest content API');
+if(suggestApi.includes('new MutationObserver'))throw new Error('Canonical Suggest content API must not own a DOM observer.');
 need(account,"registerView('requests'",'Requests view registration');
 need(account,"registerView('account'",'Account view registration');
 need(admin,"registerView('admin'",'Admin view registration');
 need(admin,'DTL_ADMIN_CONSOLE.open()','direct canonical admin route');
 forbid(admin,'.admin-stats','admin direct route');
 
-const jsOrder=['/app/app-core.js','/app/view-i18n.js','/app/admin-console.js','/app/view-home.js','/app/view-queue.js','/app/view-suggest.js','/app/view-requests-account.js','/app/view-admin.js','/app/app.js'];
+const jsOrder=['/app/app-core.js','/app/view-i18n.js','/app/admin-console.js','/app/view-home.js','/app/view-queue.js','/app/view-suggest.js','/app/suggest-content-picker.js','/app/suggest-content-api.js','/app/view-requests-account.js','/app/view-admin.js','/app/app.js'];
 let previous=-1;
 for(const asset of jsOrder){const at=index.indexOf(asset);if(at<0)throw new Error(`index.html missing ${asset}`);if(at<=previous)throw new Error(`App load order invalid around ${asset}`);previous=at;}
 
@@ -53,4 +58,4 @@ need(read('public/app/admin-console.css'),'.admin-v2','admin console stylesheet'
 need(read('public/app/admin-tools.css'),'.admin-users-layout','admin tools stylesheet');
 need(read('public/app/admin-publishing.css'),'.publishing-health','admin publishing stylesheet');
 
-console.log('App architecture audit passed: tiny bootstrap, registered view modules, render-time localization helpers, direct admin routing, semantic view events, and canonical admin CSS ownership.');
+console.log('App architecture audit passed: tiny bootstrap, registered view modules, canonical Suggest content API, render-time localization helpers, direct admin routing, semantic view events, and canonical admin CSS ownership.');
