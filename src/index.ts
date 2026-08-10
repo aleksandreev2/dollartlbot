@@ -4,6 +4,7 @@ import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
 import { handleAdminPublicationsRequest } from './admin-publications';
 import { handleAdminUsersRequest } from './admin-users';
+import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
 import { handleCoverHealthRequest } from './cover-health';
 import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
@@ -13,7 +14,7 @@ import { handleHomeReleasesRequest } from './home-releases';
 import { handleBaseMiniAppAccess } from './miniapp-access';
 import { handleMiniAppCoreRequest } from './miniapp-core';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
-import { handleNotificationApiRequest, runBroadcastMaintenance, runNotificationMaintenance } from './notifications';
+import { handleNotificationApiRequest, runNotificationMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
 import { handlePublicationLinksRequest } from './publication-links';
 import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
@@ -53,7 +54,7 @@ export default {
     if (adminAnalyticsResponse) return adminAnalyticsResponse;
     const adminPublicationsResponse = await handleAdminPublicationsRequest(request, env, apiTelegram);
     if (adminPublicationsResponse) return adminPublicationsResponse;
-    const publicationLinksResponse = await handlePublicationLinksRequest(request, env);
+    const publicationLinksResponse = await handlePublicationLinksRequest(request, env, apiTelegram);
     if (publicationLinksResponse) return publicationLinksResponse;
     const publicationDeliveryResponse = await handlePublicationDeliveryAdminRequest(request, env, apiTelegram);
     if (publicationDeliveryResponse) return publicationDeliveryResponse;
@@ -133,7 +134,7 @@ export default {
     await runScheduledTask('referral_maintenance', () => runReferralMaintenance(env, telegram, scheduledAt));
     await runScheduledTask('access_gate_maintenance', () => runAccessGateMaintenance(env, scheduledAt));
     await runScheduledTask('notification_maintenance', () => runNotificationMaintenance(env, telegram));
-    await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenance(env, telegram, 2));
+    await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenanceWithLease(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
 
     if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
