@@ -1,0 +1,21 @@
+.access-admin-panel { position: relative; }
+.access-admin-status {
+  margin-top: 14px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 9px;
+  align-items: start;
+  background: rgba(255,255,255,.72);
+}
+.access-admin-status.ok { border-color: #bde7cb; background: var(--green-soft); color: #117a42; }
+.access-admin-status.bad { border-color: #f1d2a6; background: #fff8e9; color: #8b5a15; }
+.access-admin-status svg { width: 19px; height: 19px; margin-top: 1px; }
+.access-admin-status strong { display: block; font-size: 13px; }
+.access-admin-status span { display: block; margin-top: 3px; font-size: 11px; line-height: 1.45; color: inherit; opacity: .82; }
+.access-admin-actions { display: flex; gap: 8px; margin-top: 14px; }
+.access-admin-actions button { flex: 1 1 0; min-height: 44px; border-radius: 13px; border: 1px solid var(--line); background: #fff; font-weight: 700; cursor: pointer; }
+.access-admin-actions button.primary { color: #fff; border-color: transparent; background: linear-gradient(104deg,#e0ad4f,#c88d2e); }
+.access-admin-actions button:disabled { opacity: .55; cursor: default; }
