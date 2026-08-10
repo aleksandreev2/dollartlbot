@@ -29,6 +29,7 @@ import { normalizeQueuePositions } from './queue';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
+import { denyBlockedPrivateBotUpdate } from './user-controls';
 
 const MAX_UPDATE_BYTES = 1_000_000;
 const PROCESSED_UPDATE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -116,6 +117,8 @@ export default {
           handleReferralChatMemberUpdate(update.chat_member, env),
           handleAccessChatMemberUpdate(update.chat_member, env),
         ]);
+      } else if (await denyBlockedPrivateBotUpdate(update, env, telegram)) {
+        // Admin-blocked private accounts stop here. Channel/discussion updates are unaffected.
       } else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
         // handled by publishing center
       } else {
