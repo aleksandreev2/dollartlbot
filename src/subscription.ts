@@ -1,6 +1,6 @@
 import type { SubscriptionState } from './domain';
 import { errorText } from './db';
-import type { TelegramClient } from './telegram';
+import { isActiveChatMember, type TelegramClient } from './telegram';
 
 export async function getSubscriptionState(
   userId: number,
@@ -13,13 +13,7 @@ export async function getSubscriptionState(
 
   try {
     const member = await telegram.getChatMember(env.BOOSTY_GROUP_ID, userId);
-    const status = String(member.status ?? '');
-    const subscriber =
-      status === 'creator' ||
-      status === 'administrator' ||
-      status === 'member' ||
-      (status === 'restricted' && member.is_member === true);
-    return { subscriber, verificationError: false };
+    return { subscriber: isActiveChatMember(member), verificationError: false };
   } catch (error) {
     console.warn(
       JSON.stringify({ event: 'boosty_check_failed', user_id: userId, error: errorText(error) }),

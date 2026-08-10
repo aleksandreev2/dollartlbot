@@ -1,0 +1,41 @@
+.app-shell.access-locked .topbar .brand,
+.app-shell.access-locked .topbar .notification-button {
+  pointer-events: none;
+}
+.app-shell.access-locked .topbar .notification-button { opacity: .45; }
+
+.access-gate-page {
+  min-height: min(72vh, 620px);
+  display: grid;
+  place-items: center;
+}
+
+.access-gate-card {
+  width: min(100%, 520px);
+  padding: 26px;
+  text-align: center;
+}
+
+.access-gate-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--gold-strong);
+  background: var(--gold-pale);
+  border: 1px solid #ead4ab;
+}
+.access-gate-icon svg { width: 29px; height: 29px; }
+.access-gate-card h1 { font-size: clamp(27px, 7vw, 36px); margin-bottom: 10px; }
+.access-gate-card p { max-width: 420px; margin: 0 auto; color: var(--text-soft); font-size: 14px; line-height: 1.55; }
+.access-gate-actions { display: grid; gap: 10px; margin-top: 22px; }
+.access-gate-actions .secondary-button { width: 100%; }
+.access-gate-note { margin-top: 12px; color: var(--text-faint); font-size: 11px; min-height: 16px; }
+.access-gate-actions button.is-checking { opacity: .7; pointer-events: none; }
+
+@media (max-width: 460px) {
+  .access-gate-page { min-height: 66vh; }
+  .access-gate-card { padding: 22px 17px; border-radius: 18px; }
+}

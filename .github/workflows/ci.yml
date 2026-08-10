@@ -23,6 +23,8 @@ jobs:
         run: node scripts/audit-backend-safety.mjs
       - name: Audit frontend stability invariants
         run: node scripts/audit-frontend-stability.mjs
+      - name: Audit channel access gate
+        run: node scripts/audit-access-gate.mjs
       - name: Audit notification center UX
         run: node scripts/audit-notification-ui.mjs
       - name: Audit notification delivery reliability
@@ -50,6 +52,8 @@ jobs:
           node --check public/app/app.js
           node --check public/app/app-update.js
           node --check public/app/app-core.js
+          node --check public/app/access-gate-ui.js
+          node --check public/app/access-admin-ui.js
           node --check public/app/notification-deeplink.js
           node --check public/app/view-i18n.js
           node --check public/app/view-home.js
@@ -82,6 +86,10 @@ jobs:
           test -f public/app/admin-console.css
           test -f public/app/admin-tools.css
           test -f public/app/admin-publishing.css
+          test -f public/app/access-admin-ui.css
+          test -f public/app/access-admin-ui.js
+          test -f public/app/access-gate-ui.css
+          test -f public/app/access-gate-ui.js
           test ! -e public/app/admin-v2.css
           test ! -e public/app/admin-v3.css
           test ! -e public/app/admin-performance-v3.css
@@ -117,6 +125,10 @@ jobs:
           test ! -e public/app/publishing-comments-ui.js
           test ! -e public/app/onboarding-interactions-fix.js
           grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
+          grep -q '/app/access-gate-ui.css?v=20260810-access1' public/app/index.html
+          grep -q '/app/access-gate-ui.js?v=20260810-access1' public/app/index.html
+          grep -q '/app/access-admin-ui.css?v=20260810-access1' public/app/index.html
+          grep -q '/app/access-admin-ui.js?v=20260810-access1' public/app/index.html
           grep -q '/app/app-update.js?v=20260810-update1' public/app/index.html
           grep -q '/app/file-picked-fix.css?v=20260810-file2' public/app/index.html
           grep -q '/app/notification-deeplink.js?v=20260810-notify1' public/app/index.html
@@ -169,6 +181,7 @@ jobs:
           test ! -e public/app/ui-polish.js
           test -f migrations/0014_broadcast_recipients.sql
           test -f migrations/0015_notification_delivery_state.sql
+          test -f migrations/0016_channel_access_gate.sql
       - name: Audit Mini App localization coverage
         run: |
           node scripts/audit-miniapp-i18n.mjs

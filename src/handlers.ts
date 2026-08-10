@@ -1,3 +1,4 @@
+import { checkBotAccess, sendAccessGate } from './access-gate';
 import { SUPPORTED_LANGUAGES, normalizeLocale, t, type Locale } from './i18n/index';
 import {
   MAX_LONG,
@@ -115,8 +116,10 @@ async function handleMessage(
   if (text === '/start' || text?.startsWith('/start ')) {
     const startParam = text.startsWith('/start ') ? text.slice('/start '.length).trim() : '';
     if (startParam) {
-      const handledReferral = await handleReferralBotStart(startParam, from.id, locale, env, telegram);
-      if (handledReferral) {
+      const referralHandled = await handleReferralBotStart(startParam, from.id, locale, env, telegram);
+      if (referralHandled) {
+        // Keep the referral-specific invite link as the only join CTA here so
+        // attribution cannot be lost to a generic required-channel link.
         if (!user?.language_selected) await sendLanguagePicker(from.id, locale, telegram);
         return;
       }
@@ -124,9 +127,10 @@ async function handleMessage(
 
     if (!user?.language_selected) {
       await sendLanguagePicker(from.id, locale, telegram);
-    } else {
-      await sendMainMenu(from.id, locale, telegram);
+      return;
     }
+    if (!(await ensureBotAccess(from.id, locale, env, telegram))) return;
+    await sendMainMenu(from.id, locale, telegram);
     return;
   }
 
@@ -139,6 +143,8 @@ async function handleMessage(
     await sendLanguagePicker(from.id, locale, telegram);
     return;
   }
+
+  if (!(await ensureBotAccess(from.id, locale, env, telegram))) return;
 
   if (text === '/rules') {
     await sendRules(from.id, locale, telegram, false);
@@ -323,7 +329,8 @@ async function handleCallback(
   if (chat.type !== 'private') return;
 
   await upsertUser(env, query.from);
-  const user = await getUser(env, query.from.id);
+  const userId = query.from.id;
+  const user = await getUser(env, userId);
   let locale = normalizeLocale(user?.language);
 
   if (data.startsWith('lang:')) {
@@ -335,29 +342,54 @@ async function handleCallback(
     await env.DB.prepare(
       'UPDATE users SET language = ?, language_selected = 1, updated_at = ? WHERE telegram_id = ?',
     )
-      .bind(nextLocale, new Date().toISOString(), query.from.id)
+      .bind(nextLocale, new Date().toISOString(), userId)
       .run();
     locale = nextLocale;
-    await telegram.sendMessage(query.from.id, t(locale, 'languageSaved'));
+    await telegram.sendMessage(userId, t(locale, 'languageSaved'));
 
-    const session = await getSession(env, query.from.id);
+    if (!(await ensureBotAccess(userId, locale, env, telegram))) return;
+
+    const session = await getSession(env, userId);
     if (session) {
       if (session.step === 'confirm') {
-        await sendConfirmation(query.from.id, locale, parseDraft(session.data), telegram);
+        await sendConfirmation(userId, locale, parseDraft(session.data), telegram);
       } else {
-        await sendStep(query.from.id, session.step, locale, telegram);
+        await sendStep(userId, session.step, locale, telegram);
       }
     } else if (firstSelection) {
-      await sendWelcome(query.from.id, locale, telegram);
-      await sendMainMenu(query.from.id, locale, telegram);
+      await sendWelcome(userId, locale, telegram);
+      await sendMainMenu(userId, locale, telegram);
     } else {
-      await sendMainMenu(query.from.id, locale, telegram);
+      await sendMainMenu(userId, locale, telegram);
     }
     return;
   }
 
+  if (data === 'access:retry') {
+    const access = await checkBotAccess(userId, env, telegram, { force: true });
+    if (!access.allowed) {
+      await sendAccessGate(userId, locale, access, telegram, query.message?.message_id);
+      return;
+    }
+    if (query.message?.message_id) {
+      await telegram.editMessageText(userId, query.message.message_id, t(locale, 'accessGranted'))
+        .catch(() => undefined);
+    } else {
+      await telegram.sendMessage(userId, t(locale, 'accessGranted'));
+    }
+    await sendMainMenu(userId, locale, telegram);
+    return;
+  }
+
+  if (data === 'menu:language') {
+    await sendLanguagePicker(userId, locale, telegram);
+    return;
+  }
+
+  if (!(await ensureBotAccess(userId, locale, env, telegram, query.message?.message_id))) return;
+
   if (data === 'promo:optout') {
-    await disablePromoReminders(query.from.id, env, telegram);
+    await disablePromoReminders(userId, env, telegram);
     return;
   }
 
@@ -368,135 +400,145 @@ async function handleCallback(
 
   const queuePage = /^queue:page:(\d+)$/.exec(data);
   if (queuePage) {
-    await showPublicQueue(query.from.id, locale, env, telegram, Number(queuePage[1]), query.message?.message_id);
+    await showPublicQueue(userId, locale, env, telegram, Number(queuePage[1]), query.message?.message_id);
     return;
   }
   const requestPage = /^myreq:page:(\d+)$/.exec(data);
   if (requestPage) {
-    await showMyRequests(query.from.id, locale, env, telegram, Number(requestPage[1]), query.message?.message_id);
+    await showMyRequests(userId, locale, env, telegram, Number(requestPage[1]), query.message?.message_id);
     return;
   }
 
   switch (data) {
     case 'menu:home':
-      await sendMainMenu(query.from.id, locale, telegram);
-      return;
-    case 'menu:language':
-      await sendLanguagePicker(query.from.id, locale, telegram);
+      await sendMainMenu(userId, locale, telegram);
       return;
     case 'menu:rules':
-      await sendRules(query.from.id, locale, telegram, false);
+      await sendRules(userId, locale, telegram, false);
       return;
     case 'menu:limit':
-      await sendLimit(query.from.id, locale, env, telegram);
+      await sendLimit(userId, locale, env, telegram);
       return;
     case 'menu:queue':
-      await showPublicQueue(query.from.id, locale, env, telegram);
+      await showPublicQueue(userId, locale, env, telegram);
       return;
     case 'menu:myrequests':
-      await showMyRequests(query.from.id, locale, env, telegram);
+      await showMyRequests(userId, locale, env, telegram);
       return;
     case 'menu:guide':
-      await sendGuide(query.from.id, locale, telegram);
+      await sendGuide(userId, locale, telegram);
       return;
     case 'menu:submit':
-      await beginSubmission(query.from.id, locale, env, telegram);
+      await beginSubmission(userId, locale, env, telegram);
       return;
     case 'form:agree': {
-      const session = await getSession(env, query.from.id);
+      const session = await getSession(env, userId);
       if (!session || session.step !== 'rules') {
-        await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+        await telegram.sendMessage(userId, t(locale, 'unknownAction'));
         return;
       }
-      await saveSession(env, query.from.id, 'title', {});
-      await sendStep(query.from.id, 'title', locale, telegram);
+      await saveSession(env, userId, 'title', {});
+      await sendStep(userId, 'title', locale, telegram);
       return;
     }
     case 'form:cancel':
-      await clearSession(env, query.from.id);
-      await telegram.sendMessage(query.from.id, t(locale, 'cancelled'));
-      await sendMainMenu(query.from.id, locale, telegram);
+      await clearSession(env, userId);
+      await telegram.sendMessage(userId, t(locale, 'cancelled'));
+      await sendMainMenu(userId, locale, telegram);
       return;
     case 'form:restart':
-      await saveSession(env, query.from.id, 'rules', {});
-      await sendRules(query.from.id, locale, telegram, true);
+      await saveSession(env, userId, 'rules', {});
+      await sendRules(userId, locale, telegram, true);
       return;
     case 'form:status:ongoing':
     case 'form:status:completed': {
-      const session = await getSession(env, query.from.id);
+      const session = await getSession(env, userId);
       if (!session || session.step !== 'publication_status') {
-        await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+        await telegram.sendMessage(userId, t(locale, 'unknownAction'));
         return;
       }
       const draft = parseDraft(session.data);
       draft.publication_status = data.endsWith('completed') ? 'completed' : 'ongoing';
-      await saveSession(env, query.from.id, 'source_url', draft);
-      await sendStep(query.from.id, 'source_url', locale, telegram);
+      await saveSession(env, userId, 'source_url', draft);
+      await sendStep(userId, 'source_url', locale, telegram);
       return;
     }
     case 'form:skip_source': {
-      const session = await getSession(env, query.from.id);
+      const session = await getSession(env, userId);
       if (!session || session.step !== 'source_url') {
-        await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+        await telegram.sendMessage(userId, t(locale, 'unknownAction'));
         return;
       }
       const draft = parseDraft(session.data);
       draft.source_url = '';
-      await saveSession(env, query.from.id, 'raw_file', draft);
-      await sendStep(query.from.id, 'raw_file', locale, telegram);
+      await saveSession(env, userId, 'raw_file', draft);
+      await sendStep(userId, 'raw_file', locale, telegram);
       return;
     }
     case 'form:none_sexual': {
-      const session = await getSession(env, query.from.id);
+      const session = await getSession(env, userId);
       if (!session || session.step !== 'sexual_content') {
-        await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+        await telegram.sendMessage(userId, t(locale, 'unknownAction'));
         return;
       }
       const draft = parseDraft(session.data);
       draft.sexual_content = 'None';
-      await saveSession(env, query.from.id, 'sensitive_content', draft);
-      await sendStep(query.from.id, 'sensitive_content', locale, telegram);
+      await saveSession(env, userId, 'sensitive_content', draft);
+      await sendStep(userId, 'sensitive_content', locale, telegram);
       return;
     }
     case 'form:none_sensitive': {
-      const session = await getSession(env, query.from.id);
+      const session = await getSession(env, userId);
       if (!session || session.step !== 'sensitive_content') {
-        await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+        await telegram.sendMessage(userId, t(locale, 'unknownAction'));
         return;
       }
       const draft = parseDraft(session.data);
       draft.sensitive_content = 'None';
-      await saveSession(env, query.from.id, 'notes', draft);
-      await sendStep(query.from.id, 'notes', locale, telegram);
+      await saveSession(env, userId, 'notes', draft);
+      await sendStep(userId, 'notes', locale, telegram);
       return;
     }
     case 'form:skip_notes': {
-      const session = await getSession(env, query.from.id);
+      const session = await getSession(env, userId);
       if (!session || session.step !== 'notes') {
-        await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+        await telegram.sendMessage(userId, t(locale, 'unknownAction'));
         return;
       }
       const draft = parseDraft(session.data);
       draft.notes = '';
-      await saveSession(env, query.from.id, 'confirm', draft);
-      await sendConfirmation(query.from.id, locale, draft, telegram);
+      await saveSession(env, userId, 'confirm', draft);
+      await sendConfirmation(userId, locale, draft, telegram);
       return;
     }
     case 'form:retry_chapters': {
-      const session = await getSession(env, query.from.id);
+      const session = await getSession(env, userId);
       if (!session || session.step !== 'chapter_count') {
-        await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+        await telegram.sendMessage(userId, t(locale, 'unknownAction'));
         return;
       }
-      await sendStep(query.from.id, 'chapter_count', locale, telegram);
+      await sendStep(userId, 'chapter_count', locale, telegram);
       return;
     }
     case 'form:confirm':
       await finalizeSubmission(query.from, locale, env, telegram, ctx);
       return;
     default:
-      await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
+      await telegram.sendMessage(userId, t(locale, 'unknownAction'));
   }
+}
+
+async function ensureBotAccess(
+  userId: number,
+  locale: Locale,
+  env: Env,
+  telegram: TelegramClient,
+  messageId?: number,
+): Promise<boolean> {
+  const access = await checkBotAccess(userId, env, telegram);
+  if (access.allowed) return true;
+  await sendAccessGate(userId, locale, access, telegram, messageId);
+  return false;
 }
 
 async function validateLength(

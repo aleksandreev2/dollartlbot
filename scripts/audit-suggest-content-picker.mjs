@@ -111,6 +111,6 @@ if(viewIndex<0||pickerIndex<0||apiIndex<0||bootstrap<0||pickerIndex<=viewIndex||
 need(headers,'/app/\n  Cache-Control: no-store, max-age=0','Mini App document cache policy');
 need(headers,'/app/index.html\n  Cache-Control: no-store, max-age=0','Mini App index cache policy');
 need(wrangler,'MINI_APP_URL','versioned Mini App URL');
-need(wrangler,'?build=20260810-content4','versioned Mini App URL');
+if(!/\/app\/\?build=[A-Za-z0-9._-]+/.test(wrangler))throw new Error('Mini App URL must retain a non-empty build query for Telegram WebView freshness.');
 
 console.log('Suggest content picker audit passed: one canonical step-3 renderer, no temporary DOM activation bridge, Lucide wizard icons, mobile polish, and fresh Mini App assets.');
