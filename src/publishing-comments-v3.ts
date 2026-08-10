@@ -1,6 +1,9 @@
+import { queuePublicationReleaseBroadcast, runBroadcastMaintenanceWithLease } from './broadcast-runner';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
-import { queueReleaseBroadcast, runBroadcastMaintenance } from './notifications';
 import { escapeHtml, type TelegramClient, type TelegramMessage } from './telegram';
+
+const MAX_BODY = 700;
+const FILES_LINE = '📎 Files are in the comments.';
 
 type PublicationRow = {
   id:number;
@@ -15,6 +18,8 @@ type PublicationRow = {
   image_mime:string|null;
   image_spoiler:number;
   channel_message_id:number|null;
+  submission_id:number|null;
+  requester_username_snapshot:string|null;
 };
 
 type Settings = {
@@ -23,7 +28,8 @@ type Settings = {
   bot_username:string;
 };
 
-type ChatInfo = { id:number; type:string; title?:string; linked_chat_id?:number };
+type ChatInfo = { id:number; type:string; title?:string; username?:string; linked_chat_id?:number };
+type ManagedBody = { body:string; requesterUsername:string|null };
 
 /**
  * Telegram clients hide the native channel comment button when the channel post
@@ -50,10 +56,19 @@ export async function handlePublishingCommentsV3Request(
   const publication=await env.DB.prepare('SELECT * FROM publications WHERE id=?').bind(id).first<PublicationRow>();
   if(!publication)return miniAppJsonError('not_found','Publication not found.',404);
 
+  const managed=await buildManagedBody(publication,env,telegram);
+  if(managed.body.length>MAX_BODY){
+    return miniAppJsonError(
+      'publication_template_too_long',
+      `С автоматическими строками текст занимает ${managed.body.length} / ${MAX_BODY} символов. Сократите основной текст.`,
+      400,
+    );
+  }
+
   if(action==='test'){
     await writeLog(env,id,'info','test_started','Начата тестовая отправка без inline-кнопок под основным постом.');
     try{
-      await sendPreview(publication,env,telegram);
+      await sendPreview(publication,managed.body,env,telegram);
       await writeLog(env,id,'success','test_sent','Тестовая публикация отправлена. Основной пост не содержит inline keyboard.');
       return miniAppJson({ok:true});
     }catch(error){
@@ -81,12 +96,23 @@ export async function handlePublishingCommentsV3Request(
     return miniAppJsonError('channel_invalid',message,409);
   }
 
-  await writeLog(env,id,'info','publish_started','Начата публикация. Inline keyboard у основного channel post отключён, чтобы Telegram показал комментарии.');
   const now=new Date().toISOString();
-  await env.DB.prepare("UPDATE publications SET status='publishing',error_text=NULL,updated_at=? WHERE id=?").bind(now,id).run();
+  const claimed=await env.DB.prepare(`
+    UPDATE publications
+    SET status='publishing',error_text=NULL,updated_at=?
+    WHERE id=? AND status IN ('draft','failed')
+  `).bind(now,id).run();
+  if((claimed.meta.changes??0)===0){
+    const current=await env.DB.prepare('SELECT status FROM publications WHERE id=?').bind(id).first<{status:string}>();
+    if(current?.status==='published')return miniAppJsonError('already_published','Пост уже опубликован.',409);
+    if(current?.status==='publishing')return miniAppJsonError('publish_in_progress','Публикация уже отправляется.',409);
+    return miniAppJsonError('invalid_state','Публикацию нельзя отправить из текущего состояния.',409);
+  }
+
+  await writeLog(env,id,'info','publish_started','Начата публикация. Inline keyboard у основного channel post отключён, чтобы Telegram показал комментарии.');
 
   try{
-    const text=composePost(publication,settings);
+    const text=composePost(managed.body,publication,settings);
     let sent:TelegramMessage;
     if(publication.image_key){
       const file=await r2File(env,publication.image_key,publication.image_mime||'image/jpeg','post.jpg');
@@ -105,9 +131,9 @@ export async function handlePublishingCommentsV3Request(
     }
 
     if(publication.notify_users){
-      await queueReleaseBroadcast(env,id,publication.internal_title,publication.body_html);
-      await writeLog(env,id,'success','broadcast_queued','Рассылка релиза поставлена в очередь.');
-      ctx.waitUntil(runBroadcastMaintenance(env,telegram,4));
+      await queuePublicationReleaseBroadcast(env,id,publication.internal_title,managed.body);
+      await writeLog(env,id,'success','broadcast_queued','Рассылка релиза поставлена в очередь с защитой от дублей.');
+      ctx.waitUntil(runBroadcastMaintenanceWithLease(env,telegram,4));
     }
 
     return miniAppJson({ok:true,channel_message_id:sent.message_id,comments_expected:Boolean(channel.linked_chat_id)});
@@ -120,9 +146,74 @@ export async function handlePublishingCommentsV3Request(
   }
 }
 
-async function sendPreview(p:PublicationRow,env:Env,telegram:TelegramClient):Promise<void>{
+async function buildManagedBody(p:PublicationRow,env:Env,telegram:TelegramClient):Promise<ManagedBody>{
+  const raw=stripManagedTemplateLines(p.body_html);
+  const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM publication_assets WHERE publication_id=?')
+    .bind(p.id).first<{n:number}>();
+  const lines:string[]=[];
+  if(Number(count?.n??0)>0)lines.push(FILES_LINE);
+
+  let requesterUsername=cleanUsername(p.requester_username_snapshot);
+  if(p.submission_id){
+    const linked=await env.DB.prepare(`
+      SELECT s.user_id,
+             COALESCE(NULLIF(u.username,''),NULLIF(s.username_snapshot,''),NULLIF(?,'')) AS requester_username
+      FROM submissions s
+      LEFT JOIN users u ON u.telegram_id=s.user_id
+      WHERE s.id=?
+    `).bind(requesterUsername,p.submission_id).first<{user_id:number;requester_username:string|null}>();
+
+    if(linked){
+      requesterUsername=await resolveCurrentUsername(telegram,linked.user_id,linked.requester_username);
+      if(requesterUsername){
+        const stamp=new Date().toISOString();
+        await env.DB.batch([
+          env.DB.prepare('UPDATE publications SET requester_username_snapshot=?,updated_at=? WHERE id=?')
+            .bind(requesterUsername,stamp,p.id),
+          env.DB.prepare('UPDATE users SET username=?,updated_at=? WHERE telegram_id=?')
+            .bind(requesterUsername,stamp,linked.user_id),
+        ]).catch(()=>undefined);
+      }
+    }
+
+    lines.push(requesterUsername
+      ? `Requested by: @${requesterUsername}`
+      : `Requested by: request #${p.submission_id}`);
+  }
+
+  return {
+    body:[raw,lines.join('\n')].filter(Boolean).join('\n\n'),
+    requesterUsername:requesterUsername||null,
+  };
+}
+
+async function resolveCurrentUsername(telegram:TelegramClient,userId:number,fallback:string|null):Promise<string>{
+  try{
+    const chat=await telegram.call<{username?:string}>('getChat',{chat_id:userId});
+    const current=cleanUsername(chat.username??null);
+    if(current)return current;
+  }catch{}
+  return cleanUsername(fallback);
+}
+
+function stripManagedTemplateLines(value:string):string{
+  return String(value||'')
+    .split(/\r?\n/)
+    .filter((line)=>{
+      const text=line.trim();
+      if(!text)return true;
+      if(/^📎\s*(?:Файлы.*комментар|Files?.*comments?)/iu.test(text))return false;
+      if(/^(?:Запрошено|Request|Requested(?:\s+by)?):\s*.+$/iu.test(text))return false;
+      return true;
+    })
+    .join('\n')
+    .replace(/\n{3,}/g,'\n\n')
+    .trim();
+}
+
+async function sendPreview(p:PublicationRow,body:string,env:Env,telegram:TelegramClient):Promise<void>{
   const settings=await getSettings(env);
-  const text=`<b>🧪 ТЕСТ ПУБЛИКАЦИИ</b>\n\n${composePost(p,settings)}\n\n<i>В реальном канале inline-кнопок под постом не будет — это сохраняет нативную кнопку комментариев.</i>`;
+  const text=`<b>🧪 ТЕСТ ПУБЛИКАЦИИ</b>\n\n${composePost(body,p,settings)}\n\n<i>В реальном канале inline-кнопок под постом не будет — это сохраняет нативную кнопку комментариев.</i>`;
   if(p.image_key){
     const file=await r2File(env,p.image_key,p.image_mime||'image/jpeg','preview.jpg');
     await telegram.sendPhotoUpload(env.ADMIN_TELEGRAM_ID,file,text,{has_spoiler:p.image_spoiler===1});
@@ -131,8 +222,8 @@ async function sendPreview(p:PublicationRow,env:Env,telegram:TelegramClient):Pro
   }
 }
 
-function composePost(p:PublicationRow,s:Settings):string{
-  const parts=[escapeHtml(p.body_html.trim())];
+function composePost(body:string,p:PublicationRow,s:Settings):string{
+  const parts=[escapeHtml(body.trim())];
   const botUrl=`https://t.me/${s.bot_username||'dollartlbot'}?start=submit`;
   if(p.add_footer){
     parts.push(`<b>Need a translation?</b>\nOpen <a href="${escapeHtml(botUrl)}">Dollar TL Bot</a> and suggest a novel for translation.`);
@@ -162,6 +253,11 @@ async function r2File(env:Env,key:string,mime:string,name:string):Promise<File>{
 async function writeLog(env:Env,publicationId:number,level:'info'|'success'|'warning'|'error',event:string,message:string,details?:string):Promise<void>{
   await env.DB.prepare(`INSERT INTO publication_logs (publication_id,level,event,message,details,created_at) VALUES (?,?,?,?,?,?)`)
     .bind(publicationId,level,event,message,details||null,new Date().toISOString()).run().catch(()=>undefined);
+}
+
+function cleanUsername(value:string|null|undefined):string{
+  const raw=String(value||'').trim().replace(/^@/,'');
+  return /^[A-Za-z0-9_]{5,32}$/.test(raw)?raw:'';
 }
 
 function normalizeChatId(value:string):number|string{

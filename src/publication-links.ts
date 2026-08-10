@@ -1,8 +1,10 @@
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
+import type { TelegramClient } from './telegram';
 
 export async function handlePublicationLinksRequest(
   request: Request,
   env: Env,
+  telegram: TelegramClient,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   const linkMatch = /^\/api\/app\/admin\/publications\/(\d+)\/link-request$/.exec(url.pathname);
@@ -70,29 +72,61 @@ export async function handlePublicationLinksRequest(
   }
 
   const submission = await env.DB.prepare(`
-    SELECT s.id, s.status,
+    SELECT s.id, s.status, s.user_id,
            COALESCE(NULLIF(u.username,''), NULLIF(s.username_snapshot,'')) AS requester_username
     FROM submissions s
     LEFT JOIN users u ON u.telegram_id = s.user_id
     WHERE s.id=?
-  `).bind(submissionId).first<{ id: number; status: string; requester_username: string | null }>();
+  `).bind(submissionId).first<{
+    id: number;
+    status: string;
+    user_id: number;
+    requester_username: string | null;
+  }>();
   if (!submission) return miniAppJsonError('submission_not_found', 'Request not found.', 404);
   if (submission.status !== 'accepted') {
     return miniAppJsonError('submission_not_publishable', 'Only an accepted request can be linked to a publication.', 409);
   }
 
-  const username = cleanUsername(submission.requester_username);
+  const username = await resolveCurrentUsername(
+    telegram,
+    submission.user_id,
+    submission.requester_username,
+  );
+  const now = new Date().toISOString();
+
+  if (username) {
+    await env.DB.prepare(
+      'UPDATE users SET username=?, updated_at=? WHERE telegram_id=?',
+    ).bind(username, now, submission.user_id).run().catch(() => undefined);
+  }
+
   await env.DB.prepare(`
     UPDATE publications
     SET submission_id=?, requester_username_snapshot=?, updated_at=?
     WHERE id=?
-  `).bind(submissionId, username || null, new Date().toISOString(), publicationId).run();
+  `).bind(submissionId, username || null, now, publicationId).run();
 
   return miniAppJson({
     ok: true,
     submission_id: submissionId,
     requester_username: username || null,
   });
+}
+
+async function resolveCurrentUsername(
+  telegram: TelegramClient,
+  userId: number,
+  fallback: string | null,
+): Promise<string> {
+  try {
+    const chat = await telegram.call<{ username?: string }>('getChat', { chat_id: userId });
+    const live = cleanUsername(chat.username ?? null);
+    if (live) return live;
+  } catch {
+    // A request can still be linked if Telegram cannot refresh the private chat.
+  }
+  return cleanUsername(fallback);
 }
 
 function cleanUsername(value: string | null): string {

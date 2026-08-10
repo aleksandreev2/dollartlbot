@@ -5,8 +5,7 @@
     throw new Error('DTL runtime must load before publication-template-ui.js');
   }
 
-  const MAX_BODY = 700;
-  const FILES_LINE = '📎 Файлы — в комментариях.';
+  const FILES_LINE = '📎 Files are in the comments.';
   let rows = [];
   let loading = null;
   let loadedAt = 0;
@@ -41,7 +40,7 @@
   function requestLine(row) {
     if (!row) return '';
     const username = String(row.requester_username || '').trim().replace(/^@/, '');
-    return username ? `Запрошено: @${username}` : `Запрошено: заявка #${Number(row.id)}`;
+    return username ? `Requested by: @${username}` : `Requested by: request #${Number(row.id)}`;
   }
 
   function templateLines(form) {
@@ -53,12 +52,6 @@
     const request = selectedRequest();
     if (request) lines.push(requestLine(request));
     return lines;
-  }
-
-  function composeBody(raw, lines) {
-    const body = String(raw || '').trim();
-    const additions = lines.filter((line) => line && !body.includes(line));
-    return additions.length ? `${body}\n\n${additions.join('\n')}` : body;
   }
 
   function updatePreview() {
@@ -95,7 +88,7 @@
       <div class="publication-request-select-wrap">${icon('link-2')}
         <select id="pubSubmissionId"><option value="">Без связи с заявкой</option></select>
       </div>
-      <small class="publication-request-help">В пост автоматически добавится «Запрошено: @username». Связь сохранится в Dollar TL.</small>`;
+      <small class="publication-request-help">В пост автоматически добавится «Requested by: @username». Перед публикацией username перепроверяется через Telegram.</small>`;
     host.after(field);
 
     try {
@@ -115,9 +108,9 @@
         if (help) {
           help.textContent = request
             ? (request.requester_username
-              ? `Будет добавлено: «Запрошено: @${String(request.requester_username).replace(/^@/, '')}».`
-              : `У заявки нет @username. Будет добавлено: «Запрошено: заявка #${request.id}».`)
-            : 'В пост автоматически добавится «Запрошено: @username». Связь сохранится в Dollar TL.';
+              ? `Сейчас: «Requested by: @${String(request.requester_username).replace(/^@/, '')}». Username будет перепроверен перед отправкой.`
+              : `У заявки нет @username. Будет добавлено: «Requested by: request #${request.id}».`)
+            : 'В пост автоматически добавится «Requested by: @username». Перед публикацией username перепроверяется через Telegram.';
         }
         updatePreview();
       });
@@ -150,17 +143,7 @@
     if (!(init?.body instanceof FormData)) return next(input, init);
 
     const request = selectedRequest();
-    const form = new FormData();
-    for (const [key, value] of init.body.entries()) form.append(key, value);
-    const finalBody = composeBody(form.get('body'), templateLines(form));
-    if (finalBody.length > MAX_BODY) {
-      return new Response(JSON.stringify({
-        error: { code:'publication_template_too_long', message:`С шаблонными строками текст занимает ${finalBody.length} / ${MAX_BODY} символов. Сократите основной текст.` },
-      }), { status:400, headers:{ 'content-type':'application/json; charset=utf-8', 'cache-control':'no-store' } });
-    }
-    form.set('body', finalBody);
-
-    const response = await next(input, { ...init, body: form });
+    const response = await next(input, init);
     if (!response.ok || !request) return response;
 
     const payload = await response.clone().json().catch(() => ({}));
@@ -172,7 +155,14 @@
       headers: { ...headers(), 'content-type':'application/json' },
       body: JSON.stringify({ submission_id:Number(request.id) }),
     });
-    if (linkResponse.ok) return response;
+    if (linkResponse.ok) {
+      const linked = await linkResponse.clone().json().catch(() => ({}));
+      if (linked?.requester_username) {
+        request.requester_username = linked.requester_username;
+        updatePreview();
+      }
+      return response;
+    }
 
     const failure = await linkResponse.json().catch(() => ({}));
     await fetch(`/api/app/admin/publications/${publicationId}`, {
