@@ -16,6 +16,7 @@ const telegram = read('src/telegram.ts');
 const configure = read('scripts/configure-bot.mjs');
 const adminApi = read('src/access-admin.ts');
 const gateUi = read('public/app/access-gate-ui.js');
+const gateCss = read('public/app/access-gate-ui.css');
 const adminUi = read('public/app/access-admin-ui.js');
 const html = read('public/app/index.html');
 const wrangler = read('wrangler.jsonc');
@@ -83,7 +84,16 @@ for (const token of [
   "document.addEventListener('visibilitychange'",
   'runtime.registerResponseHandler',
   'app.state.accessLocked = true',
+  'function setChromeLocked(locked)',
+  "app.root.classList.toggle('access-locked', locked)",
+  "app.sheetRoot.innerHTML = ''",
+  'bell.disabled = locked',
 ]) need(gateUi, token, 'Mini App gate UX');
+for (const token of [
+  '.app-shell.access-locked .topbar .brand',
+  '.app-shell.access-locked .topbar .notification-button',
+  'pointer-events: none',
+]) need(gateCss, token, 'Mini App gate CSS');
 
 for (const token of [
   "url.pathname !== '/api/app/admin/access'",
@@ -115,4 +125,4 @@ need(wrangler, '?build=20260810-access1', 'fresh Mini App URL');
 new Function(gateUi);
 new Function(adminUi);
 
-console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, referral-safe onboarding, localized bot/Mini App UX, admin diagnostics, and live rechecks are wired.');
+console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, referral-safe onboarding, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
