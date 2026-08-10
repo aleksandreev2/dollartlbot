@@ -1,5 +1,5 @@
 import { errorText, isAdmin } from './db';
-import { normalizeLocale, t, type Locale } from './i18n/index';
+import { t, type Locale } from './i18n/index';
 import { getSubscriptionState } from './subscription';
 import {
   isActiveChatMember,
@@ -11,7 +11,6 @@ import {
 
 const POSITIVE_TTL_MS = 3 * 60 * 1000;
 const NEGATIVE_TTL_MS = 15 * 1000;
-const EVENT_NEGATIVE_TTL_MS = 5 * 60 * 1000;
 const STALE_POSITIVE_GRACE_MS = 30 * 60 * 1000;
 const CONFIG_TTL_MS = 60 * 1000;
 
@@ -75,8 +74,13 @@ export async function checkBotAccess(
   const now = Date.now();
   const cached = await readCache(env, userId, config.channelKey);
   if (!options.force && cached && Date.parse(cached.expires_at) > now) {
-    if (cached.is_member === 1) return decision(true, cached.source === 'entitlement' ? 'entitlement' : 'cache', config);
-    return decision(false, 'membership_required', config);
+    if (cached.is_member === 1) {
+      return decision(true, cached.source === 'entitlement' ? 'entitlement' : 'cache', config);
+    }
+    // Only a denial written after both access paths were checked is authoritative.
+    // A channel leave event merely invalidates a prior positive cache; it must not
+    // suppress the internal entitlement check on the next interaction.
+    if (cached.source === 'denied') return decision(false, 'membership_required', config);
   }
 
   let channelCheckFailed = false;
@@ -99,14 +103,31 @@ export async function checkBotAccess(
     return decision(true, 'entitlement', config);
   }
 
+  if (
+    subscription.verificationError
+    && cached?.is_member === 1
+    && cached.source === 'entitlement'
+    && Date.parse(cached.stale_until) > now
+  ) {
+    return decision(true, 'cache', config);
+  }
+
   if (channelCheckFailed) {
-    if (cached?.is_member === 1 && Date.parse(cached.stale_until) > now) {
+    if (
+      cached?.is_member === 1
+      && cached.source !== 'entitlement'
+      && Date.parse(cached.stale_until) > now
+    ) {
       return decision(true, 'cache', config);
     }
     return decision(false, 'check_unavailable', config);
   }
 
-  await writeCache(env, userId, config.channelKey, false, 'channel', NEGATIVE_TTL_MS, NEGATIVE_TTL_MS);
+  // The user is known not to be in the required channel, but an entitlement API
+  // failure means we still cannot safely conclude that access should be denied.
+  if (subscription.verificationError) return decision(false, 'check_unavailable', config);
+
+  await writeCache(env, userId, config.channelKey, false, 'denied', NEGATIVE_TTL_MS, NEGATIVE_TTL_MS);
   return decision(false, 'membership_required', config);
 }
 
@@ -122,8 +143,8 @@ export async function handleAccessChatMemberUpdate(update: TelegramChatMemberUpd
     config.channelKey,
     active,
     'channel_event',
-    active ? POSITIVE_TTL_MS : EVENT_NEGATIVE_TTL_MS,
-    active ? STALE_POSITIVE_GRACE_MS : EVENT_NEGATIVE_TTL_MS,
+    active ? POSITIVE_TTL_MS : 0,
+    active ? STALE_POSITIVE_GRACE_MS : 0,
   );
 }
 
