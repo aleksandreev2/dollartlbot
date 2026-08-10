@@ -43,10 +43,11 @@ const quotaWords=evalObject(between(quota,'const words=',';\n  const captions=')
 const quotaCaptions=evalObject(between(quota,'const captions=',';\n  function norm'),'quota captions');exactLocales(quotaWords,'quota words');exactLocales(quotaCaptions,'quota captions');
 
 const base={};for(const locale of allLocales)base[locale]=evalExportObject(`src/i18n/${locale}.ts`,locale);
-const layerSpecs=[['src/i18n/features.ts','featureTranslations'],['src/i18n/policy.ts','policyTranslations'],['src/i18n/policy_override.ts','policyOverrideTranslations'],['src/i18n/status_override.ts','statusOverrideTranslations'],['src/i18n/quality_override.ts','qualityOverrideTranslations'],['src/i18n/rules_quality_override.ts','rulesQualityOverrideTranslations'],['src/i18n/interface_polish.ts','interfacePolishTranslations'],['src/i18n/locale_cleanup.ts','localeCleanupTranslations']];
-const layers=layerSpecs.map(([path,name])=>{const obj=evalExportObject(path,name);exactLocales(obj,`${path}/${name}`);return obj;});
+const layerSpecs=[['src/i18n/features.ts','featureTranslations'],['src/i18n/policy.ts','policyTranslations'],['src/i18n/policy_override.ts','policyOverrideTranslations'],['src/i18n/status_override.ts','statusOverrideTranslations'],['src/i18n/quality_override.ts','qualityOverrideTranslations'],['src/i18n/rules_quality_override.ts','rulesQualityOverrideTranslations'],['src/i18n/interface_polish.ts','interfacePolishTranslations'],['src/i18n/locale_cleanup.ts','localeCleanupTranslations'],['src/i18n/access_gate.ts','accessGateTranslations']];
+const layers=layerSpecs.map(([path,name])=>{const obj=evalExportObject(path,name);exactLocales(obj,`${path}/${name}`);sameKeys(obj,`${path}/${name}`);return obj;});
 const merged={};for(const locale of allLocales)merged[locale]=Object.assign({},base[locale],...layers.map(layer=>layer[locale]||{}));sameKeys(merged,'Final Telegram bot dictionaries');
 for(const locale of allLocales)for(const [key,value] of Object.entries(merged[locale]))if(typeof value!=='string'||!value.trim())throw new Error(`Final Telegram bot dictionaries/${locale}: empty ${key}`);
+for(const locale of allLocales)for(const key of ['accessRequiredTitle','accessRequiredText','accessJoinButton','accessRetryButton','accessGranted','accessCheckUnavailableTitle','accessCheckUnavailableText'])if(!merged[locale]?.[key])throw new Error(`Access gate/${locale}: missing ${key}`);
 
 const i18nCore=read('public/app/i18n-core.js');
 const presenter=read('public/app/novel-presenter.js');
@@ -79,4 +80,4 @@ if(index.indexOf('/app/view-i18n.js')>index.indexOf('/app/view-home.js'))throw n
 for(const legacy of ['/app/locale-sync.js','/app/i18n-inline-fixes.js','/app/i18n-wizard.js','/app/i18n-complete.js','/app/ui-polish.js','/app/language-display-fix.js','/app/onboarding-interactions-fix.js'])forbid(index,legacy,'legacy localization/runtime asset');
 for(const removed of ['public/app/i18n-wizard.js','public/app/i18n-complete.js','public/app/ui-polish.js','public/app/onboarding-interactions-fix.js'])if(fs.existsSync(new URL(`../${removed}`,import.meta.url)))throw new Error(`Legacy localization/runtime file must be removed: ${removed}`);
 
-console.log(`Localization audit passed for ${allLocales.length} locales with render-time views, canonical Suggest content localization, semantic presenter events, localized Guide/Rules, and one fallback catalog pipeline.`);
+console.log(`Localization audit passed for ${allLocales.length} locales with render-time views, canonical Suggest content localization, access-gate localization, semantic presenter events, localized Guide/Rules, and one fallback catalog pipeline.`);
