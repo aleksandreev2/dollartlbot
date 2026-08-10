@@ -81,7 +81,7 @@ for (const token of [
   "fetch('/api/app/access'",
   "headers.set('x-access-recheck', '1')",
   'tg?.openTelegramLink',
-  'window.setInterval(verifyAccess, 60_000)',
+  'window.setInterval(() => void verifyAccess(false), 60_000)',
   "document.addEventListener('visibilitychange'",
   'runtime.registerResponseHandler',
   'app.state.accessLocked = true',
@@ -91,6 +91,8 @@ for (const token of [
   'bell.disabled = locked',
   "emitAccessLifecycle('dtl:accesslocked'",
   "emitAccessLifecycle('dtl:accessready'",
+  'const result = await requestAccess(true)',
+  'void verifyAccess(true)',
 ]) need(gateUi, token, 'Mini App gate UX');
 for (const token of [
   '.app-shell.access-locked .topbar .brand',
@@ -130,17 +132,24 @@ for (const locale of ['en','es','fil','hi','pt','id','vi','fr','de','ru']) need(
 forbid(gateCopy, 'Boosty', 'user-facing access gate copy');
 forbid(gateCopy, 'boosty', 'user-facing access gate copy');
 
-need(configure, "allowed_updates: ['message', 'callback_query', 'chat_member']", 'Telegram webhook membership updates');
+for (const token of [
+  "allowed_updates: ['message', 'callback_query', 'chat_member']",
+  "readFileSync(new URL('../wrangler.jsonc', import.meta.url)",
+  'const configuredMiniAppUrl = readConfiguredMiniAppUrl()',
+  'process.env.MINI_APP_URL',
+  '|| configuredMiniAppUrl',
+  "web_app: { url: miniAppUrl }",
+]) need(configure, token, 'Telegram configuration freshness');
 need(html, '/app/access-gate-ui.css?v=20260810-access1', 'access gate CSS asset');
-need(html, '/app/access-gate-ui.js?v=20260810-access2', 'access gate JS asset');
+need(html, '/app/access-gate-ui.js?v=20260810-access3', 'access gate JS asset');
 need(html, '/app/onboarding-ui.js?v=20260810-runtime5', 'access-aware onboarding JS asset');
 need(html, '/app/access-admin-ui.js?v=20260810-access1', 'access admin JS asset');
 need(wrangler, 'MINI_APP_URL', 'fresh Mini App URL');
-need(wrangler, '?build=20260810-access2', 'fresh access-onboarding build');
+need(wrangler, '?build=20260810-access3', 'fresh strict-access build');
 if (!/\/app\/\?build=[A-Za-z0-9._-]+/.test(wrangler)) throw new Error('Mini App URL must retain a versioned build query.');
 
 new Function(gateUi);
 new Function(onboardingUi);
 new Function(adminUi);
 
-console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, referral-safe onboarding, coordinated access/onboarding lifecycle, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
+console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, strict open/resume rechecks for former members, bounded cache/grace, referral-safe onboarding, coordinated access lifecycle, versioned Telegram menu URL, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
