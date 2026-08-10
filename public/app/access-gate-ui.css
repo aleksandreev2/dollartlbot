@@ -1,3 +1,9 @@
+.app-shell.access-locked .topbar .brand,
+.app-shell.access-locked .topbar .notification-button {
+  pointer-events: none;
+}
+.app-shell.access-locked .topbar .notification-button { opacity: .45; }
+
 .access-gate-page {
   min-height: min(72vh, 620px);
   display: grid;
