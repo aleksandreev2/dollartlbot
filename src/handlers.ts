@@ -1,3 +1,4 @@
+import { checkBotAccess, sendAccessGate } from './access-gate';
 import { SUPPORTED_LANGUAGES, normalizeLocale, t, type Locale } from './i18n/index';
 import {
   MAX_LONG,
@@ -115,18 +116,15 @@ async function handleMessage(
   if (text === '/start' || text?.startsWith('/start ')) {
     const startParam = text.startsWith('/start ') ? text.slice('/start '.length).trim() : '';
     if (startParam) {
-      const handledReferral = await handleReferralBotStart(startParam, from.id, locale, env, telegram);
-      if (handledReferral) {
-        if (!user?.language_selected) await sendLanguagePicker(from.id, locale, telegram);
-        return;
-      }
+      await handleReferralBotStart(startParam, from.id, locale, env, telegram);
     }
 
     if (!user?.language_selected) {
       await sendLanguagePicker(from.id, locale, telegram);
-    } else {
-      await sendMainMenu(from.id, locale, telegram);
+      return;
     }
+    if (!(await ensureBotAccess(from.id, locale, env, telegram))) return;
+    await sendMainMenu(from.id, locale, telegram);
     return;
   }
 
@@ -139,6 +137,8 @@ async function handleMessage(
     await sendLanguagePicker(from.id, locale, telegram);
     return;
   }
+
+  if (!(await ensureBotAccess(from.id, locale, env, telegram))) return;
 
   if (text === '/rules') {
     await sendRules(from.id, locale, telegram, false);
@@ -340,6 +340,8 @@ async function handleCallback(
     locale = nextLocale;
     await telegram.sendMessage(query.from.id, t(locale, 'languageSaved'));
 
+    if (!(await ensureBotAccess(query.from.id, locale, env, telegram))) return;
+
     const session = await getSession(env, query.from.id);
     if (session) {
       if (session.step === 'confirm') {
@@ -355,6 +357,29 @@ async function handleCallback(
     }
     return;
   }
+
+  if (data === 'access:retry') {
+    const access = await checkBotAccess(query.from.id, env, telegram, { force: true });
+    if (!access.allowed) {
+      await sendAccessGate(query.from.id, locale, access, telegram, query.message?.message_id);
+      return;
+    }
+    if (query.message?.message_id) {
+      await telegram.editMessageText(query.from.id, query.message.message_id, t(locale, 'accessGranted'))
+        .catch(() => undefined);
+    } else {
+      await telegram.sendMessage(query.from.id, t(locale, 'accessGranted'));
+    }
+    await sendMainMenu(query.from.id, locale, telegram);
+    return;
+  }
+
+  if (data === 'menu:language') {
+    await sendLanguagePicker(query.from.id, locale, telegram);
+    return;
+  }
+
+  if (!(await ensureBotAccess(query.from.id, locale, env, telegram, query.message?.message_id))) return;
 
   if (data === 'promo:optout') {
     await disablePromoReminders(query.from.id, env, telegram);
@@ -380,9 +405,6 @@ async function handleCallback(
   switch (data) {
     case 'menu:home':
       await sendMainMenu(query.from.id, locale, telegram);
-      return;
-    case 'menu:language':
-      await sendLanguagePicker(query.from.id, locale, telegram);
       return;
     case 'menu:rules':
       await sendRules(query.from.id, locale, telegram, false);
@@ -466,7 +488,7 @@ async function handleCallback(
       }
       const draft = parseDraft(session.data);
       draft.sensitive_content = 'None';
-      await saveSession(env, query.from.id, 'notes', draft);
+      await saveSession(env, userId, 'notes', draft);
       await sendStep(query.from.id, 'notes', locale, telegram);
       return;
     }
@@ -497,6 +519,19 @@ async function handleCallback(
     default:
       await telegram.sendMessage(query.from.id, t(locale, 'unknownAction'));
   }
+}
+
+async function ensureBotAccess(
+  userId: number,
+  locale: Locale,
+  env: Env,
+  telegram: TelegramClient,
+  messageId?: number,
+): Promise<boolean> {
+  const access = await checkBotAccess(userId, env, telegram);
+  if (access.allowed) return true;
+  await sendAccessGate(userId, locale, access, telegram, messageId);
+  return false;
 }
 
 async function validateLength(
