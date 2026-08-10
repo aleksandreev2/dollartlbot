@@ -52,7 +52,7 @@ need(referrals,'`referral:${row.id}:qualified`','referral notification dedupe');
 forbid(referrals,'telegram.sendMessage(row.referrer_user_id, grant ? NOTIFY','legacy referral direct notification');
 
 for(const token of [
-  "new Set(['home','queue','suggest','requests','account'])",
+  "new Set(['home','queue','suggest','requests','account','admin'])",
   "url.searchParams.get('request')",
   "instance.state.requestFilter='all'",
   "document.addEventListener('dtl:requests',focusRequest)",
@@ -61,8 +61,8 @@ for(const token of [
 need(ui,'data-action-url','notification card target');
 need(ui,'DTL_NOTIFICATION_LINK?.open','notification card routing');
 need(css,'.request-card.notification-target','request highlight');
-need(html,'/app/notification-deeplink.js?v=20260810-notify1','notification deep-link asset');
+need(html,'/app/notification-deeplink.js?v=20260810-notify2','notification deep-link asset');
 need(html,'/app/notifications-ui.js?v=20260810-notify3','notification UI cache bust');
 need(html,'/app/notifications-ui.css?v=20260810-notify3','notification CSS cache bust');
 
-console.log('Notification delivery audit passed: durable retries, preserved preferences, idempotent/debounced progress, referral preference routing, and request deep links.');
+console.log('Notification delivery audit passed: durable retries, preserved preferences, idempotent/debounced progress, referral preference routing, and request/admin deep links.');
