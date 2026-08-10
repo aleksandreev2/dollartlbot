@@ -37,27 +37,64 @@ export function localeFromTelegramLanguageCode(languageCode?: string | null): st
 export async function upsertUser(env: Env, user: TelegramUser): Promise<void> {
   const now = new Date().toISOString();
   const initialLanguage = localeFromTelegramLanguageCode(user.language_code);
+  try {
+    await env.DB.prepare(`
+      INSERT INTO users (
+        telegram_id, username, first_name, language, language_selected,
+        created_at, updated_at, last_seen_at
+      )
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?)
+      ON CONFLICT(telegram_id) DO UPDATE SET
+        username = excluded.username,
+        first_name = excluded.first_name,
+        language = CASE WHEN users.language_selected = 0 THEN excluded.language ELSE users.language END,
+        updated_at = excluded.updated_at,
+        last_seen_at = excluded.last_seen_at
+    `)
+      .bind(user.id, user.username ?? null, user.first_name ?? null, initialLanguage, now, now, now)
+      .run();
+    return;
+  } catch (error) {
+    if (!isAdminEventsSchemaMissing(error)) throw error;
+  }
+
+  // Migration 0019 must not become a hard dependency for the public bot/Mini App.
+  // If a deployment races ahead of the remote D1 migration, preserve the legacy
+  // user flow and let the admin-event feature remain temporarily unavailable.
   await env.DB.prepare(`
     INSERT INTO users (
       telegram_id, username, first_name, language, language_selected,
-      created_at, updated_at, last_seen_at
+      created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, 0, ?, ?, ?)
+    VALUES (?, ?, ?, ?, 0, ?, ?)
     ON CONFLICT(telegram_id) DO UPDATE SET
       username = excluded.username,
       first_name = excluded.first_name,
       language = CASE WHEN users.language_selected = 0 THEN excluded.language ELSE users.language END,
-      updated_at = excluded.updated_at,
-      last_seen_at = excluded.last_seen_at
+      updated_at = excluded.updated_at
   `)
-    .bind(user.id, user.username ?? null, user.first_name ?? null, initialLanguage, now, now, now)
+    .bind(user.id, user.username ?? null, user.first_name ?? null, initialLanguage, now, now)
     .run();
 }
 
-export function getUser(env: Env, userId: number): Promise<UserRow | null> {
+export async function getUser(env: Env, userId: number): Promise<UserRow | null> {
+  try {
+    return await env.DB.prepare(`
+      SELECT telegram_id, username, first_name, language, language_selected,
+             created_at, updated_at, activated_at, activated_via, last_seen_at,
+             last_limit_reset_notified_month, last_promo_at, promo_opt_out,
+             miniapp_onboarded_at, adult_confirmed_at
+      FROM users WHERE telegram_id = ?
+    `)
+      .bind(userId)
+      .first<UserRow>();
+  } catch (error) {
+    if (!isAdminEventsSchemaMissing(error)) throw error;
+  }
+
   return env.DB.prepare(`
     SELECT telegram_id, username, first_name, language, language_selected,
-           created_at, updated_at, activated_at, activated_via, last_seen_at,
+           created_at, updated_at,
            last_limit_reset_notified_month, last_promo_at, promo_opt_out,
            miniapp_onboarded_at, adult_confirmed_at
     FROM users WHERE telegram_id = ?
@@ -163,4 +200,16 @@ export async function safeSecretEqual(left: string, right: string): Promise<bool
 
 export function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
+export function isAdminEventsSchemaMissing(error: unknown): boolean {
+  const text = errorText(error).toLowerCase();
+  const missingSchema = text.includes('no such column')
+    || text.includes('no such table')
+    || text.includes('has no column named');
+  if (!missingSchema) return false;
+  return text.includes('activated_at')
+    || text.includes('activated_via')
+    || text.includes('last_seen_at')
+    || text.includes('admin_events');
 }
