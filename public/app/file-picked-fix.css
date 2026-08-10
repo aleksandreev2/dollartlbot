@@ -1,0 +1,28 @@
+.upload-inner {
+  width: min(100%, 360px);
+  min-width: 0;
+}
+
+.file-picked {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.file-picked > div:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.file-picked > div:nth-child(2) > strong {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-picked > .status-pill {
+  justify-self: end;
+}
