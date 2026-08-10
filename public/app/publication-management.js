@@ -1,5 +1,8 @@
 (() => {
   const tg=window.Telegram?.WebApp;
+  const runtime=window.DTL_RUNTIME;
+  if(!runtime?.registerPatcher)throw new Error('DTL runtime core must load before publication-management.js');
+
   let cache=null,loading=false;
   const H=()=>({'x-telegram-init-data':tg?.initData||''});
   const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -35,7 +38,7 @@
     const b=card.querySelector('.publication-delete-button');if(b)b.disabled=true;
     try{const d=await api(`/api/app/admin/publications/${p.id}/delete-telegram`,{method:'POST'});p.telegram_deleted_at=d.telegram_deleted_at||new Date().toISOString();card.classList.add('telegram-deleted');card.querySelector('.publication-edit-button')?.remove();b?.remove();const actions=card.querySelector('.admin-publication-actions');actions?.insertAdjacentHTML('beforeend',`<span class="telegram-deleted-label">${icon('trash-2')} Удалено из Telegram</span>`);toast('Пост удалён из Telegram. История сохранена.');cache=null;icons();}catch(err){toast(err.message,true);if(b)b.disabled=false;}
   }
-  const root=document.getElementById('viewRoot');if(root)new MutationObserver(()=>queueMicrotask(install)).observe(root,{childList:true,subtree:false});
-  document.addEventListener('click',e=>{if(e.target.closest?.('[data-admin-v3="publications"]')){cache=null;setTimeout(install,0);}},true);
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+
+  runtime.registerPatcher(()=>{void install();});
+  document.addEventListener('click',e=>{if(e.target.closest?.('[data-admin-v3="publications"]')){cache=null;runtime.schedule();}},true);
 })();

@@ -38,6 +38,12 @@
 .tg-spoiler-badge svg { width:28px; height:28px; }
 .tg-spoiler-badge span { font-size:9px; letter-spacing:.16em; font-weight:900; }
 
+.publisher-preview .tg-preview-buttons { display:none!important; }
+.tg-preview-comments-note { display:flex; gap:8px; align-items:flex-start; margin-top:8px; padding:10px 11px; border:1px solid #dceadd; border-radius:12px; background:#f5fbf6; color:#4c5f50; }
+.tg-preview-comments-note>svg { width:16px; height:16px; flex:0 0 auto; }
+.tg-preview-comments-note strong { display:block; font-size:10px; }
+.tg-preview-comments-note small { display:block; margin-top:3px; font-size:9px; line-height:1.4; color:#7d897f; }
+
 .publishing-logs { margin:16px 0; }
 .publishing-log-list { display:grid; gap:7px; max-height:390px; overflow:auto; padding-right:3px; scrollbar-width:thin; }
 .publishing-log-row { display:grid; grid-template-columns:34px minmax(0,1fr); gap:10px; border:1px solid #eee7dc; border-radius:13px; padding:10px 11px; background:#fff; }

@@ -3,4 +3,5 @@ node_modules/
 .env
 .wrangler/
 worker-configuration.d.ts
+public/app/vendor/lucide.min.js
 .DS_Store

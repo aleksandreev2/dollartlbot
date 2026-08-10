@@ -1,4 +1,7 @@
 (() => {
+  const runtime = window.DTL_RUNTIME;
+  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before onboarding-interactions-fix.js');
+
   let startX = 0;
   let startY = 0;
   let startTarget = null;
@@ -30,9 +33,6 @@
       const control = rawTarget?.closest?.(TAP_SELECTOR);
       if (!control || control.hasAttribute?.('disabled')) return;
 
-      // Some Telegram Android WebViews occasionally suppress the synthetic click
-      // after touchend when several gesture/DOM layers are active. Trigger the
-      // already-bound control action explicitly and suppress the duplicate click.
       event.preventDefault();
       event.stopPropagation();
 
@@ -46,11 +46,5 @@
     }, { passive: false, capture: true });
   }
 
-  const observer = new MutationObserver(install);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', install, { once: true });
-  } else {
-    install();
-  }
+  runtime.registerPatcher(install);
 })();

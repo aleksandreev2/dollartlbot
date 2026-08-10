@@ -1,5 +1,8 @@
 (() => {
   const tg = window.Telegram?.WebApp;
+  const runtime = window.DTL_RUNTIME;
+  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before referrals-ui.js');
+
   let data = null;
   let loading = null;
   let pollTimer = null;
@@ -19,11 +22,8 @@
   };
 
   function locale() {
-    const lang = (document.documentElement.lang || 'en').toLowerCase();
-    if (lang.startsWith('ru')) return 'ru'; if (lang.startsWith('es')) return 'es';
-    if (lang.startsWith('fil') || lang.startsWith('tl')) return 'fil'; if (lang.startsWith('hi')) return 'hi';
-    if (lang.startsWith('pt')) return 'pt'; if (lang.startsWith('id')) return 'id'; if (lang.startsWith('vi')) return 'vi';
-    if (lang.startsWith('fr')) return 'fr'; if (lang.startsWith('de')) return 'de'; return 'en';
+    const value = runtime.locale();
+    return L[value] ? value : 'en';
   }
   const tr = (key) => L[locale()]?.[key] || L.en[key] || key;
 
@@ -269,9 +269,14 @@
   function esc(v='') { return String(v).replace(/[&<>'\"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt',"'":'&#39;','\"':'&quot;'}[c])); }
 
   async function patch(root=document) { await Promise.all([installAccountRow(root), installBonusStrip(root)]); }
-  let raf=0;
-  const schedule=()=>{ if(raf)return; raf=requestAnimationFrame(()=>{raf=0;patch(document);}); };
-  const patchRoot = document.getElementById('viewRoot') || document.body;
-  new MutationObserver(schedule).observe(patchRoot,{childList:true,subtree:true});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true}); else schedule();
+  function refreshLocalizedUi(){
+    const row=document.getElementById('referralSetting');
+    if(row){const title=row.querySelector('.setting-title'),sub=row.querySelector('.setting-sub');if(title)title.textContent=tr('title');if(sub)sub.textContent=tr('sub');}
+    const label=document.querySelector('.referral-bonus-label');if(label)label.textContent=tr('bonus');
+    const page=document.querySelector('[data-referral-page]');
+    if(page&&data?.enabled){const root=document.getElementById('viewRoot');if(root)renderPage(root,data);}
+  }
+
+  runtime.registerPatcher(()=>{void patch(document);});
+  document.addEventListener('dtl:localechange',refreshLocalizedUi);
 })();

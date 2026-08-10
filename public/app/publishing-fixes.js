@@ -1,17 +1,25 @@
 (() => {
   const tg=window.Telegram?.WebApp;
-  let busy=false,logTimer=0,lastImageUrl='';
+  const runtime=window.DTL_RUNTIME;
+  if(!runtime?.registerPatcher)throw new Error('DTL runtime core must load before publishing-fixes.js');
+
+  let busy=false,logTimer=0,lastImageUrl='',installedEditor=null;
   const H=()=>({'x-telegram-init-data':tg?.initData||''});
   async function api(path,options={}){const r=await fetch(path,{...options,headers:{...H(),...(options.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error?.message||d?.message||`HTTP ${r.status}`);return d;}
   const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ico=n=>`<i data-lucide="${n}" aria-hidden="true"></i>`;
   function icons(){try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}}
   function toast(text,error=false){const r=document.getElementById('toastRegion');if(!r)return;const e=document.createElement('div');e.className=`toast ${error?'error':'success'}`;e.textContent=text;r.append(e);setTimeout(()=>e.remove(),3600);}
-  function isPublishing(){return Boolean(document.querySelector('.publisher-editor'));}
+  function editor(){return document.querySelector('.publisher-editor');}
+  function isPublishing(){return Boolean(editor());}
 
   function install(){
-    if(!isPublishing())return stopLogs();
-    injectSpoiler();injectHealth();injectLogs();bindSpoilerPreview();refreshDiagnostics();refreshLogs();startLogs();icons();
+    const current=editor();
+    if(!current){installedEditor=null;stopLogs();return;}
+    injectSpoiler();injectHealth();injectLogs();injectNativeCommentsNote();bindSpoilerPreview();startLogs();icons();
+    if(installedEditor===current)return;
+    installedEditor=current;
+    refreshDiagnostics();refreshLogs();
   }
   function injectSpoiler(){
     const options=document.querySelector('.publisher-options');if(!options||document.getElementById('pubImageSpoiler'))return;
@@ -24,6 +32,15 @@
   function injectLogs(){
     const history=document.querySelector('.admin-publication-history');if(!history||document.getElementById('publishingLogs'))return;
     const box=document.createElement('section');box.id='publishingLogs';box.className='admin-panel publishing-logs';box.innerHTML=`<div class="admin-panel-head"><div><h2>Журнал публикаций</h2><p>Что реально произошло на Worker и в Telegram</p></div><button type="button" id="publishingLogsRefresh">${ico('refresh-cw')} Обновить</button></div><div id="publishingLogsBody" class="publishing-log-list"><div class="admin-empty">Загружаем журнал…</div></div>`;history.before(box);box.querySelector('#publishingLogsRefresh')?.addEventListener('click',refreshLogs);
+  }
+  function injectNativeCommentsNote(){
+    const preview=document.querySelector('.publisher-preview .tg-preview');if(!preview)return;
+    if(!preview.querySelector('.tg-preview-comments-note')){
+      const note=document.createElement('div');
+      note.className='tg-preview-comments-note';
+      note.innerHTML=`${ico('message-circle')}<div><strong>Комментарии останутся нативными</strong><small>Кнопки Suggest a Novel и Donate будут отправлены в первый комментарий, поэтому Telegram не скроет кнопку «Комментарии» у поста.</small></div>`;
+      preview.append(note);
+    }
   }
 
   async function refreshDiagnostics(){
@@ -74,7 +91,6 @@
   function setBusy(on,mode){for(const id of ['pubSave','pubTest','pubPublish']){const b=document.getElementById(id);if(b)b.disabled=on;}const active=document.getElementById(mode==='test'?'pubTest':mode==='publish'?'pubPublish':'pubSave');if(active&&on){active.dataset.old=active.innerHTML;active.innerHTML=`${ico('loader-circle')} Выполняем…`;active.classList.add('is-busy');icons();}else document.querySelectorAll('.publisher-actions button[data-old]').forEach(b=>{b.innerHTML=b.dataset.old;b.removeAttribute('data-old');b.classList.remove('is-busy');icons();});}
 
   document.addEventListener('click',e=>{const b=e.target.closest?.('#pubSave,#pubTest,#pubPublish');if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();createAndAct(b.id==='pubTest'?'test':b.id==='pubPublish'?'publish':'save');},true);
-  const root=document.getElementById('viewRoot');if(root)new MutationObserver(()=>queueMicrotask(install)).observe(root,{childList:true,subtree:false});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&isPublishing()){refreshDiagnostics();refreshLogs();}});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+  runtime.registerPatcher(install);
 })();
