@@ -91,6 +91,7 @@ export async function authenticateMiniAppRequest(
   const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
   const access = await checkBotAccess(telegramUser.id, env, telegram, {
     force: request.headers.get('x-access-recheck') === '1',
+    activationSource: 'miniapp',
   });
   if (!access.allowed) {
     return miniAppJsonError(
