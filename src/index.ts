@@ -11,10 +11,11 @@ import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
 import { handleHomeReleasesRequest } from './home-releases';
 import { handleBaseMiniAppAccess } from './miniapp-access';
+import { handleMiniAppCoreRequest } from './miniapp-core';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
-import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance, runNotificationMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
+import { handlePublicationLinksRequest } from './publication-links';
 import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
 import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
@@ -52,6 +53,8 @@ export default {
     if (adminAnalyticsResponse) return adminAnalyticsResponse;
     const adminPublicationsResponse = await handleAdminPublicationsRequest(request, env, apiTelegram);
     if (adminPublicationsResponse) return adminPublicationsResponse;
+    const publicationLinksResponse = await handlePublicationLinksRequest(request, env);
+    if (publicationLinksResponse) return publicationLinksResponse;
     const publicationDeliveryResponse = await handlePublicationDeliveryAdminRequest(request, env, apiTelegram);
     if (publicationDeliveryResponse) return publicationDeliveryResponse;
     const adminActionResponse = await handleAdminActionV2(request, env, apiTelegram);
@@ -71,8 +74,8 @@ export default {
     if (referralResponse) return referralResponse;
     const baseMiniAppAccessResponse = await handleBaseMiniAppAccess(request, env);
     if (baseMiniAppAccessResponse) return baseMiniAppAccessResponse;
-    const miniAppResponse = await handleMiniAppRequest(request, env, ctx);
-    if (miniAppResponse) return enhanceMiniAppResponse(request, miniAppResponse, env);
+    const miniAppCoreResponse = await handleMiniAppCoreRequest(request, env);
+    if (miniAppCoreResponse) return enhanceMiniAppResponse(request, miniAppCoreResponse, env);
 
     if (request.method === 'GET' && url.pathname === '/') {
       return Response.json({ ok: true, service: 'dollartlbot', mini_app: `${url.origin}/app/` });
