@@ -25,6 +25,8 @@ jobs:
         run: node scripts/audit-frontend-stability.mjs
       - name: Audit channel access gate
         run: node scripts/audit-access-gate.mjs
+      - name: Audit admin activity and new-user alerts
+        run: node scripts/audit-admin-activity.mjs
       - name: Audit canonical Mini App auth and publication templates
         run: node scripts/audit-miniapp-auth-publication-template.mjs
       - name: Audit notification center UX
@@ -80,6 +82,7 @@ jobs:
           node --check public/app/admin-cache.js
           node --check public/app/admin-console.js
           node --check public/app/admin-tools.js
+          node --check public/app/admin-activity.js
           node --check public/app/publication-template-ui.js
           node --check public/app/admin-publishing.js
           node --check public/app/quota-unlimited-ui.js
@@ -88,6 +91,8 @@ jobs:
         run: |
           test -f public/app/admin-console.css
           test -f public/app/admin-tools.css
+          test -f public/app/admin-activity.css
+          test -f public/app/admin-activity.js
           test -f public/app/admin-publishing.css
           test -f public/app/publication-template-ui.css
           test -f public/app/publication-template-ui.js
@@ -138,7 +143,7 @@ jobs:
           grep -q '/app/access-admin-ui.js?v=20260810-access1' public/app/index.html
           grep -q '/app/app-update.js?v=20260810-update1' public/app/index.html
           grep -q '/app/file-picked-fix.css?v=20260810-file2' public/app/index.html
-          grep -q '/app/notification-deeplink.js?v=20260810-notify1' public/app/index.html
+          grep -q '/app/notification-deeplink.js?v=20260810-notify2' public/app/index.html
           grep -q '/app/view-i18n.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-home.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-queue.js?v=20260810-app3' public/app/index.html
@@ -159,6 +164,8 @@ jobs:
           ! grep -q '/app/onboarding-interactions-fix.js' public/app/index.html
           grep -q '/app/admin-console.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-tools.css?v=20260810-app1' public/app/index.html
+          grep -q '/app/admin-activity.css?v=20260810-adminactivity1' public/app/index.html
+          grep -q '/app/admin-activity.js?v=20260810-adminactivity1' public/app/index.html
           grep -q '/app/admin-publishing.css?v=20260810-app1' public/app/index.html
           grep -q '/app/publication-template-ui.css?v=20260810-pubtemplate1' public/app/index.html
           grep -q '/app/publication-template-ui.js?v=20260810-pubtemplate1' public/app/index.html
@@ -192,6 +199,8 @@ jobs:
           test -f migrations/0015_notification_delivery_state.sql
           test -f migrations/0016_channel_access_gate.sql
           test -f migrations/0017_publication_request_links.sql
+          test -f migrations/0018_release_broadcast_dedupe.sql
+          test -f migrations/0019_admin_events.sql
       - name: Audit Mini App localization coverage
         run: |
           node scripts/audit-miniapp-i18n.mjs
