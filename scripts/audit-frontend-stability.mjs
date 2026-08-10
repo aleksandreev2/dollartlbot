@@ -72,6 +72,10 @@ need(referrals,"document.addEventListener('dtl:home'",'Home referral bonus mount
 need(referrals,"document.addEventListener('dtl:viewchange'",'referral polling lifecycle');
 need(onboarding,'const TAP_SELECTOR','integrated onboarding tap bridge');
 need(onboarding,"capture:true",'onboarding single touch lifecycle');
+need(onboarding,"document.addEventListener('dtl:accessready'",'onboarding access-ready lifecycle');
+need(onboarding,"document.addEventListener('dtl:accesslocked'",'onboarding access-lock lifecycle');
+need(onboarding,"const ACCESS_CODES = new Set(['membership_required','access_check_unavailable'])",'onboarding access response handling');
+forbid(onboarding,"document.addEventListener('DOMContentLoaded',init",'onboarding access race');
 if(fs.existsSync(new URL('../public/app/onboarding-interactions-fix.js',import.meta.url)))throw new Error('Superseded onboarding interaction shim must be removed.');
 forbid(index,'onboarding-interactions-fix.js','superseded onboarding interaction shim');
 need(accountView,"new CustomEvent('dtl:sheetopen'",'semantic sheet lifecycle');
@@ -95,7 +99,7 @@ for(const legacy of ['admin-v2.js','admin-v3.js','admin-performance-v3.js','publ
   if(fs.existsSync(new URL(`../public/app/${legacy}`,import.meta.url)))throw new Error(`Superseded admin runtime must be removed: ${legacy}`);
 }
 for(const asset of ['admin-cache.js?v=20260810-admin1','admin-console.js?v=20260810-admin1','admin-tools.js?v=20260810-admin1','admin-publishing.js?v=20260810-admin1'])need(index,asset,'canonical admin runtime');
-for(const asset of ['novel-presenter.js?v=20260810-runtime4','cover-ui.js?v=20260810-runtime4','referrals-ui.js?v=20260810-runtime4','onboarding-ui.js?v=20260810-runtime4','home-v2.js?v=20260810-runtime4','view-queue.js?v=20260810-app3','view-requests-account.js?v=20260810-app3'])need(index,asset,'event-driven frontend runtime');
+for(const asset of ['novel-presenter.js?v=20260810-runtime4','cover-ui.js?v=20260810-runtime4','referrals-ui.js?v=20260810-runtime4','onboarding-ui.js?v=20260810-runtime5','home-v2.js?v=20260810-runtime4','view-queue.js?v=20260810-app3','view-requests-account.js?v=20260810-app3'])need(index,asset,'event-driven frontend runtime');
 for(const css of ['admin-console.css?v=20260810-app1','admin-tools.css?v=20260810-app1','admin-publishing.css?v=20260810-app1'])need(index,css,'canonical admin CSS');
 for(const legacyCss of ['admin-v2.css','admin-v3.css','admin-performance-v3.css','publishing-fixes.css','publication-management.css'])forbid(index,legacyCss,'legacy admin CSS');
 
@@ -113,4 +117,4 @@ const notices=read('THIRD_PARTY_NOTICES.md');
 need(notices,'## Circle Flags','Circle Flags license notice');
 need(notices,'## Lucide','Lucide license notice');
 
-console.log('Frontend stability audit passed: semantic view/sheet enhancement events, lifecycle-safe internal rerenders, one fallback observer, canonical admin modules, self-hosted Lucide, and no duplicate Home/onboarding patch layers.');
+console.log('Frontend stability audit passed: semantic view/sheet enhancement events, access-aware onboarding, lifecycle-safe internal rerenders, one fallback observer, canonical admin modules, self-hosted Lucide, and no duplicate Home/onboarding patch layers.');
