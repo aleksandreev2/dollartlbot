@@ -139,7 +139,7 @@
     catch { return null; }
   }
 
-  window.DTL_I18N = Object.freeze({
+  const runtimeApi = Object.freeze({
     supported: Object.freeze([...supported]),
     normalize,
     locale,
@@ -154,6 +154,8 @@
     registerPatcher,
     registerResponseHandler,
   });
+  window.DTL_RUNTIME = runtimeApi;
+  window.DTL_I18N = runtimeApi;
 
   // Local storage is only a first-paint hint. Authenticated bootstrap remains authoritative.
   apply(fromStorage() || fromTelegram() || 'en', 'initial');
@@ -171,6 +173,7 @@
       try {
         const payload = await response.clone().json();
         apply(payload?.user?.locale, 'bootstrap');
+        document.dispatchEvent(new CustomEvent('dtl:bootstrap', { detail: { payload } }));
       } catch {}
     }
 
