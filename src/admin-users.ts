@@ -81,13 +81,14 @@ async function listUsers(url: URL, env: Env): Promise<Response> {
 
   const rows = await env.DB.prepare(`
     SELECT
-      u.telegram_id,u.username,u.first_name,u.language,u.created_at,u.updated_at,u.quota_unlimited,
+      u.telegram_id,u.username,u.first_name,u.language,u.created_at,u.updated_at,
+      u.activated_at,u.activated_via,u.last_seen_at,u.quota_unlimited,
       COALESCE((SELECT s.plan FROM submissions s WHERE s.user_id=u.telegram_id ORDER BY s.id DESC LIMIT 1),'free') AS last_plan,
       (SELECT COUNT(*) FROM submissions s WHERE s.user_id=u.telegram_id) AS submissions_total,
       (SELECT COUNT(*) FROM submissions s WHERE s.user_id=u.telegram_id AND s.month_key=? AND s.slot_returned=0) AS used_this_month,
       COALESCE((SELECT SUM(q.delta) FROM quota_events q WHERE q.user_id=u.telegram_id AND q.month_key=?),0) AS admin_adjustment,
       (SELECT COUNT(*) FROM referrals r WHERE r.referrer_user_id=u.telegram_id AND r.status='qualified') AS referrals_qualified,
-      COALESCE((SELECT MAX(s.created_at) FROM submissions s WHERE s.user_id=u.telegram_id),u.updated_at) AS last_activity
+      COALESCE(u.last_seen_at,u.updated_at,u.created_at) AS last_activity
     FROM users u
     WHERE ${where.join(' AND ')}
     ORDER BY last_activity DESC,u.telegram_id DESC
@@ -103,7 +104,8 @@ async function listUsers(url: URL, env: Env): Promise<Response> {
 async function userProfile(userId: number, env: Env, telegram: TelegramClient): Promise<Response> {
   if (!Number.isSafeInteger(userId) || userId <= 0) return miniAppJsonError('invalid_user', 'Некорректный Telegram ID.', 400);
   const user = await env.DB.prepare(`
-    SELECT telegram_id,username,first_name,language,language_selected,created_at,updated_at,quota_unlimited,
+    SELECT telegram_id,username,first_name,language,language_selected,
+           created_at,updated_at,activated_at,activated_via,last_seen_at,quota_unlimited,
            notify_request_updates,notify_releases,notify_announcements,notify_referrals
     FROM users WHERE telegram_id=?
   `).bind(userId).first<Record<string, unknown>>();
