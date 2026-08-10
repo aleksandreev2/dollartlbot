@@ -15,8 +15,8 @@ need(presenter,"const FLAG_BASE = '/app/flags';",'novel presenter Circle Flags')
 need(presenter,'runtime.detectLanguage','novel presenter semantic language detection');
 need(presenter,'runtime.languageLabel','novel presenter semantic language labels');
 need(presenter,'runtime.registerPatcher','novel presenter shared scheduler');
-need(presenter,'data-source-language-code','novel presenter language metadata ownership');
-need(presenter,'data-meta-suffix','novel presenter metadata suffix ownership');
+need(presenter,'dataset.sourceLanguageCode','novel presenter language metadata ownership');
+need(presenter,'dataset.metaSuffix','novel presenter metadata suffix ownership');
 need(presenter,'enhanceLanguagePicker','novel presenter language picker');
 need(presenter,'normalizeListMeta','novel presenter language normalization');
 need(presenter,'replaceArrows','novel presenter language arrows');
