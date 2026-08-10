@@ -27,8 +27,8 @@
     de:{next:'Weiter',back:'Zurück',enter:'Dollar TL öffnen',notAdult:'Ich bin noch nicht volljährig',loading:'Dollar TL wird vorbereitet…',error:'Der Willkommensleitfaden konnte nicht geladen werden. Tippe zum Wiederholen.',retry:'Erneut versuchen',s1t:'Willkommen bei Dollar TL',s1b:'Ein übersichtlicher Ort, um Romane vorzuschlagen, die öffentliche Übersetzungswarteschlange zu verfolgen und alle Anfragen zusammenzuhalten.',s2t:'Intelligentere Einreichungen',s2b:'Lade TXT oder EPUB hoch. Wir können die Datei analysieren, Originalsprache und Kapitelzahl vorschlagen und vorhandene EPUB-Cover verwenden.',s3t:'Immer auf dem Laufenden',s3b:'Verfolge Prüfung und Übersetzung, erhalte Telegram-Benachrichtigungen und lade Freunde für bis zu +3 Bonus-Anfragen ein.',s4t:'Bevor du fortfährst',s4b:'Dollar TL kann fiktionale Inhalte für Erwachsene, sexuelle oder fetischbezogene Inhalte, Gewalt oder andere sensible Themen enthalten oder besprechen.',adult:'Ich bestätige, dass ich in meinem Land oder in meiner Rechtsordnung volljährig bin.',adultHelp:'Dies ist eine Selbstauskunft. Dollar TL bestimmt weder dein Alter noch die für dich geltenden lokalen rechtlichen Anforderungen.'},
   };
 
-  const ACCESS_CODES = new Set(['membership_required','access_check_unavailable']);
   const icons = ['book-open','wand-sparkles','bell-ring','shield-check'];
+  const ACCESS_CODES = new Set(['membership_required','access_check_unavailable']);
   const TAP_SELECTOR = '#onboardNext,#onboardBack,[data-onboard-dot],#underageButton,#onboardingRetry,.adult-confirm';
   let current = 0;
   let locale = inferLocale();
