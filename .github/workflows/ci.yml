@@ -27,6 +27,8 @@ jobs:
         run: node scripts/audit-notification-ui.mjs
       - name: Audit notification delivery reliability
         run: node scripts/audit-notification-delivery.mjs
+      - name: Audit Suggest content picker UX
+        run: node scripts/audit-suggest-content-picker.mjs
       - name: Audit modular Mini App shell
         run: node scripts/audit-app-modules.mjs
       - name: Audit shared Mini App i18n runtime
@@ -50,6 +52,7 @@ jobs:
           node --check public/app/view-home.js
           node --check public/app/view-queue.js
           node --check public/app/view-suggest.js
+          node --check public/app/suggest-content-picker.js
           node --check public/app/view-requests-account.js
           node --check public/app/view-admin.js
           node --check public/app/performance.js
@@ -94,6 +97,8 @@ jobs:
           test -f public/app/view-home.js
           test -f public/app/view-queue.js
           test -f public/app/view-suggest.js
+          test -f public/app/suggest-content-picker.js
+          test -f public/app/suggest-content-picker.css
           test -f public/app/view-requests-account.js
           test -f public/app/view-admin.js
           test ! -e public/app/admin-v2.js
@@ -109,6 +114,8 @@ jobs:
           grep -q '/app/view-home.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-queue.js?v=20260810-app3' public/app/index.html
           grep -q '/app/view-suggest.js?v=20260810-app2' public/app/index.html
+          grep -q '/app/suggest-content-picker.css?v=20260810-content1' public/app/index.html
+          grep -q '/app/suggest-content-picker.js?v=20260810-content1' public/app/index.html
           grep -q '/app/view-requests-account.js?v=20260810-app3' public/app/index.html
           grep -q '/app/view-admin.js?v=20260810-app1' public/app/index.html
           grep -q '/app/novel-presenter.js?v=20260810-runtime4' public/app/index.html
