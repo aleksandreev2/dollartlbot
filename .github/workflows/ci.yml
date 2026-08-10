@@ -21,6 +21,8 @@ jobs:
         run: node scripts/audit-backend-safety.mjs
       - name: Audit frontend stability invariants
         run: node scripts/audit-frontend-stability.mjs
+      - name: Audit shared Mini App i18n runtime
+        run: node scripts/audit-i18n-shared-runtime.mjs
       - name: Audit EPUB resource safety
         run: node scripts/audit-epub-safety.mjs
       - name: Audit submission intake reliability
