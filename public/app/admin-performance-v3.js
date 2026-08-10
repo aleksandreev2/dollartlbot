@@ -1,17 +1,27 @@
 (() => {
-  const nativeFetch = window.fetch.bind(window);
+  const runtime = window.DTL_RUNTIME;
+  if (!runtime?.registerFetchMiddleware) throw new Error('DTL runtime core must load before admin-performance-v3.js');
+
   const cache = new Map();
   const pending = new Map();
   const TTL = 8000;
   let prefetched = false;
 
-  function adminGet(path, init) {
-    const method = String(init?.method || 'GET').toUpperCase();
-    return method === 'GET' && path.startsWith('/api/app/admin/');
+  function requestMeta(input, init = {}) {
+    let path = '';
+    try {
+      const raw = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input || '');
+      const url = new URL(raw, location.href);
+      path = `${url.pathname}${url.search}`;
+    } catch {}
+    const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(init?.headers || {}).forEach((value, key) => headers.set(key, value));
+    return { path, method, headers };
   }
 
-  function keyFor(path, init) {
-    const auth = new Headers(init?.headers || {}).get('x-telegram-init-data') || '';
+  function keyFor(path, headers) {
+    const auth = headers.get('x-telegram-init-data') || '';
     return `${path}|${auth.slice(-24)}`;
   }
 
@@ -23,56 +33,41 @@
     });
   }
 
-  async function fetchAndStore(input, init, key) {
-    const response = await nativeFetch(input, init);
-    const body = await response.clone().arrayBuffer();
-    const entry = {
-      body,
+  async function snapshot(response) {
+    return {
+      body: await response.clone().arrayBuffer(),
       status: response.status,
       statusText: response.statusText,
       headers: [...response.headers.entries()],
       at: Date.now(),
     };
-    if (response.ok) cache.set(key, entry);
-    return materialize(entry);
   }
 
-  window.fetch = function dtlAdminFastFetch(input, init = {}) {
-    let path = '';
-    try {
-      const raw = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input || '');
-      const url = new URL(raw, location.href);
-      path = `${url.pathname}${url.search}`;
-    } catch {
-      return nativeFetch(input, init);
-    }
+  runtime.registerFetchMiddleware(async (input, init = {}, next) => {
+    const { path, method, headers } = requestMeta(input, init);
+    const isAdmin = path.startsWith('/api/app/admin/');
+    if (!isAdmin) return next(input, init);
 
-    const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
-    if (method !== 'GET' && path.startsWith('/api/app/admin/')) {
+    if (method !== 'GET') {
       cache.clear();
       pending.clear();
-      return nativeFetch(input, init);
+      return next(input, init);
     }
-    if (!adminGet(path, init)) return nativeFetch(input, init);
 
-    const key = keyFor(path, init);
+    const key = keyFor(path, headers);
     const hit = cache.get(key);
-    if (hit && Date.now() - hit.at < TTL) return Promise.resolve(materialize(hit));
+    if (hit && Date.now() - hit.at < TTL) return materialize(hit);
     if (pending.has(key)) return pending.get(key).then(materialize);
 
-    const job = fetchAndStore(input, init, key).then(async response => {
-      const body = await response.clone().arrayBuffer();
-      return {
-        body,
-        status: response.status,
-        statusText: response.statusText,
-        headers: [...response.headers.entries()],
-        at: Date.now(),
-      };
-    }).finally(() => pending.delete(key));
+    const job = (async () => {
+      const response = await next(input, init);
+      const entry = await snapshot(response);
+      if (response.ok) cache.set(key, entry);
+      return entry;
+    })().finally(() => pending.delete(key));
     pending.set(key, job);
     return job.then(materialize);
-  };
+  });
 
   function prefetchAdmin() {
     if (prefetched || document.hidden) return;
