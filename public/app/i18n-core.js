@@ -1,14 +1,13 @@
 (() => {
   const supported = new Set(['en','es','fil','hi','pt','id','vi','fr','de','ru']);
   const storageKey = 'dtl_locale';
-
-  const units = {ru:'глав',es:'capítulos',fil:'kabanata',hi:'अध्याय',pt:'capítulos',id:'bab',vi:'chương',fr:'chapitres',de:'Kapitel'};
-  const requestWords = {ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage'};
-  const positionWords = {ru:'Позиция',es:'Posición',fil:'Puwesto',hi:'स्थान',pt:'Posição',id:'Posisi',vi:'Vị trí',fr:'Position',de:'Position'};
-  const repostTitles = {ru:'Правила переводов и репостов',es:'Reglas de traducción y republicación',fil:'Mga tuntunin sa pagsasalin at muling paglalathala',hi:'अनुवाद और पुनर्प्रकाशन के नियम',pt:'Regras de tradução e republicação',id:'Aturan terjemahan dan publikasi ulang',vi:'Quy định dịch và đăng lại',fr:'Règles de traduction et de republication',de:'Regeln für Übersetzungen und Wiederveröffentlichung'};
-
   const patchers = new Set();
   const responseHandlers = new Set();
+  const requestWords = {en:'Request',ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage'};
+  const requestPattern = /(?:Request|Заявка|Solicitud|Kahilingan|अनुरोध|Pedido|Permintaan|Yêu cầu|Demande|Anfrage)\s+#(\d+)/giu;
+  const positionPattern = /(?:Position|Позиция|Posición|Puwesto|स्थान|Posição|Posisi|Vị trí|Anfrageposition)\s+#(\d+)/giu;
+  const chapterPattern = /(\d+)\s+(?:chapters?|глав(?:а|ы)?|capítulos?|kabanata|अध्याय|bab|chương|chapitres?|Kapitel)/giu;
+  let catalog = null;
   let raf = 0;
 
   function normalize(value) {
@@ -21,32 +20,78 @@
     return normalize(window.__DTL_LOCALE__ || document.documentElement.lang) || 'en';
   }
 
-  function patchInlineCopy() {
-    const l = locale();
-    if (!units[l]) return;
-    for (const root of [document.getElementById('viewRoot'), document.getElementById('bottomNav'), document.getElementById('sheetRoot')]) {
-      if (!root) continue;
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      const nodes = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      for (const node of nodes) {
-        const text = node.nodeValue || '';
-        const next = text
-          .replace(/\b(\d+)\s+chapters\b/gi, (_, n) => `${n} ${units[l]}`)
-          .replace(/\bRequest\s+#(\d+)\b/gi, (_, n) => `${requestWords[l]} #${n}`)
-          .replace(/\bPosition\s+#(\d+)\b/gi, (_, n) => `${positionWords[l]} #${n}`);
-        if (next !== text) node.nodeValue = next;
-      }
-    }
-    const title = document.querySelector('.sheet-copy.rich-sheet .rule-note strong');
-    if (title && repostTitles[l] && title.textContent !== repostTitles[l]) title.textContent = repostTitles[l];
+  function setCatalog(next) {
+    catalog = next && typeof next === 'object' ? next : null;
+    schedule();
   }
 
-  patchers.add(patchInlineCopy);
+  function table(name, localeValue = locale()) {
+    const source = catalog?.[name];
+    if (!source || typeof source !== 'object') return null;
+    return source[normalize(localeValue) || 'en'] || source.en || null;
+  }
+
+  function copy(key, ...args) {
+    const value = table('copy')?.[key] ?? catalog?.copy?.en?.[key];
+    return typeof value === 'function' ? value(...args) : value;
+  }
+
+  function languageLabel(code, localeValue = locale()) {
+    const labels = table('languageLabels', localeValue) || catalog?.languageLabels?.en || {};
+    return labels?.[code] || catalog?.languageLabels?.en?.[code] || code;
+  }
+
+  function tagLabel(tag, localeValue = locale()) {
+    const labels = table('tags', localeValue) || catalog?.tags?.en || {};
+    return labels?.[tag] || catalog?.tags?.en?.[tag] || tag;
+  }
+
+  function detectLanguage(value) {
+    const raw = String(value || '').normalize('NFKC').replace(/[\u{1F1E6}-\u{1F1FF}]{2}/gu, ' ').trim();
+    if (!raw) return null;
+    const patterns = catalog?.languagePatterns || {};
+    for (const [code, pattern] of Object.entries(patterns)) {
+      try {
+        pattern.lastIndex = 0;
+        if (pattern.test(raw)) return code;
+      } catch {}
+    }
+    const short = raw.toLowerCase().replace(/[^a-z]/g, '');
+    const aliases = {ko:'ko',kr:'ko',ja:'ja',jp:'ja',zh:'zh',cn:'zh',en:'en',gb:'en',ru:'ru',es:'es',pt:'pt',id:'id',vi:'vi',fr:'fr',de:'de',hi:'hi',fil:'fil',tl:'fil'};
+    return aliases[short] || null;
+  }
+
+  function patchInlineCopy() {
+    if (!catalog) return;
+    const l = locale();
+    const fallback = catalog.uiFallback?.[l] || {};
+    const chapterWord = fallback.chapters || 'chapters';
+    const positionWord = fallback.Position || 'Position';
+    const requestWord = requestWords[l] || requestWords.en;
+    const root = document.getElementById('app');
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest('script,style,textarea,input')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }});
+    const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+    for(const node of nodes){
+      const raw=node.nodeValue||'';
+      const next=raw
+        .replace(requestPattern,(_,n)=>`${requestWord} #${n}`)
+        .replace(positionPattern,(_,n)=>`${positionWord} #${n}`)
+        .replace(chapterPattern,(_,n)=>`${n} ${chapterWord}`);
+      if(next!==raw)node.nodeValue=next;
+    }
+  }
 
   function runPatchers() {
+    try { patchInlineCopy(); }
+    catch (error) { console.error('[DTL runtime] inline copy patch failed', error); }
     for (const patcher of [...patchers]) {
-      try { patcher(); } catch (error) { console.error('[DTL i18n] patcher failed', error); }
+      try { patcher(); }
+      catch (error) { console.error('[DTL runtime] patcher failed', error); }
     }
   }
 
@@ -74,7 +119,7 @@
   function apply(localeValue, source = 'unknown') {
     const next = normalize(localeValue);
     if (!next) return false;
-    const previous = normalize(document.documentElement.lang) || 'en';
+    const previous = locale();
     window.__DTL_LOCALE__ = next;
     document.documentElement.lang = next;
     try { localStorage.setItem(storageKey, next); } catch {}
@@ -90,24 +135,31 @@
   }
 
   function fromStorage() {
-    try { return normalize(localStorage.getItem(storageKey)); } catch { return null; }
+    try { return normalize(localStorage.getItem(storageKey)); }
+    catch { return null; }
   }
 
   window.DTL_I18N = Object.freeze({
-    locale,
+    supported: Object.freeze([...supported]),
     normalize,
+    locale,
     apply,
+    setCatalog,
+    table,
+    copy,
+    languageLabel,
+    tagLabel,
+    detectLanguage,
     schedule,
     registerPatcher,
     registerResponseHandler,
   });
 
-  // The last saved client-side locale is only a first-paint hint. The
-  // authenticated /bootstrap response remains the source of truth.
+  // Local storage is only a first-paint hint. Authenticated bootstrap remains authoritative.
   apply(fromStorage() || fromTelegram() || 'en', 'initial');
 
   const nativeFetch = window.fetch.bind(window);
-  window.fetch = async function dtlLocaleAwareFetch(input, init) {
+  window.fetch = async function dtlRuntimeFetch(input, init) {
     let response = await nativeFetch(input, init);
     let pathname = '';
     try {
@@ -140,7 +192,7 @@
         const next = await handler(response, { pathname, input, init });
         if (next instanceof Response) response = next;
       } catch (error) {
-        console.error('[DTL i18n] response handler failed', error);
+        console.error('[DTL runtime] response handler failed', error);
       }
     }
     return response;
@@ -149,12 +201,13 @@
   // Preview mode does not call the language API, so switch immediately on click.
   document.addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-lang]');
-    if (!button) return;
-    if (!window.Telegram?.WebApp?.initData) apply(button.dataset.lang, 'preview-picker');
+    if (!button || window.Telegram?.WebApp?.initData) return;
+    apply(button.dataset.lang, 'preview-picker');
   }, true);
 
+  const observedRoot = document.getElementById('app') || document.body || document.documentElement;
   const observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  observer.observe(observedRoot, { childList: true, subtree: true, characterData: true });
   document.addEventListener('dtl:localechange', schedule);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule, { once: true });
   else schedule();
