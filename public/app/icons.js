@@ -1,4 +1,7 @@
 (() => {
+  const runtime = window.DTL_RUNTIME;
+  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before icons.js');
+
   const navIcons = {
     home: 'house',
     queue: 'layers-3',
@@ -136,9 +139,7 @@
 
   function upgradeButtonsAndLabels() {
     document.querySelectorAll('.primary-button,.secondary-button,.link-button,.form-label,.small.muted,h2,.section-title').forEach((el) => {
-      for (const [glyph, name] of Object.entries(leadingIcons)) {
-        replaceLeadingGlyph(el, glyph, name);
-      }
+      for (const [glyph, name] of Object.entries(leadingIcons)) replaceLeadingGlyph(el, glyph, name);
       replaceTrailingGlyph(el, '›', 'chevron-right');
     });
 
@@ -159,58 +160,31 @@
 
   function upgradeIcons() {
     if (!window.lucide?.createIcons) return;
-
-    observer.disconnect();
-    try {
-      upgradeNav();
-      upgradePremium();
-      replaceExact('.round-icon', roundIcons);
-      replaceExact('.empty-icon', emptyIcons);
-      replaceExact('.upload-illustration', { '⇧': 'upload' });
-      replaceExact('.analysis-icon', { '✦': 'sparkles', '✓': 'circle-check' });
-      replaceExact('.back-button', { '‹': 'chevron-left' });
-      replaceExact('.chevron', { '›': 'chevron-right' });
-      replaceExact('.step-circle', { '✓': 'check' });
-      document.querySelectorAll('.status-pill').forEach((el) => {
-        if (el.textContent.trim() === '✓' && !el.querySelector('svg,[data-lucide]')) {
-          el.classList.add('icon-only');
-          replaceExactWithName(el, 'check');
-        }
-      });
-
-      document.querySelectorAll('.segmented button').forEach((el) => {
-        replaceLeadingGlyph(el, '⚡', 'zap');
-        replaceLeadingGlyph(el, '◷', 'clock-3');
-      });
-
-      upgradeButtonsAndLabels();
-      upgradeAdminActions();
-
-      window.lucide.createIcons({
-        attrs: {
-          'stroke-width': 1.8,
-          'aria-hidden': 'true',
-        },
-      });
-    } finally {
-      observer.observe(document.body, { childList: true, subtree: true });
-    }
-  }
-
-  let frame = 0;
-  function scheduleUpgrade() {
-    if (frame) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      upgradeIcons();
+    upgradeNav();
+    upgradePremium();
+    replaceExact('.round-icon', roundIcons);
+    replaceExact('.empty-icon', emptyIcons);
+    replaceExact('.upload-illustration', { '⇧': 'upload' });
+    replaceExact('.analysis-icon', { '✦': 'sparkles', '✓': 'circle-check' });
+    replaceExact('.back-button', { '‹': 'chevron-left' });
+    replaceExact('.chevron', { '›': 'chevron-right' });
+    replaceExact('.step-circle', { '✓': 'check' });
+    document.querySelectorAll('.status-pill').forEach((el) => {
+      if (el.textContent.trim() === '✓' && !el.querySelector('svg,[data-lucide]')) {
+        el.classList.add('icon-only');
+        replaceExactWithName(el, 'check');
+      }
     });
+
+    document.querySelectorAll('.segmented button').forEach((el) => {
+      replaceLeadingGlyph(el, '⚡', 'zap');
+      replaceLeadingGlyph(el, '◷', 'clock-3');
+    });
+
+    upgradeButtonsAndLabels();
+    upgradeAdminActions();
+    window.lucide.createIcons({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } });
   }
 
-  const observer = new MutationObserver(scheduleUpgrade);
-  observer.observe(document.body, { childList: true, subtree: true });
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleUpgrade, { once: true });
-  } else {
-    scheduleUpgrade();
-  }
+  runtime.registerPatcher(upgradeIcons);
 })();
