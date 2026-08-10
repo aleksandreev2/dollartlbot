@@ -23,6 +23,7 @@ import { handlePublicationLinksRequest } from './publication-links';
 import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
 import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
+import { handlePublishingPreflight } from './publishing-preflight';
 import { handlePublishingRequest } from './publishing';
 import { handlePublishingV2Request } from './publishing-v2';
 import { guardPublishingRequest } from './publishing-guard';
@@ -69,6 +70,8 @@ export default {
     const adminActionResponse = await handleAdminActionV2(request, env, apiTelegram);
     if (adminActionResponse) return adminActionResponse;
 
+    const publishingPreflightResponse = await handlePublishingPreflight(request, env, apiTelegram);
+    if (publishingPreflightResponse) return publishingPreflightResponse;
     const publishingCommentsV3Response = await handlePublishingCommentsV3Request(request, env, apiTelegram, ctx);
     if (publishingCommentsV3Response) return publishingCommentsV3Response;
     const publishingV2Response = await handlePublishingV2Request(request, env, apiTelegram, ctx);
