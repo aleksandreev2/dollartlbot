@@ -130,11 +130,11 @@
     }
   }
 
-  async function verifyAccess() {
+  async function verifyAccess(force = false) {
     if (checking || app.state.preview || !initialized || app.state.accessLocked || document.visibilityState !== 'visible') return;
     checking = true;
     try {
-      const result = await requestAccess(false);
+      const result = await requestAccess(force);
       if (!result.ok && isAccessPayload(result.data)) renderLocked(result.data);
     } catch {
       // A transient client/network failure is not evidence that access was lost.
@@ -145,7 +145,7 @@
 
   function startHeartbeat() {
     if (heartbeat || app.state.preview) return;
-    heartbeat = window.setInterval(verifyAccess, 60_000);
+    heartbeat = window.setInterval(() => void verifyAccess(false), 60_000);
   }
 
   app.init = async function accessAwareInit() {
@@ -156,7 +156,9 @@
       return;
     }
     try {
-      const result = await requestAccess(false);
+      // Opening the Mini App must reflect current membership, not a previous
+      // positive cache entry from before the user left the required channel.
+      const result = await requestAccess(true);
       if (!result.ok && isAccessPayload(result.data)) {
         renderLocked(result.data);
         return;
@@ -180,7 +182,7 @@
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void verifyAccess();
+    if (document.visibilityState === 'visible') void verifyAccess(true);
   });
-  window.addEventListener('pageshow', () => void verifyAccess());
+  window.addEventListener('pageshow', () => void verifyAccess(true));
 })();
