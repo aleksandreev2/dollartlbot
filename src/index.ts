@@ -1,3 +1,4 @@
+import { handleAccessChatMemberUpdate, runAccessGateMaintenance } from './access-gate';
 import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
 import { handleAdminPublicationsRequest } from './admin-publications';
@@ -8,6 +9,7 @@ import { errorText, safeSecretEqual } from './db';
 import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
 import { handleHomeReleasesRequest } from './home-releases';
+import { handleBaseMiniAppAccess } from './miniapp-access';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleMiniAppRequest } from './miniapp';
 import { handleNotificationApiRequest, runBroadcastMaintenance, runNotificationMaintenance } from './notifications';
@@ -64,6 +66,8 @@ export default {
     if (notificationResponse) return notificationResponse;
     const referralResponse = await handleReferralApiRequest(request, env, apiTelegram);
     if (referralResponse) return referralResponse;
+    const baseMiniAppAccessResponse = await handleBaseMiniAppAccess(request, env);
+    if (baseMiniAppAccessResponse) return baseMiniAppAccessResponse;
     const miniAppResponse = await handleMiniAppRequest(request, env, ctx);
     if (miniAppResponse) return enhanceMiniAppResponse(request, miniAppResponse, env);
 
@@ -92,7 +96,10 @@ export default {
       if ((inserted.meta.changes ?? 0) === 0) return new Response('OK');
 
       if (update.chat_member) {
-        await handleReferralChatMemberUpdate(update.chat_member, env);
+        await Promise.all([
+          handleReferralChatMemberUpdate(update.chat_member, env),
+          handleAccessChatMemberUpdate(update.chat_member, env),
+        ]);
       } else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
         // handled by publishing center
       } else {
@@ -118,6 +125,7 @@ export default {
     await runScheduledTask('queue_normalize', () => normalizeQueuePositions(env));
     await runScheduledTask('admin_delivery_retry', () => retryPendingAdminDeliveries(env, telegram));
     await runScheduledTask('referral_maintenance', () => runReferralMaintenance(env, telegram, scheduledAt));
+    await runScheduledTask('access_gate_maintenance', () => runAccessGateMaintenance(env, scheduledAt));
     await runScheduledTask('notification_maintenance', () => runNotificationMaintenance(env, telegram));
     await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenance(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
