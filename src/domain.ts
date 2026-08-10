@@ -36,6 +36,11 @@ export type UserRow = {
   first_name: string | null;
   language: string;
   language_selected: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  activated_at?: string | null;
+  activated_via?: 'legacy' | 'bot' | 'miniapp' | null;
+  last_seen_at?: string | null;
   last_limit_reset_notified_month?: string | null;
   last_promo_at?: string | null;
   promo_opt_out?: number;
