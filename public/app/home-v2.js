@@ -1,25 +1,22 @@
 (() => {
   const tg = window.Telegram?.WebApp;
   const runtime = window.DTL_RUNTIME;
-  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before home-v2.js');
+  if (!runtime?.locale) throw new Error('DTL runtime core must load before home-v2.js');
 
-  let owner = null;
   let releases = null;
   let loading = null;
-  let generation = 0;
-  let bootstrapUser = null;
 
   const copy = {
-    en:{greeting:n=>`Good to see you, ${n} 👋`,reader:'Reader',title:'Translated Chapters',subtitle:'The latest chapters released by Dollar TL.',empty:'No translated chapters have been published yet.',open:'Open release',files:n=>`${n} file${n===1?'':'s'}`},
-    ru:{greeting:n=>`Рады вас видеть, ${n} 👋`,reader:'Читатель',title:'Переведённые главы',subtitle:'Последние главы, выпущенные Dollar TL.',empty:'Переведённых глав пока нет.',open:'Открыть релиз',files:n=>`${n} файл${n%10===1&&n%100!==11?'':n%10>=2&&n%10<=4&&(n%100<10||n%100>=20)?'а':'ов'}`},
-    es:{greeting:n=>`Qué bueno verte, ${n} 👋`,reader:'Lector',title:'Capítulos traducidos',subtitle:'Los últimos capítulos publicados por Dollar TL.',empty:'Todavía no se han publicado capítulos traducidos.',open:'Abrir publicación',files:n=>`${n} archivo${n===1?'':'s'}`},
-    fil:{greeting:n=>`Masaya kang makita, ${n} 👋`,reader:'Mambabasa',title:'Mga naisaling kabanata',subtitle:'Pinakabagong mga kabanatang inilabas ng Dollar TL.',empty:'Wala pang nailalabas na naisaling kabanata.',open:'Buksan ang release',files:n=>`${n} file`},
-    hi:{greeting:n=>`आपको देखकर अच्छा लगा, ${n} 👋`,reader:'पाठक',title:'अनुवादित अध्याय',subtitle:'Dollar TL द्वारा जारी नवीनतम अध्याय।',empty:'अभी कोई अनुवादित अध्याय प्रकाशित नहीं हुआ है।',open:'रिलीज़ खोलें',files:n=>`${n} फ़ाइल`},
-    pt:{greeting:n=>`Bom ver você, ${n} 👋`,reader:'Leitor',title:'Capítulos traduzidos',subtitle:'Os capítulos mais recentes publicados pela Dollar TL.',empty:'Ainda não há capítulos traduzidos publicados.',open:'Abrir lançamento',files:n=>`${n} arquivo${n===1?'':'s'}`},
-    id:{greeting:n=>`Senang melihatmu, ${n} 👋`,reader:'Pembaca',title:'Bab yang diterjemahkan',subtitle:'Bab terbaru yang dirilis Dollar TL.',empty:'Belum ada bab terjemahan yang diterbitkan.',open:'Buka rilis',files:n=>`${n} berkas`},
-    vi:{greeting:n=>`Rất vui được gặp bạn, ${n} 👋`,reader:'Độc giả',title:'Các chương đã dịch',subtitle:'Những chương mới nhất do Dollar TL phát hành.',empty:'Chưa có chương dịch nào được phát hành.',open:'Mở bản phát hành',files:n=>`${n} tệp`},
-    fr:{greeting:n=>`Quel plaisir de vous revoir, ${n} 👋`,reader:'Lecteur',title:'Chapitres traduits',subtitle:'Les derniers chapitres publiés par Dollar TL.',empty:'Aucun chapitre traduit n’a encore été publié.',open:'Ouvrir la publication',files:n=>`${n} fichier${n===1?'':'s'}`},
-    de:{greeting:n=>`Schön, dich zu sehen, ${n} 👋`,reader:'Leser',title:'Übersetzte Kapitel',subtitle:'Die neuesten von Dollar TL veröffentlichten Kapitel.',empty:'Noch keine übersetzten Kapitel veröffentlicht.',open:'Release öffnen',files:n=>`${n} Datei${n===1?'':'en'}`},
+    en:{title:'Translated Chapters',subtitle:'The latest chapters released by Dollar TL.',empty:'No translated chapters have been published yet.',open:'Open release',files:n=>`${n} file${n===1?'':'s'}`},
+    ru:{title:'Переведённые главы',subtitle:'Последние главы, выпущенные Dollar TL.',empty:'Переведённых глав пока нет.',open:'Открыть релиз',files:n=>`${n} файл${n%10===1&&n%100!==11?'':n%10>=2&&n%10<=4&&(n%100<10||n%100>=20)?'а':'ов'}`},
+    es:{title:'Capítulos traducidos',subtitle:'Los últimos capítulos publicados por Dollar TL.',empty:'Todavía no se han publicado capítulos traducidos.',open:'Abrir publicación',files:n=>`${n} archivo${n===1?'':'s'}`},
+    fil:{title:'Mga naisaling kabanata',subtitle:'Pinakabagong mga kabanatang inilabas ng Dollar TL.',empty:'Wala pang nailalabas na naisaling kabanata.',open:'Buksan ang release',files:n=>`${n} file`},
+    hi:{title:'अनुवादित अध्याय',subtitle:'Dollar TL द्वारा जारी नवीनतम अध्याय।',empty:'अभी कोई अनुवादित अध्याय प्रकाशित नहीं हुआ है।',open:'रिलीज़ खोलें',files:n=>`${n} फ़ाइल`},
+    pt:{title:'Capítulos traduzidos',subtitle:'Os capítulos mais recentes publicados pela Dollar TL.',empty:'Ainda não há capítulos traduzidos publicados.',open:'Abrir lançamento',files:n=>`${n} arquivo${n===1?'':'s'}`},
+    id:{title:'Bab yang diterjemahkan',subtitle:'Bab terbaru yang dirilis Dollar TL.',empty:'Belum ada bab terjemahan yang diterbitkan.',open:'Buka rilis',files:n=>`${n} berkas`},
+    vi:{title:'Các chương đã dịch',subtitle:'Những chương mới nhất do Dollar TL phát hành.',empty:'Chưa có chương dịch nào được phát hành.',open:'Mở bản phát hành',files:n=>`${n} tệp`},
+    fr:{title:'Chapitres traduits',subtitle:'Les derniers chapitres publiés par Dollar TL.',empty:'Aucun chapitre traduit n’a encore été publié.',open:'Ouvrir la publication',files:n=>`${n} fichier${n===1?'':'s'}`},
+    de:{title:'Übersetzte Kapitel',subtitle:'Die neuesten von Dollar TL veröffentlichten Kapitel.',empty:'Noch keine übersetzten Kapitel veröffentlicht.',open:'Release öffnen',files:n=>`${n} Datei${n===1?'':'en'}`},
   };
 
   function locale(){
@@ -35,27 +32,26 @@
     try{return new Intl.DateTimeFormat(tags[locale()]||'en-US',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value));}catch{return String(value);}
   }
 
-  function resetForOwner(nextOwner){
-    if(owner===nextOwner)return;
-    owner=nextOwner;
-    releases=null;
-    loading=null;
-    generation+=1;
+  function rerenderIfHome(){
+    if(window.DTL_APP?.state?.view==='home')renderHomeReleaseSection();
   }
 
   function loadReleases(){
     if(releases) return Promise.resolve(releases);
     if(loading) return loading;
-    if(!tg?.initData){releases=[];return Promise.resolve(releases);}
-    const token=generation;
+    if(!tg?.initData){
+      releases=[];
+      queueMicrotask(rerenderIfHome);
+      return Promise.resolve(releases);
+    }
     loading=fetch('/api/app/releases',{
       cache:'no-store',
       headers:{'x-telegram-init-data':tg.initData},
     })
       .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error?.message||`HTTP ${r.status}`);return Array.isArray(d.releases)?d.releases:[];})
-      .then(rows=>{if(token===generation)releases=rows;return rows;})
-      .catch(()=>{if(token===generation)releases=[];return[];})
-      .finally(()=>{if(token===generation)loading=null;runtime.schedule();});
+      .then(rows=>{releases=rows;return rows;})
+      .catch(()=>{releases=[];return[];})
+      .finally(()=>{loading=null;rerenderIfHome();});
     return loading;
   }
 
@@ -75,10 +71,9 @@
   function ensureSection(){
     const requestsButton=document.getElementById('homeRequests');
     const queueButton=document.getElementById('homeQueue');
-    if(!requestsButton||!queueButton){owner=null;return null;}
+    if(!requestsButton||!queueButton)return null;
     const requestsSection=requestsButton.closest('.section');
-    if(!requestsSection){owner=null;return null;}
-    resetForOwner(requestsSection);
+    if(!requestsSection)return null;
     let section=document.querySelector('.dtl-releases-section');
     if(!section){
       section=document.createElement('section');
@@ -88,20 +83,9 @@
     return section;
   }
 
-  function patchGreeting(){
-    const homeButton=document.getElementById('homeSuggest');
-    const heading=homeButton?.closest('.page')?.querySelector('.page-heading h1');
-    if(!heading)return;
-    const c=t();
-    const user=bootstrapUser||tg?.initDataUnsafe?.user||{};
-    const name=String(user.first_name||user.username||c.reader).trim()||c.reader;
-    const next=c.greeting(name);
-    if(heading.textContent!==next)heading.textContent=next;
-  }
-
   function renderSection(section){
     const c=t();
-    const stateKey=`${locale()}:${releases===null?'loading':releases.length}:${generation}`;
+    const stateKey=`${locale()}:${releases===null?'loading':releases.length}`;
     if(section.dataset.releaseState===stateKey)return;
     section.dataset.releaseState=stateKey;
     if(releases===null){
@@ -110,19 +94,18 @@
       return;
     }
     section.innerHTML=`<div class="section-header"><div class="dtl-releases-copy"><h2>${esc(c.title)}</h2><p class="subtitle">${esc(c.subtitle)}</p></div></div>${releases.length?`<div class="dtl-release-list">${releases.slice(0,4).map(releaseCard).join('')}</div>`:`<div class="surface-card empty-state"><div class="empty-icon">✓</div><p>${esc(c.empty)}</p></div>`}`;
+    if(window.lucide?.createIcons)window.lucide.createIcons({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});
   }
 
-  function patch(){
-    patchGreeting();
+  function renderHomeReleaseSection(){
     const section=ensureSection();
     if(section)renderSection(section);
   }
 
-  document.addEventListener('dtl:bootstrap',event=>{bootstrapUser=event.detail?.payload?.user||bootstrapUser;runtime.schedule();});
+  document.addEventListener('dtl:home',renderHomeReleaseSection);
+  document.addEventListener('dtl:localechange',rerenderIfHome);
   document.addEventListener('click',event=>{
     const link=event.target.closest?.('.dtl-release-link');
     if(link&&tg?.openTelegramLink){event.preventDefault();tg.openTelegramLink(link.href);}
   },true);
-
-  runtime.registerPatcher(patch);
 })();

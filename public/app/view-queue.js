@@ -12,8 +12,8 @@
     <div class="segmented"><button class="${state.queueSegment==='active'?'active':''}" type="button" data-q-segment="active">⚡ ${escapeHtml(tr('currentlyTranslating'))}</button><button class="${state.queueSegment==='upcoming'?'active':''}" type="button" data-q-segment="upcoming">◷ ${escapeHtml(tr('upNext'))}</button></div>
     ${state.queueSegment==='active'?renderActiveQueue(active):renderUpcomingQueue(upcoming)}
     <div class="small muted" style="text-align:center;margin:22px 10px 0">◇ ${escapeHtml(tr('queueAuto'))}</div></section>`;
-    document.querySelectorAll('[data-q-lang]').forEach(btn=>btn.addEventListener('click',()=>{state.queueLanguage=btn.dataset.qLang;renderQueue();}));
-    document.querySelectorAll('[data-q-segment]').forEach(btn=>btn.addEventListener('click',()=>{state.queueSegment=btn.dataset.qSegment;renderQueue();}));
+    document.querySelectorAll('[data-q-lang]').forEach(btn=>btn.addEventListener('click',()=>{state.queueLanguage=btn.dataset.qLang;app.render();}));
+    document.querySelectorAll('[data-q-segment]').forEach(btn=>btn.addEventListener('click',()=>{state.queueSegment=btn.dataset.qSegment;app.render();}));
     c.bindNovelLinks();
   }
   function matchesLanguage(row,filter){

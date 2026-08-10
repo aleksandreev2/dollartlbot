@@ -1,7 +1,7 @@
 (() => {
   const tg = window.Telegram?.WebApp;
   const runtime = window.DTL_RUNTIME;
-  if (!runtime?.registerPatcher) throw new Error('DTL runtime core must load before cover-ui.js');
+  if (!runtime?.locale) throw new Error('DTL runtime core must load before cover-ui.js');
 
   let lastNovelId = null;
   let manifestLoaded = false;
@@ -58,12 +58,11 @@
         manifestLoaded = true;
       })
       .catch(() => {
-        // Fail closed for this foreground session instead of creating a request loop.
         manifestLoaded = true;
       })
       .finally(() => {
         manifestLoading = null;
-        runtime.schedule();
+        refreshCurrentDom();
       });
     return manifestLoading;
   }
@@ -110,7 +109,7 @@
         setTimeout(() => {
           if (!cover.isConnected || !assigned.has(id) || cover.classList.contains('has-real-cover')) return;
           delete cover.dataset.realCoverChecked;
-          runtime.schedule();
+          installRealCover(cover, id);
         }, 500 * nextFailures);
       }
     }, { once:true });
@@ -123,16 +122,19 @@
       installRealCover(cover, Number(owner?.dataset.novel));
     });
     const detail = root.querySelector('.detail-hero .novel-cover');
-    if (detail && lastNovelId) installRealCover(detail, lastNovelId);
+    const detailId = Number(window.DTL_APP?.state?.detailNovel?.id || lastNovelId);
+    if (detail && detailId) installRealCover(detail, detailId);
   }
 
   function adminId(card) {
-    const action = card.querySelector('[data-admin-action][data-id]');
+    const action = card.querySelector('[data-action][data-id],[data-admin-action][data-id]');
     if (action?.dataset.id) return Number(action.dataset.id);
+    const progress = card.querySelector('[data-progress]');
+    if (progress?.dataset.progress) return Number(progress.dataset.progress);
     const save = card.querySelector('[data-progress-save]');
     if (save?.dataset.progressSave) return Number(save.dataset.progressSave);
-    const eyebrow = card.querySelector('.eyebrow')?.textContent || '';
-    const match = /#(\d+)/.exec(eyebrow);
+    const text = card.querySelector('.admin-card-id,.eyebrow')?.textContent || '';
+    const match = /#(\d+)/.exec(text);
     return match ? Number(match[1]) : null;
   }
 
@@ -260,7 +262,8 @@
         cover.dataset.realCoverChecked = 'none';
         delete cover.dataset.coverFailures;
       });
-      if (lastNovelId === id) {
+      const detailId = Number(window.DTL_APP?.state?.detailNovel?.id || lastNovelId);
+      if (detailId === id) {
         const detail = document.querySelector('.detail-hero .novel-cover');
         if (detail) clearRealCover(detail);
       }
@@ -277,7 +280,8 @@
       delete cover.dataset.coverFailures;
       installRealCover(cover, id);
     });
-    if (lastNovelId === id) {
+    const detailId = Number(window.DTL_APP?.state?.detailNovel?.id || lastNovelId);
+    if (detailId === id) {
       const detail = document.querySelector('.detail-hero .novel-cover');
       if (detail) {
         clearRealCover(detail);
@@ -298,10 +302,11 @@
     setTimeout(() => el.remove(), 2600);
   }
 
-  function patch(root = document) {
+  function refreshCurrentDom() {
     if (!manifestLoaded && !manifestLoading) loadManifest();
+    const root = document.getElementById('viewRoot') || document;
     patchCovers(root);
-    if (manifestLoaded) root.querySelectorAll('.admin-request').forEach(installAdminTools);
+    if (manifestLoaded) root.querySelectorAll('.admin-request-card,.admin-request').forEach(installAdminTools);
     if (window.lucide?.createIcons) window.lucide.createIcons({ attrs:{'stroke-width':1.8,'aria-hidden':'true'} });
   }
 
@@ -309,6 +314,11 @@
     const novel = event.target.closest?.('[data-novel]');
     if (novel?.dataset.novel) lastNovelId = Number(novel.dataset.novel);
   }, true);
+
+  document.addEventListener('dtl:viewrender',refreshCurrentDom);
+  document.addEventListener('dtl:adminrender',refreshCurrentDom);
+  document.addEventListener('dtl:detail',()=>{lastNovelId=Number(window.DTL_APP?.state?.detailNovel?.id||lastNovelId);refreshCurrentDom();});
+  document.addEventListener('dtl:localechange',()=>document.querySelectorAll('.admin-cover-tools').forEach(syncAdminToolsCopy));
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
@@ -321,6 +331,4 @@
     manifestLoaded = false;
     loadManifest(true);
   });
-
-  runtime.registerPatcher(() => patch(document));
 })();

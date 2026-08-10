@@ -24,15 +24,17 @@
     id:{next:'Lanjut',back:'Kembali',enter:'Masuk ke Dollar TL',notAdult:'Saya belum cukup umur secara hukum',loading:'Menyiapkan Dollar TL…',error:'Panduan sambutan tidak dapat dimuat. Ketuk untuk mencoba lagi.',retry:'Coba lagi',s1t:'Selamat datang di Dollar TL',s1b:'Tempat yang rapi untuk mengusulkan novel, mengikuti antrean terjemahan publik, dan menyimpan semua permintaanmu dalam satu tempat.',s2t:'Pengajuan yang lebih pintar',s2b:'Unggah TXT atau EPUB. Kami dapat menganalisis file, menyarankan bahasa asli dan jumlah bab, serta memakai sampul EPUB jika tersedia.',s3t:'Selalu terbarui',s3b:'Pantau proses review dan terjemahan, terima notifikasi Telegram, dan undang teman untuk mendapat hingga +3 permintaan bonus.',s4t:'Sebelum melanjutkan',s4b:'Dollar TL dapat memuat atau membahas konten fiksi dewasa, seksual, fetish, kekerasan, atau tema sensitif lainnya.',adult:'Saya mengonfirmasi bahwa saya telah mencapai usia dewasa secara hukum di negara atau yurisdiksi saya.',adultHelp:'Ini adalah konfirmasi mandiri. Dollar TL tidak menentukan usia atau persyaratan hukum lokal untukmu.'},
     vi:{next:'Tiếp tục',back:'Quay lại',enter:'Vào Dollar TL',notAdult:'Tôi chưa đủ tuổi thành niên hợp pháp',loading:'Đang chuẩn bị Dollar TL…',error:'Không thể tải phần hướng dẫn chào mừng. Nhấn để thử lại.',retry:'Thử lại',s1t:'Chào mừng đến Dollar TL',s1b:'Một nơi gọn gàng để đề xuất tiểu thuyết, theo dõi hàng đợi dịch công khai và quản lý mọi yêu cầu của bạn.',s2t:'Gửi yêu cầu thông minh hơn',s2b:'Tải TXT hoặc EPUB. Chúng tôi có thể phân tích tệp, gợi ý ngôn ngữ gốc và số chương, đồng thời dùng bìa EPUB nếu có.',s3t:'Luôn được cập nhật',s3b:'Theo dõi quá trình duyệt và dịch, nhận thông báo Telegram và mời bạn bè để nhận tối đa +3 lượt yêu cầu bổ sung.',s4t:'Trước khi tiếp tục',s4b:'Dollar TL có thể chứa hoặc thảo luận nội dung hư cấu dành cho người lớn, tình dục, fetish, bạo lực hoặc các chủ đề nhạy cảm khác.',adult:'Tôi xác nhận rằng tôi đã đủ tuổi thành niên theo luật tại quốc gia hoặc khu vực pháp lý của mình.',adultHelp:'Đây là xác nhận do bạn tự thực hiện. Dollar TL không xác định tuổi hoặc yêu cầu pháp lý địa phương thay cho bạn.'},
     fr:{next:'Suivant',back:'Retour',enter:'Entrer dans Dollar TL',notAdult:'Je ne suis pas majeur',loading:'Préparation de Dollar TL…',error:'Impossible de charger le guide de bienvenue. Touchez pour réessayer.',retry:'Réessayer',s1t:'Bienvenue sur Dollar TL',s1b:'Un espace clair pour proposer des romans, suivre la file publique de traduction et retrouver toutes vos demandes.',s2t:'Des demandes plus intelligentes',s2b:'Importez un TXT ou un EPUB. Nous pouvons analyser le fichier, suggérer la langue originale et le nombre de chapitres, et utiliser la couverture EPUB si elle existe.',s3t:'Restez informé',s3b:'Suivez la validation et la traduction, recevez des notifications Telegram et invitez des amis pour obtenir jusqu’à +3 demandes bonus.',s4t:'Avant de continuer',s4b:'Dollar TL peut contenir ou évoquer des contenus fictifs adultes, sexuels, fétichistes, violents ou d’autres thèmes sensibles.',adult:'Je confirme être majeur selon les lois de mon pays ou de ma juridiction.',adultHelp:'Il s’agit d’une auto-déclaration. Dollar TL ne détermine pas votre âge ni les exigences légales locales à votre place.'},
-    de:{next:'Weiter',back:'Zurück',enter:'Dollar TL öffnen',notAdult:'Ich bin noch nicht volljährig',loading:'Dollar TL wird vorbereitet…',error:'Der Willkommensleitfaden konnte nicht geladen werden. Tippe zum Wiederholen.',retry:'Erneut versuchen',s1t:'Willkommen bei Dollar TL',s1b:'Ein übersichtlicher Ort, um Romane vorzuschlagen, die öffentliche Übersetzungswarteschlange zu verfolgen und alle Anfragen zusammenzuhalten.',s2t:'Intelligentere Einreichungen',s2b:'Lade TXT oder EPUB hoch. Wir können die Datei analysieren, Originalsprache und Kapitelzahl vorschlagen und vorhandene EPUB-Cover verwenden.',s3t:'Immer auf dem Laufenden',s3b:'Verfolge Prüfung und Übersetzung, erhalte Telegram-Benachrichtigungen und lade Freunde für bis zu +3 Bonus-Anfragen ein.',s4t:'Bevor du fortfährst',s4b:'Dollar TL kann fiktionale Inhalte für Erwachsene, sexuelle oder fetischbezogene Inhalte, Gewalt oder andere sensible Themen enthalten oder besprechen.',adult:'Ich bestätige, dass ich in meinem Land oder meiner Rechtsordnung volljährig bin.',adultHelp:'Dies ist eine Selbstauskunft. Dollar TL bestimmt weder dein Alter noch die für dich geltenden lokalen rechtlichen Anforderungen.'},
+    de:{next:'Weiter',back:'Zurück',enter:'Dollar TL öffnen',notAdult:'Ich bin noch nicht volljährig',loading:'Dollar TL wird vorbereitet…',error:'Der Willkommensleitfaden konnte nicht geladen werden. Tippe zum Wiederholen.',retry:'Erneut versuchen',s1t:'Willkommen bei Dollar TL',s1b:'Ein übersichtlicher Ort, um Romane vorzuschlagen, die öffentliche Übersetzungswarteschlange zu verfolgen und alle Anfragen zusammenzuhalten.',s2t:'Intelligentere Einreichungen',s2b:'Lade TXT oder EPUB hoch. Wir können die Datei analysieren, Originalsprache und Kapitelzahl vorschlagen und vorhandene EPUB-Cover verwenden.',s3t:'Immer auf dem Laufenden',s3b:'Verfolge Prüfung und Übersetzung, erhalte Telegram-Benachrichtigungen und lade Freunde für bis zu +3 Bonus-Anfragen ein.',s4t:'Bevor du fortfährst',s4b:'Dollar TL kann fiktionale Inhalte für Erwachsene, sexuelle oder fetischbezogene Inhalte, Gewalt oder andere sensible Themen enthalten oder besprechen.',adult:'Ich bestätige, dass ich in meinem Land oder in meiner Rechtsordnung volljährig bin.',adultHelp:'Dies ist eine Selbstauskunft. Dollar TL bestimmt weder dein Alter noch die für dich geltenden lokalen rechtlichen Anforderungen.'},
   };
 
   const icons = ['book-open','wand-sparkles','bell-ring','shield-check'];
+  const TAP_SELECTOR = '#onboardNext,#onboardBack,[data-onboard-dot],#underageButton,#onboardingRetry,.adult-confirm';
   let current = 0;
   let locale = inferLocale();
   let overlay = null;
   let touchX = 0;
   let touchY = 0;
+  let touchTarget = null;
 
   function inferLocale() {
     const raw = String(tg?.initDataUnsafe?.user?.language_code || 'en').toLowerCase();
@@ -63,6 +65,8 @@
     overlay = document.createElement('div');
     overlay.id = 'dtlOnboarding';
     overlay.className = 'onboarding-overlay';
+    overlay.addEventListener('touchstart',onTouchStart,{passive:true,capture:true});
+    overlay.addEventListener('touchend',onTouchEnd,{passive:false,capture:true});
     document.body.appendChild(overlay);
     document.body.classList.add('onboarding-active');
     return overlay;
@@ -111,8 +115,6 @@
     const checkbox = el.querySelector('#adultConfirm');
     if (checkbox) checkbox.addEventListener('change',()=>{ const next=el.querySelector('#onboardNext'); if(next) next.disabled=!checkbox.checked; });
     el.querySelector('#underageButton')?.addEventListener('click',()=>{ try { tg.close(); } catch {} });
-    el.addEventListener('touchstart',onTouchStart,{passive:true});
-    el.addEventListener('touchend',onTouchEnd,{passive:true});
     refreshIcons();
   }
 
@@ -122,8 +124,37 @@
     current=index; render(direction);
   }
 
-  function onTouchStart(e) { const t=e.changedTouches?.[0]; if(!t)return; touchX=t.clientX; touchY=t.clientY; }
-  function onTouchEnd(e) { const t=e.changedTouches?.[0]; if(!t)return; const dx=t.clientX-touchX,dy=Math.abs(t.clientY-touchY); if(Math.abs(dx)>58&&dy<70){ if(dx<0&&current<3)move(1); else if(dx>0&&current>0)move(-1); } }
+  function onTouchStart(e) {
+    const t=e.changedTouches?.[0];
+    if(!t)return;
+    touchX=t.clientX;
+    touchY=t.clientY;
+    touchTarget=e.target;
+  }
+
+  function onTouchEnd(e) {
+    const t=e.changedTouches?.[0];
+    if(!t)return;
+    const dx=t.clientX-touchX;
+    const dy=t.clientY-touchY;
+    if(Math.abs(dx)>58&&Math.abs(dy)<70){
+      if(dx<0&&current<3)move(1);
+      else if(dx>0&&current>0)move(-1);
+      return;
+    }
+    if(Math.hypot(dx,dy)>18)return;
+    const rawTarget=touchTarget instanceof Element?touchTarget:e.target;
+    const control=rawTarget?.closest?.(TAP_SELECTOR);
+    if(!control||control.hasAttribute?.('disabled'))return;
+    e.preventDefault();
+    e.stopPropagation();
+    if(control.classList.contains('adult-confirm')){
+      const checkbox=control.querySelector('input[type="checkbox"]');
+      if(checkbox)checkbox.click();
+      return;
+    }
+    control.click?.();
+  }
 
   async function complete() {
     const check = overlay?.querySelector('#adultConfirm');
