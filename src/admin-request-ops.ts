@@ -33,15 +33,22 @@ export async function handleAdminRequestOps(
   if(!Number.isSafeInteger(id)||id<=0)return miniAppJsonError('invalid_request','Некорректный ID заявки.',400);
   const action=match[2]||'';
 
-  if(request.method==='GET'&&!action)return requestDetail(id,env);
-  if(request.method!=='POST')return miniAppJsonError('method_not_allowed','Method not allowed.',405);
+  try{
+    if(request.method==='GET'&&!action)return requestDetail(id,env);
+    if(request.method!=='POST')return miniAppJsonError('method_not_allowed','Method not allowed.',405);
 
-  if(action==='edit')return editRequest(request,id,auth.telegramUser.id,env);
-  if(action==='queue-position')return moveToPosition(request,id,auth.telegramUser.id,env);
-  if(action==='meta')return saveMeta(request,id,auth.telegramUser.id,env);
-  if(action==='restore-pending')return restorePending(id,auth.telegramUser.id,env);
-  if(action==='raw')return sendRaw(id,auth.telegramUser.id,env,telegram);
-  return miniAppJsonError('not_found','Request operation not found.',404);
+    if(action==='edit')return editRequest(request,id,auth.telegramUser.id,env);
+    if(action==='queue-position')return moveToPosition(request,id,auth.telegramUser.id,env);
+    if(action==='meta')return saveMeta(request,id,auth.telegramUser.id,env);
+    if(action==='restore-pending')return restorePending(id,auth.telegramUser.id,env);
+    if(action==='raw')return sendRaw(id,auth.telegramUser.id,env,telegram);
+    return miniAppJsonError('not_found','Request operation not found.',404);
+  }catch(error){
+    if(error instanceof RequestValidationError){
+      return miniAppJsonError('invalid_request_edit',error.message,400);
+    }
+    throw error;
+  }
 }
 
 async function requestDetail(id:number,env:Env):Promise<Response>{
