@@ -1,3 +1,4 @@
+import { handleAccessAdminRequest } from './access-admin';
 import { handleAccessChatMemberUpdate, runAccessGateMaintenance } from './access-gate';
 import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
@@ -43,6 +44,8 @@ export default {
     if (releasesResponse) return releasesResponse;
 
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+    const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
+    if (accessAdminResponse) return accessAdminResponse;
     const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
     if (adminUsersResponse) return adminUsersResponse;
     const adminAnalyticsResponse = await handleAdminAnalyticsRequest(request, env);
