@@ -41,6 +41,7 @@ jobs:
         run: |
           node --check public/app/app.js
           node --check public/app/app-core.js
+          node --check public/app/view-i18n.js
           node --check public/app/view-home.js
           node --check public/app/view-queue.js
           node --check public/app/view-suggest.js
@@ -84,6 +85,7 @@ jobs:
           test -f public/app/admin-tools.js
           test -f public/app/admin-publishing.js
           test -f public/app/app-core.js
+          test -f public/app/view-i18n.js
           test -f public/app/view-home.js
           test -f public/app/view-queue.js
           test -f public/app/view-suggest.js
@@ -96,7 +98,11 @@ jobs:
           test ! -e public/app/publication-management.js
           test ! -e public/app/publishing-comments-ui.js
           grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
-          grep -q '/app/view-home.js?v=20260810-app1' public/app/index.html
+          grep -q '/app/view-i18n.js?v=20260810-app2' public/app/index.html
+          grep -q '/app/view-home.js?v=20260810-app2' public/app/index.html
+          grep -q '/app/view-queue.js?v=20260810-app2' public/app/index.html
+          grep -q '/app/view-suggest.js?v=20260810-app2' public/app/index.html
+          grep -q '/app/view-requests-account.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-admin.js?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-console.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-tools.css?v=20260810-app1' public/app/index.html
