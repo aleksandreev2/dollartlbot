@@ -116,7 +116,13 @@ async function handleMessage(
   if (text === '/start' || text?.startsWith('/start ')) {
     const startParam = text.startsWith('/start ') ? text.slice('/start '.length).trim() : '';
     if (startParam) {
-      await handleReferralBotStart(startParam, from.id, locale, env, telegram);
+      const referralHandled = await handleReferralBotStart(startParam, from.id, locale, env, telegram);
+      if (referralHandled) {
+        // Keep the referral-specific invite link as the only join CTA here so
+        // attribution cannot be lost to a generic required-channel link.
+        if (!user?.language_selected) await sendLanguagePicker(from.id, locale, telegram);
+        return;
+      }
     }
 
     if (!user?.language_selected) {
