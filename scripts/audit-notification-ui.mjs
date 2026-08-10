@@ -20,6 +20,8 @@ for(const token of [
   'bodyMarkup(n.body)',
   'notification-subject',
   'notification-detail',
+  'data-action-url',
+  'DTL_NOTIFICATION_LINK?.open',
 ]) need(js,token,'notification center');
 
 forbid(js,'id="notifSave"','notification center manual save button');
@@ -34,10 +36,13 @@ for(const token of [
   '.notification-item-body{display:grid',
   '.notification-subject{',
   '.notification-detail{',
+  '.notification-action{',
+  '.request-card.notification-target{',
 ]) need(css,token,'notification center CSS');
 forbid(css,'grid-template-columns:1fr 1fr','notification center two-column feed');
 
-need(index,'/app/notifications-ui.css?v=20260810-notify2','notification CSS cache bust');
-need(index,'/app/notifications-ui.js?v=20260810-notify2','notification JS cache bust');
+need(index,'/app/notifications-ui.css?v=20260810-notify3','notification CSS cache bust');
+need(index,'/app/notifications-ui.js?v=20260810-notify3','notification JS cache bust');
+need(index,'/app/notification-deeplink.js?v=20260810-notify1','notification deep-link runtime');
 
-console.log('Notification center UX audit passed: feed-first layout, collapsed settings, autosave preferences, compact one-column cards, and semantic notification body hierarchy.');
+console.log('Notification center UX audit passed: feed-first layout, autosave preferences, compact cards, semantic body hierarchy, and actionable deep links.');
