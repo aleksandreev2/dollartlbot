@@ -17,6 +17,7 @@ const configure = read('scripts/configure-bot.mjs');
 const adminApi = read('src/access-admin.ts');
 const gateUi = read('public/app/access-gate-ui.js');
 const gateCss = read('public/app/access-gate-ui.css');
+const onboardingUi = read('public/app/onboarding-ui.js');
 const adminUi = read('public/app/access-admin-ui.js');
 const html = read('public/app/index.html');
 const wrangler = read('wrangler.jsonc');
@@ -88,12 +89,25 @@ for (const token of [
   "app.root.classList.toggle('access-locked', locked)",
   "app.sheetRoot.innerHTML = ''",
   'bell.disabled = locked',
+  "emitAccessLifecycle('dtl:accesslocked'",
+  "emitAccessLifecycle('dtl:accessready'",
 ]) need(gateUi, token, 'Mini App gate UX');
 for (const token of [
   '.app-shell.access-locked .topbar .brand',
   '.app-shell.access-locked .topbar .notification-button',
   'pointer-events: none',
 ]) need(gateCss, token, 'Mini App gate CSS');
+
+for (const token of [
+  "const ACCESS_CODES = new Set(['membership_required','access_check_unavailable'])",
+  "document.addEventListener('dtl:accesslocked', removeOverlay)",
+  "document.addEventListener('dtl:accessready', () => void init())",
+  "if (ACCESS_CODES.has(info?.error?.code))",
+  'window.DTL_APP?.state?.accessLocked',
+  'let onboardingResolved = false',
+]) need(onboardingUi, token, 'access-aware onboarding');
+forbid(onboardingUi, "document.addEventListener('DOMContentLoaded',init", 'onboarding must not race access preflight');
+forbid(onboardingUi, "else init();", 'onboarding must wait for access lifecycle');
 
 for (const token of [
   "url.pathname !== '/api/app/admin/access'",
@@ -118,12 +132,15 @@ forbid(gateCopy, 'boosty', 'user-facing access gate copy');
 
 need(configure, "allowed_updates: ['message', 'callback_query', 'chat_member']", 'Telegram webhook membership updates');
 need(html, '/app/access-gate-ui.css?v=20260810-access1', 'access gate CSS asset');
-need(html, '/app/access-gate-ui.js?v=20260810-access1', 'access gate JS asset');
+need(html, '/app/access-gate-ui.js?v=20260810-access2', 'access gate JS asset');
+need(html, '/app/onboarding-ui.js?v=20260810-runtime5', 'access-aware onboarding JS asset');
 need(html, '/app/access-admin-ui.js?v=20260810-access1', 'access admin JS asset');
 need(wrangler, 'MINI_APP_URL', 'fresh Mini App URL');
+need(wrangler, '?build=20260810-access2', 'fresh access-onboarding build');
 if (!/\/app\/\?build=[A-Za-z0-9._-]+/.test(wrangler)) throw new Error('Mini App URL must retain a versioned build query.');
 
 new Function(gateUi);
+new Function(onboardingUi);
 new Function(adminUi);
 
-console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, referral-safe onboarding, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
+console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, referral-safe onboarding, coordinated access/onboarding lifecycle, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
