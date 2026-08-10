@@ -20,7 +20,6 @@ type AccessConfig = {
   joinUrl: string | null;
   configured: boolean;
   intended: boolean;
-  inheritedFromPublishing: boolean;
 };
 
 type CacheRow = {
@@ -77,9 +76,6 @@ export async function checkBotAccess(
     if (cached.is_member === 1) {
       return decision(true, cached.source === 'entitlement' ? 'entitlement' : 'cache', config);
     }
-    // Only a denial written after both access paths were checked is authoritative.
-    // A channel leave event merely invalidates a prior positive cache; it must not
-    // suppress the internal entitlement check on the next interaction.
     if (cached.source === 'denied') return decision(false, 'membership_required', config);
   }
 
@@ -95,8 +91,8 @@ export async function checkBotAccess(
     console.warn(JSON.stringify({ event: 'access_channel_check_failed', user_id: userId, error: errorText(error) }));
   }
 
-  // An existing product entitlement is an internal access path. It deliberately
-  // does not appear in access-gate copy or API details shown to users.
+  // Existing privileged entitlement remains an internal access path and is never
+  // disclosed in access-gate copy or API details shown to users.
   const subscription = await getSubscriptionState(userId, env, telegram);
   if (subscription.subscriber) {
     await writeCache(env, userId, config.channelKey, true, 'entitlement', POSITIVE_TTL_MS, STALE_POSITIVE_GRACE_MS);
@@ -123,8 +119,6 @@ export async function checkBotAccess(
     return decision(false, 'check_unavailable', config);
   }
 
-  // The user is known not to be in the required channel, but an entitlement API
-  // failure means we still cannot safely conclude that access should be denied.
   if (subscription.verificationError) return decision(false, 'check_unavailable', config);
 
   await writeCache(env, userId, config.channelKey, false, 'denied', NEGATIVE_TTL_MS, NEGATIVE_TTL_MS);
@@ -171,7 +165,7 @@ export async function sendAccessGate(
       await telegram.editMessageText(chatId, messageId, text, { reply_markup: keyboard });
       return;
     } catch {
-      // A stale or otherwise non-editable message should not make the gate unusable.
+      // A stale/non-editable gate message should not make the flow unusable.
     }
   }
   await telegram.sendMessage(chatId, text, { reply_markup: keyboard });
@@ -201,7 +195,7 @@ export async function getAccessGateDiagnostics(env: Env, telegram: TelegramClien
     return {
       ok: false,
       configured: false,
-      message: 'Канал обязательного доступа не настроен. Ограничение доступа пока выключено.',
+      message: 'Канал обязательного доступа не настроен. Ограничение доступа выключено.',
       join_url: null,
     };
   }
@@ -230,17 +224,17 @@ export async function getAccessGateDiagnostics(env: Env, telegram: TelegramClien
     const me = await telegram.call<TelegramUser>('getMe', {});
     const member = await telegram.getChatMember(chat.id, me.id);
     const botAdmin = member.status === 'administrator' || member.status === 'creator';
+    const effectiveJoinUrl = config.joinUrl || (chat.username ? `https://t.me/${chat.username}` : null);
     return {
-      ok: botAdmin && Boolean(config.joinUrl),
+      ok: botAdmin && Boolean(effectiveJoinUrl),
       configured: true,
       id: String(chat.id),
       title: chat.title || chat.username || '',
       bot_status: member.status,
-      inherited_from_publishing: config.inheritedFromPublishing,
-      join_url: config.joinUrl,
+      join_url: effectiveJoinUrl,
       message: !botAdmin
-        ? 'Канал найден, но бот не является администратором. Проверка участников и мгновенный отзыв доступа не гарантируются.'
-        : !config.joinUrl
+        ? 'Канал найден, но бот не является администратором. Надёжная проверка участников и мгновенный отзыв доступа невозможны.'
+        : !effectiveJoinUrl
           ? 'Канал и права бота настроены, но нет публичной или invite-ссылки для кнопки вступления.'
           : `Доступ настроен: ${chat.title || chat.username || chat.id}. Бот имеет права администратора.`,
     };
@@ -260,21 +254,18 @@ async function getAccessConfig(env: Env, force = false): Promise<AccessConfig> {
 
   const rows = await env.DB.prepare(`
     SELECT key, value FROM app_settings
-    WHERE key IN ('access_channel_id','access_channel_url','publish_channel_id')
+    WHERE key IN ('access_channel_id','access_channel_url')
   `).all<{ key: string; value: string }>();
   const values = Object.fromEntries(rows.results.map((row) => [row.key, String(row.value || '').trim()]));
-  const accessRaw = values.access_channel_id || '';
-  const publishRaw = values.publish_channel_id || '';
-  const selectedRaw = accessRaw || publishRaw;
-  const channelId = normalizeConfiguredChannelId(selectedRaw);
+  const raw = values.access_channel_id || '';
+  const channelId = normalizeConfiguredChannelId(raw);
   const explicitJoin = normalizeJoinUrl(values.access_channel_url || '');
   const value: AccessConfig = {
     channelId,
     channelKey: channelId ? channelId.toLowerCase() : null,
     joinUrl: explicitJoin || deriveJoinUrl(channelId),
     configured: Boolean(channelId),
-    intended: Boolean(selectedRaw),
-    inheritedFromPublishing: !accessRaw && Boolean(publishRaw),
+    intended: Boolean(raw),
   };
   configCache = { value, expiresAt: now + CONFIG_TTL_MS };
   return value;
