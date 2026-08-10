@@ -1,6 +1,7 @@
 import { currentMonthKey, getUser } from './db';
 import { normalizeLocale, type Locale } from './i18n/index';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
+import { sendUserNotification } from './notifications';
 import { getQuotaState, REFERRAL_MONTHLY_SLOT_CAP } from './quota';
 import { getSubscriptionState } from './subscription';
 import {
@@ -46,6 +47,19 @@ const NOTIFY: Record<Locale, { earned: string; cap: string }> = {
   fr: { earned: '🎁 Parrainage validé ! Vous gagnez +1 demande de roman supplémentaire.', cap: '✅ Parrainage validé. Vous avez déjà atteint le maximum de +3 demandes bonus.' },
   de: { earned: '🎁 Empfehlung abgeschlossen! Du erhältst +1 zusätzliche Roman-Anfrage.', cap: '✅ Empfehlung abgeschlossen. Du hast bereits das Maximum von +3 Bonus-Anfragen erreicht.' },
   ru: { earned: '🎁 Реферал засчитан! Вы получили +1 дополнительную заявку на новеллу.', cap: '✅ Реферал засчитан. У вас уже достигнут максимум: +3 реферальных слота.' },
+};
+
+const REFERRAL_NOTIFY_TITLE: Record<Locale, string> = {
+  en:'Referral bonus updated',
+  es:'Bono de referido actualizado',
+  fil:'Na-update ang referral bonus',
+  hi:'रेफ़रल बोनस अपडेट हुआ',
+  pt:'Bônus de indicação atualizado',
+  id:'Bonus referral diperbarui',
+  vi:'Đã cập nhật thưởng giới thiệu',
+  fr:'Bonus de parrainage mis à jour',
+  de:'Empfehlungsbonus aktualisiert',
+  ru:'Реферальный бонус обновлён',
 };
 
 const REFERRAL_START: Record<Locale, { title: string; body: string; join: string; app: string }> = {
@@ -369,7 +383,19 @@ async function qualifyReferral(
 
   const user = await getUser(env, row.referrer_user_id);
   const locale = normalizeLocale(user?.language);
-  await telegram.sendMessage(row.referrer_user_id, grant ? NOTIFY[locale].earned : NOTIFY[locale].cap).catch(() => undefined);
+  const message = (grant ? NOTIFY[locale].earned : NOTIFY[locale].cap).replace(/^[🎁✅]\s*/u, '');
+  await sendUserNotification(
+    env,
+    telegram,
+    row.referrer_user_id,
+    locale,
+    'notify_referrals',
+    grant ? 'referral_earned' : 'referral_cap',
+    REFERRAL_NOTIFY_TITLE[locale],
+    message,
+    '/app/?view=account',
+    `referral:${row.id}:qualified`,
+  );
 }
 
 async function ensureChannelInvite(

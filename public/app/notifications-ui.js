@@ -69,6 +69,7 @@
     document.getElementById('notifBack')?.addEventListener('click',goBack);
     document.getElementById('notifPrefsButton')?.addEventListener('click',toggleSettings);
     document.querySelectorAll('[data-pref]').forEach(input=>input.addEventListener('change',schedulePreferenceSave));
+    document.querySelectorAll('[data-action-url]').forEach(card=>card.addEventListener('click',()=>window.DTL_NOTIFICATION_LINK?.open(card.dataset.actionUrl)));
     icons();
     dot(0);
     document.dispatchEvent(new CustomEvent('dtl:notifications',{detail:{root}}));
@@ -106,14 +107,17 @@
 
   function item(n){
     const unread=n.read_at?'':' unread';
-    return`<article class="surface-card notification-item${unread}" data-notification-id="${Number(n.id)||0}">
+    const action=n.action_url?` data-action-url="${esc(n.action_url)}"`:'';
+    const tag=n.action_url?'button':'article';
+    const type=n.action_url?' type="button"':'';
+    return`<${tag}${type} class="surface-card notification-item${unread}${n.action_url?' notification-action':''}" data-notification-id="${Number(n.id)||0}"${action}>
       <div class="notification-item-icon">${ico(typeIcon(n.type))}</div>
       <div class="notification-item-copy">
         <div class="notification-item-top"><strong>${esc(n.title)}</strong>${n.read_at?'':'<i class="notification-unread-dot" aria-hidden="true"></i>'}</div>
         ${bodyMarkup(n.body)}
         <time datetime="${esc(n.created_at||'')}">${fmt(n.created_at)}</time>
       </div>
-    </article>`;
+    </${tag}>`;
   }
 
   function typeIcon(t=''){
@@ -160,9 +164,9 @@
     const payload=currentPreferencePayload();
     panel?.classList.add('saving');
     try{
-      await api('/api/app/notifications/preferences',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+      const result=await api('/api/app/notifications/preferences',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
       if(version!==preferenceVersion)return;
-      cache.preferences={...payload};
+      cache.preferences=result.preferences||{...payload};
       updatePreferenceCountFromInputs();
       toast(tr('saved'));
     }catch{

@@ -1,5 +1,5 @@
 import { getSubmission } from './db';
-import { notifySubmissionStatus, type RequestNotificationKind } from './notifications';
+import { notifySubmissionStatus, resetProgressNotificationState, type RequestNotificationKind } from './notifications';
 import { normalizeQueuePositions } from './queue';
 import type { SubmissionRow } from './domain';
 import type { TelegramClient } from './telegram';
@@ -124,6 +124,7 @@ export async function applyAdminSubmissionAction(
         WHERE id=? AND status='accepted' AND queue_status='queued'
       `).bind(now, now, submissionId).run();
       changed = oneRow(result);
+      if (changed) await resetProgressNotificationState(env, submissionId);
       normalizeQueue = true;
       notification = 'started';
       break;
@@ -168,6 +169,7 @@ export async function applyAdminSubmissionAction(
         WHERE id=? AND status='accepted' AND queue_status='in_progress'
       `).bind(now, submissionId).run();
       changed = oneRow(result);
+      if (changed) await resetProgressNotificationState(env, submissionId);
       normalizeQueue = true;
       break;
     }
@@ -190,6 +192,7 @@ export async function applyAdminSubmissionAction(
         WHERE id=? AND status='accepted' AND queue_status='completed'
       `).bind(restored.currentChapter, restored.progressUpdatedAt, now, now, submissionId).run();
       changed = oneRow(result);
+      if (changed) await resetProgressNotificationState(env, submissionId, restored.currentChapter);
       auditMeta = {
         restored_current_chapter: restored.currentChapter,
         restored_from_audit: restored.fromAudit,
@@ -210,6 +213,7 @@ export async function applyAdminSubmissionAction(
           400,
         );
       }
+      if (before.current_chapter === chapter) return before;
       const result = await env.DB.prepare(`
         UPDATE submissions
         SET current_chapter=?, progress_updated_at=?, updated_at=?
