@@ -1,5 +1,8 @@
+/app/
+  Cache-Control: no-store, max-age=0
+
 /app/index.html
-  Cache-Control: no-cache
+  Cache-Control: no-store, max-age=0
 
 /app/*.js
   Cache-Control: no-cache
