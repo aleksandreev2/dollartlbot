@@ -36,11 +36,16 @@ for (const token of [
   "values.access_channel_id",
   "values.publish_channel_id",
   'getSubscriptionState(userId, env, telegram)',
-  "source === 'entitlement'",
+  "cached.source === 'denied'",
+  "cached.source === 'entitlement'",
+  'subscription.verificationError',
   'cached?.is_member === 1',
   'Date.parse(cached.stale_until) > now',
   'handleAccessChatMemberUpdate',
   "'channel_event'",
+  'active ? POSITIVE_TTL_MS : 0',
+  'active ? STALE_POSITIVE_GRACE_MS : 0',
+  "writeCache(env, userId, config.channelKey, false, 'denied'",
   'runAccessGateMaintenance',
   'getAccessGateDiagnostics',
   'invalidateAccessConfigCache',
@@ -56,7 +61,7 @@ need(baseAccess, 'authenticateMiniAppRequest(request, env)', 'legacy Mini App ga
 for (const token of [
   'ensureBotAccess(from.id, locale, env, telegram)',
   "data === 'access:retry'",
-  'checkBotAccess(query.from.id, env, telegram, { force: true })',
+  'checkBotAccess(userId, env, telegram, { force: true })',
   'sendAccessGate(',
 ]) need(handlers, token, 'Telegram bot gate');
 
@@ -105,4 +110,4 @@ need(wrangler, '?build=20260810-access1', 'fresh Mini App URL');
 new Function(gateUi);
 new Function(adminUi);
 
-console.log('Channel access gate audit passed: backend enforcement, immediate membership events, bounded cache/grace, localized bot/Mini App UX, admin diagnostics, and live rechecks are wired.');
+console.log('Channel access gate audit passed: backend enforcement, immediate membership invalidation, bounded cache/grace, internal entitlement safety, localized bot/Mini App UX, admin diagnostics, and live rechecks are wired.');
