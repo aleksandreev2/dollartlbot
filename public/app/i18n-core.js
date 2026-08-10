@@ -3,6 +3,7 @@
   const storageKey = 'dtl_locale';
   const patchers = new Set();
   const responseHandlers = new Set();
+  const fetchMiddlewares = new Set();
   const requestWords = {en:'Request',ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage'};
   const requestPattern = /(?:Request|Заявка|Solicitud|Kahilingan|अनुरोध|Pedido|Permintaan|Yêu cầu|Demande|Anfrage)\s+#(\d+)/giu;
   const positionPattern = /(?:Position|Позиция|Posición|Puwesto|स्थान|Posição|Posisi|Vị trí|Anfrageposition)\s+#(\d+)/giu;
@@ -116,6 +117,12 @@
     return () => responseHandlers.delete(handler);
   }
 
+  function registerFetchMiddleware(middleware) {
+    if (typeof middleware !== 'function') return () => {};
+    fetchMiddlewares.add(middleware);
+    return () => fetchMiddlewares.delete(middleware);
+  }
+
   function apply(localeValue, source = 'unknown') {
     const next = normalize(localeValue);
     if (!next) return false;
@@ -139,6 +146,15 @@
     catch { return null; }
   }
 
+  function requestPath(input) {
+    try {
+      const raw = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input || '');
+      return new URL(raw, location.href).pathname;
+    } catch {
+      return '';
+    }
+  }
+
   const runtimeApi = Object.freeze({
     supported: Object.freeze([...supported]),
     normalize,
@@ -153,6 +169,7 @@
     schedule,
     registerPatcher,
     registerResponseHandler,
+    registerFetchMiddleware,
   });
   window.DTL_RUNTIME = runtimeApi;
   window.DTL_I18N = runtimeApi;
@@ -162,12 +179,20 @@
 
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async function dtlRuntimeFetch(input, init) {
-    let response = await nativeFetch(input, init);
-    let pathname = '';
-    try {
-      const raw = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input || '');
-      pathname = new URL(raw, location.href).pathname;
-    } catch {}
+    const middlewares = [...fetchMiddlewares];
+    const dispatch = async (index, currentInput = input, currentInit = init) => {
+      if (index >= middlewares.length) return nativeFetch(currentInput, currentInit);
+      const middleware = middlewares[index];
+      return middleware(
+        currentInput,
+        currentInit,
+        (nextInput = currentInput, nextInit = currentInit) => dispatch(index + 1, nextInput, nextInit),
+        { pathname: requestPath(currentInput) },
+      );
+    };
+
+    let response = await dispatch(0);
+    const pathname = requestPath(input);
 
     if (pathname === '/api/app/bootstrap' && response.ok) {
       try {
