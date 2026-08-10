@@ -57,7 +57,10 @@
         for (const row of data.covers || []) assigned.set(Number(row.id), String(row.cover_updated_at || '1'));
         manifestLoaded = true;
       })
-      .catch(() => {})
+      .catch(() => {
+        // Fail closed for this foreground session instead of creating a request loop.
+        manifestLoaded = true;
+      })
       .finally(() => {
         manifestLoading = null;
         runtime.schedule();
@@ -82,7 +85,9 @@
     }
 
     const stamp = String(assigned.get(id) || '1');
+    const failures = Number(cover.dataset.coverFailures || 0);
     if (cover.dataset.realCoverChecked === stamp && cover.querySelector('.real-cover-image')) return;
+    if (cover.dataset.realCoverChecked === stamp && failures >= 3) return;
     cover.dataset.realCoverChecked = stamp;
     clearRealCover(cover);
 
@@ -99,14 +104,14 @@
     img.addEventListener('error', () => {
       img.remove();
       cover.classList.remove('has-real-cover');
-      const failures = Number(cover.dataset.coverFailures || 0) + 1;
-      cover.dataset.coverFailures = String(failures);
-      if (failures < 3) {
+      const nextFailures = Number(cover.dataset.coverFailures || 0) + 1;
+      cover.dataset.coverFailures = String(nextFailures);
+      if (nextFailures < 3) {
         setTimeout(() => {
           if (!cover.isConnected || !assigned.has(id) || cover.classList.contains('has-real-cover')) return;
           delete cover.dataset.realCoverChecked;
           runtime.schedule();
-        }, 500 * failures);
+        }, 500 * nextFailures);
       }
     }, { once:true });
     cover.appendChild(img);
@@ -149,12 +154,33 @@
     if (remove) { remove.title = tr('remove'); remove.setAttribute('aria-label', tr('remove')); }
   }
 
+  function syncAdminPreview(tools, id) {
+    const preview = tools.querySelector('.admin-cover-preview');
+    if (!preview) return;
+    const existing = preview.querySelector('img');
+    if (!assigned.has(id)) {
+      existing?.remove();
+      return;
+    }
+    const src = coverUrl(id);
+    if (existing?.getAttribute('src') === src) return;
+    existing?.remove();
+    const img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.src = src;
+    img.addEventListener('error', () => img.remove(), { once:true });
+    preview.appendChild(img);
+  }
+
   function installAdminTools(card) {
     const id = adminId(card);
     if (!id) return;
     let tools = card.querySelector('.admin-cover-tools');
     if (tools) {
       syncAdminToolsCopy(tools);
+      syncAdminPreview(tools, id);
       return;
     }
 
@@ -168,17 +194,6 @@
         <div class="admin-cover-sub"></div>
       </div>
       <div class="admin-cover-actions"></div>`;
-
-    const preview = tools.querySelector('.admin-cover-preview');
-    if (assigned.has(id)) {
-      const previewImg = document.createElement('img');
-      previewImg.alt = '';
-      previewImg.loading = 'lazy';
-      previewImg.decoding = 'async';
-      previewImg.src = coverUrl(id);
-      previewImg.addEventListener('error', () => previewImg.remove(), { once:true });
-      preview.appendChild(previewImg);
-    }
 
     const actions = tools.querySelector('.admin-cover-actions');
     const replace = document.createElement('button');
@@ -198,6 +213,7 @@
     remove.addEventListener('click', () => removeCover(id, tools));
     card.appendChild(tools);
     syncAdminToolsCopy(tools);
+    syncAdminPreview(tools, id);
   }
 
   async function chooseCover(id, tools) {
@@ -218,7 +234,7 @@
         if (!response.ok) throw new Error('upload failed');
         assigned.set(id, String(Date.now()));
         manifestLoaded = true;
-        refreshAdminPreview(tools, id);
+        syncAdminPreview(tools, id);
         refreshVisibleCovers(id);
         toast(tr('updated'));
       } catch {
@@ -238,7 +254,7 @@
       if (!response.ok) throw new Error('delete failed');
       assigned.delete(id);
       manifestLoaded = true;
-      tools.querySelector('.admin-cover-preview img')?.remove();
+      syncAdminPreview(tools, id);
       document.querySelectorAll(`[data-novel="${id}"] .novel-cover`).forEach((cover) => {
         clearRealCover(cover);
         cover.dataset.realCoverChecked = 'none';
@@ -252,17 +268,6 @@
     } catch {
       toast(tr('failed'), true);
     }
-  }
-
-  function refreshAdminPreview(tools, id) {
-    const preview = tools.querySelector('.admin-cover-preview');
-    preview.innerHTML = '';
-    const img = document.createElement('img');
-    img.alt = '';
-    img.decoding = 'async';
-    img.src = coverUrl(id);
-    img.addEventListener('error', () => img.remove(), { once:true });
-    preview.appendChild(img);
   }
 
   function refreshVisibleCovers(id) {
@@ -296,7 +301,7 @@
   function patch(root = document) {
     if (!manifestLoaded && !manifestLoading) loadManifest();
     patchCovers(root);
-    root.querySelectorAll('.admin-request').forEach(installAdminTools);
+    if (manifestLoaded) root.querySelectorAll('.admin-request').forEach(installAdminTools);
     if (window.lucide?.createIcons) window.lucide.createIcons({ attrs:{'stroke-width':1.8,'aria-hidden':'true'} });
   }
 
@@ -313,6 +318,7 @@
         delete cover.dataset.coverFailures;
       }
     });
+    manifestLoaded = false;
     loadManifest(true);
   });
 
