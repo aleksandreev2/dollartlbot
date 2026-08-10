@@ -25,6 +25,8 @@ jobs:
         run: node scripts/audit-frontend-stability.mjs
       - name: Audit notification center UX
         run: node scripts/audit-notification-ui.mjs
+      - name: Audit notification delivery reliability
+        run: node scripts/audit-notification-delivery.mjs
       - name: Audit modular Mini App shell
         run: node scripts/audit-app-modules.mjs
       - name: Audit shared Mini App i18n runtime
@@ -43,6 +45,7 @@ jobs:
         run: |
           node --check public/app/app.js
           node --check public/app/app-core.js
+          node --check public/app/notification-deeplink.js
           node --check public/app/view-i18n.js
           node --check public/app/view-home.js
           node --check public/app/view-queue.js
@@ -86,6 +89,7 @@ jobs:
           test -f public/app/admin-tools.js
           test -f public/app/admin-publishing.js
           test -f public/app/app-core.js
+          test -f public/app/notification-deeplink.js
           test -f public/app/view-i18n.js
           test -f public/app/view-home.js
           test -f public/app/view-queue.js
@@ -100,6 +104,7 @@ jobs:
           test ! -e public/app/publishing-comments-ui.js
           test ! -e public/app/onboarding-interactions-fix.js
           grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
+          grep -q '/app/notification-deeplink.js?v=20260810-notify1' public/app/index.html
           grep -q '/app/view-i18n.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-home.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-queue.js?v=20260810-app3' public/app/index.html
@@ -111,8 +116,8 @@ jobs:
           grep -q '/app/referrals-ui.js?v=20260810-runtime4' public/app/index.html
           grep -q '/app/onboarding-ui.js?v=20260810-runtime4' public/app/index.html
           grep -q '/app/home-v2.js?v=20260810-runtime4' public/app/index.html
-          grep -q '/app/notifications-ui.css?v=20260810-notify2' public/app/index.html
-          grep -q '/app/notifications-ui.js?v=20260810-notify2' public/app/index.html
+          grep -q '/app/notifications-ui.css?v=20260810-notify3' public/app/index.html
+          grep -q '/app/notifications-ui.js?v=20260810-notify3' public/app/index.html
           ! grep -q '/app/onboarding-interactions-fix.js' public/app/index.html
           grep -q '/app/admin-console.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-tools.css?v=20260810-app1' public/app/index.html
@@ -144,6 +149,7 @@ jobs:
           test ! -e public/app/i18n-complete.js
           test ! -e public/app/ui-polish.js
           test -f migrations/0014_broadcast_recipients.sql
+          test -f migrations/0015_notification_delivery_state.sql
       - name: Audit Mini App localization coverage
         run: |
           node scripts/audit-miniapp-i18n.mjs
