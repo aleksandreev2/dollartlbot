@@ -22,20 +22,20 @@ export async function authenticateMiniAppRequest(
   env: Env,
 ): Promise<MiniAppAuthContext | Response> {
   const initData = getInitDataHeader(request);
-  if (!initData) return jsonError('unauthorized', 'Open this app from Telegram.', 401);
+  if (!initData) return miniAppJsonError('unauthorized', 'Open this app from Telegram.', 401);
 
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
   const authDateRaw = params.get('auth_date');
   const userRaw = params.get('user');
   if (!hash || !authDateRaw || !userRaw) {
-    return jsonError('unauthorized', 'Telegram authorization data is incomplete.', 401);
+    return miniAppJsonError('unauthorized', 'Telegram authorization data is incomplete.', 401);
   }
 
   const authDate = Number(authDateRaw);
   const now = Math.floor(Date.now() / 1000);
   if (!Number.isFinite(authDate) || authDate > now + 300 || now - authDate > INIT_DATA_MAX_AGE_SECONDS) {
-    return jsonError('auth_expired', 'Telegram authorization has expired. Reopen the Mini App.', 401);
+    return miniAppJsonError('auth_expired', 'Telegram authorization has expired. Reopen the Mini App.', 401);
   }
 
   const entries = [...params.entries()]
@@ -64,7 +64,7 @@ export async function authenticateMiniAppRequest(
   try {
     signature = hexToBytes(hash);
   } catch {
-    return jsonError('unauthorized', 'Telegram authorization signature is invalid.', 401);
+    return miniAppJsonError('unauthorized', 'Telegram authorization signature is invalid.', 401);
   }
 
   const valid = await crypto.subtle.verify(
@@ -73,16 +73,16 @@ export async function authenticateMiniAppRequest(
     signature,
     encoder.encode(dataCheckString),
   );
-  if (!valid) return jsonError('unauthorized', 'Telegram authorization signature is invalid.', 401);
+  if (!valid) return miniAppJsonError('unauthorized', 'Telegram authorization signature is invalid.', 401);
 
   let telegramUser: TelegramUser;
   try {
     telegramUser = JSON.parse(userRaw) as TelegramUser;
   } catch {
-    return jsonError('unauthorized', 'Telegram user data is invalid.', 401);
+    return miniAppJsonError('unauthorized', 'Telegram user data is invalid.', 401);
   }
   if (!Number.isSafeInteger(telegramUser.id) || telegramUser.id <= 0) {
-    return jsonError('unauthorized', 'Telegram user data is invalid.', 401);
+    return miniAppJsonError('unauthorized', 'Telegram user data is invalid.', 401);
   }
 
   await upsertUser(env, telegramUser);
@@ -109,12 +109,20 @@ export async function authenticateMiniAppRequest(
   };
 }
 
+export function miniAppApiHeaders(): Record<string, string> {
+  return {
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'same-origin',
+  };
+}
+
 export function miniAppJson(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
+      ...miniAppApiHeaders(),
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
     },
   });
 }
@@ -140,8 +148,4 @@ function hexToBytes(value: string): Uint8Array {
   const out = new Uint8Array(value.length / 2);
   for (let i = 0; i < value.length; i += 2) out[i / 2] = Number.parseInt(value.slice(i, i + 2), 16);
   return out;
-}
-
-function jsonError(code: string, message: string, status: number): Response {
-  return miniAppJsonError(code, message, status);
 }
