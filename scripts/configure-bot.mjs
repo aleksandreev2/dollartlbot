@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { loadLocalVars } from './env.mjs';
 
 const vars = loadLocalVars();
@@ -5,7 +6,11 @@ const token = vars.TELEGRAM_BOT_TOKEN;
 const webhookUrl = vars.WEBHOOK_URL;
 const webhookSecret = vars.TELEGRAM_WEBHOOK_SECRET;
 const adminTelegramId = vars.ADMIN_TELEGRAM_ID;
-const miniAppUrl = vars.MINI_APP_URL || (webhookUrl ? `${webhookUrl.replace(/\/$/, '')}/app/` : '');
+const configuredMiniAppUrl = readConfiguredMiniAppUrl();
+const miniAppUrl = process.env.MINI_APP_URL
+  || configuredMiniAppUrl
+  || vars.MINI_APP_URL
+  || (webhookUrl ? `${webhookUrl.replace(/\/$/, '')}/app/` : '');
 
 if (!token || !webhookUrl || !webhookSecret) {
   console.error('Required: TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET in .dev.vars, plus WEBHOOK_URL in the environment.');
@@ -14,6 +19,11 @@ if (!token || !webhookUrl || !webhookSecret) {
 
 if (!/^[A-Za-z0-9_-]{1,256}$/.test(webhookSecret)) {
   console.error('TELEGRAM_WEBHOOK_SECRET must be 1-256 characters using only A-Z, a-z, 0-9, _ and -.');
+  process.exit(1);
+}
+
+if (miniAppUrl && !/^https:\/\//i.test(miniAppUrl)) {
+  console.error('MINI_APP_URL must use HTTPS.');
   process.exit(1);
 }
 
@@ -69,3 +79,12 @@ await api('setWebhook', {
 });
 
 console.log(`Telegram commands, Mini App menu button${miniAppUrl ? ` (${miniAppUrl})` : ''} and webhook configured.`);
+
+function readConfiguredMiniAppUrl() {
+  try {
+    const source = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+    return /"MINI_APP_URL"\s*:\s*"([^"]+)"/.exec(source)?.[1]?.trim() || '';
+  } catch {
+    return '';
+  }
+}
