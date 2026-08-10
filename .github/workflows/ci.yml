@@ -23,6 +23,8 @@ jobs:
         run: node scripts/audit-backend-safety.mjs
       - name: Audit frontend stability invariants
         run: node scripts/audit-frontend-stability.mjs
+      - name: Audit modular Mini App shell
+        run: node scripts/audit-app-modules.mjs
       - name: Audit shared Mini App i18n runtime
         run: node scripts/audit-i18n-shared-runtime.mjs
       - name: Audit EPUB resource safety
@@ -38,6 +40,12 @@ jobs:
       - name: Check Mini App JavaScript syntax
         run: |
           node --check public/app/app.js
+          node --check public/app/app-core.js
+          node --check public/app/view-home.js
+          node --check public/app/view-queue.js
+          node --check public/app/view-suggest.js
+          node --check public/app/view-requests-account.js
+          node --check public/app/view-admin.js
           node --check public/app/performance.js
           node --check public/app/telegram-desktop.js
           node --check public/app/vendor/lucide.min.js
@@ -59,25 +67,40 @@ jobs:
           node --check public/app/home-v2.js
       - name: Verify publishing, desktop and locale assets
         run: |
-          test -f public/app/admin-v2.css
-          test -f public/app/admin-v3.css
-          test -f public/app/admin-performance-v3.css
+          test -f public/app/admin-console.css
+          test -f public/app/admin-tools.css
+          test -f public/app/admin-publishing.css
+          test ! -e public/app/admin-v2.css
+          test ! -e public/app/admin-v3.css
+          test ! -e public/app/admin-performance-v3.css
+          test ! -e public/app/publishing-fixes.css
+          test ! -e public/app/publication-management.css
           test -f public/app/desktop.css
           test -f public/app/desktop-v2.css
           test -f public/app/quota-unlimited-ui.css
           test -f public/app/telegram-desktop.css
-          test -f public/app/publishing-fixes.css
-          test -f public/app/publication-management.css
           test -f public/app/admin-cache.js
           test -f public/app/admin-console.js
           test -f public/app/admin-tools.js
           test -f public/app/admin-publishing.js
+          test -f public/app/app-core.js
+          test -f public/app/view-home.js
+          test -f public/app/view-queue.js
+          test -f public/app/view-suggest.js
+          test -f public/app/view-requests-account.js
+          test -f public/app/view-admin.js
           test ! -e public/app/admin-v2.js
           test ! -e public/app/admin-v3.js
           test ! -e public/app/admin-performance-v3.js
           test ! -e public/app/publishing-fixes.js
           test ! -e public/app/publication-management.js
           test ! -e public/app/publishing-comments-ui.js
+          grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
+          grep -q '/app/view-home.js?v=20260810-app1' public/app/index.html
+          grep -q '/app/view-admin.js?v=20260810-app1' public/app/index.html
+          grep -q '/app/admin-console.css?v=20260810-app1' public/app/index.html
+          grep -q '/app/admin-tools.css?v=20260810-app1' public/app/index.html
+          grep -q '/app/admin-publishing.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-console.js?v=20260810-admin1' public/app/index.html
           grep -q '/app/admin-tools.js?v=20260810-admin1' public/app/index.html
           grep -q '/app/admin-publishing.js?v=20260810-admin1' public/app/index.html

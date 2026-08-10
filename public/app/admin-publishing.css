@@ -1,4 +1,4 @@
-/* Publishing Center — desktop polish, clear pointer states, diagnostics and logs. */
+/* Canonical admin publishing editor, diagnostics, logs and Telegram publication management. */
 .admin-v2 button,
 .admin-v2 [role="button"],
 .admin-v2 input[type="checkbox"],
@@ -13,7 +13,6 @@
 .publisher-drop:hover { border-color:#d49a31; background:#fff7e7; box-shadow:0 8px 24px rgba(179,122,20,.08); }
 .publisher-actions button:hover { border-color:#d7bf92; box-shadow:0 5px 14px rgba(54,39,12,.07); }
 .publisher-actions button.is-busy svg,.publishing-health-loading svg { animation:spin 1s linear infinite; }
-
 .publishing-health { margin-bottom:16px; }
 .publishing-health-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
 .publisher-health-card { display:grid; grid-template-columns:38px minmax(0,1fr); gap:10px; align-items:start; border:1px solid #ebe3d5; border-radius:15px; padding:12px; background:#fff; }
@@ -28,7 +27,6 @@
 .publisher-health-card small { display:block; margin-top:5px; color:#aaa; font-size:9px; }
 .publishing-health-loading { grid-column:1/-1; padding:16px; color:#999; display:flex; gap:8px; align-items:center; justify-content:center; }
 .publishing-health-loading svg { width:16px; }
-
 .publisher-spoiler-option b { display:flex!important; align-items:center; gap:6px; }
 .publisher-spoiler-option b svg { width:14px; height:14px; color:#b37a14; }
 .tg-preview-image { position:relative; isolation:isolate; }
@@ -37,13 +35,11 @@
 .tg-spoiler-badge { position:absolute; z-index:3; inset:0; display:flex; flex-direction:column; gap:7px; align-items:center; justify-content:center; color:#fff; text-shadow:0 2px 8px rgba(0,0,0,.35); pointer-events:none; }
 .tg-spoiler-badge svg { width:28px; height:28px; }
 .tg-spoiler-badge span { font-size:9px; letter-spacing:.16em; font-weight:900; }
-
 .publisher-preview .tg-preview-buttons { display:none!important; }
 .tg-preview-comments-note { display:flex; gap:8px; align-items:flex-start; margin-top:8px; padding:10px 11px; border:1px solid #dceadd; border-radius:12px; background:#f5fbf6; color:#4c5f50; }
 .tg-preview-comments-note>svg { width:16px; height:16px; flex:0 0 auto; }
 .tg-preview-comments-note strong { display:block; font-size:10px; }
 .tg-preview-comments-note small { display:block; margin-top:3px; font-size:9px; line-height:1.4; color:#7d897f; }
-
 .publishing-logs { margin:16px 0; }
 .publishing-log-list { display:grid; gap:7px; max-height:390px; overflow:auto; padding-right:3px; scrollbar-width:thin; }
 .publishing-log-row { display:grid; grid-template-columns:34px minmax(0,1fr); gap:10px; border:1px solid #eee7dc; border-radius:13px; padding:10px 11px; background:#fff; }
@@ -60,7 +56,7 @@
 .publishing-log-copy details { margin-top:6px; }
 .publishing-log-copy summary { cursor:pointer; color:#9b711f; font-size:9px; }
 .publishing-log-copy pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:150px; overflow:auto; margin:6px 0 0; border-radius:9px; padding:8px; background:#f7f5f1; font:9px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace; color:#655f55; }
-
+.publication-edit-button,.publication-delete-button{display:inline-flex;align-items:center;gap:5px}.publication-edit-button svg,.publication-delete-button svg{width:13px;height:13px}.publication-delete-button{border-color:#ecc8c4!important;background:#fff7f6!important;color:#b54038!important}.publication-inline-editor{margin-top:11px;border:1px solid #e5d8be;border-radius:14px;padding:12px;background:#fffcf6;box-shadow:0 8px 24px rgba(74,52,15,.055)}.publication-editor-head{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}.publication-editor-head strong{display:flex;align-items:center;gap:6px;font:700 11px Georgia,serif}.publication-editor-head strong svg{width:14px;color:#b77b13}.publication-editor-head span{font-size:9px;color:#8d8579}.publication-inline-editor textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px solid #ded5c7;background:#fff;border-radius:11px;padding:10px 11px;outline:0;font:11px/1.5 system-ui;color:#2d2923}.publication-inline-editor textarea:focus{border-color:#d49a31;box-shadow:0 0 0 3px rgba(212,154,49,.1)}.publication-editor-count{text-align:right;margin-top:4px;font-size:8px;color:#aaa}.publication-editor-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:8px}.publication-editor-actions button{border:1px solid #e2d9cb;background:#fff;border-radius:10px;padding:8px 11px;cursor:pointer;font-weight:700;font-size:9px}.publication-editor-actions button.primary{background:#c8891e;color:#fff;border-color:#c8891e}.telegram-deleted{opacity:.72}.telegram-deleted .admin-publication-cover{filter:grayscale(.35)}.telegram-deleted-label{display:inline-flex;align-items:center;gap:5px;border-radius:9px;background:#f2f0ed;color:#777;padding:7px 9px;font-size:9px;font-weight:700}.telegram-deleted-label svg{width:12px;height:12px}
 @media (min-width:1180px) {
   .admin-v2 { max-width:1480px; grid-template-columns:230px minmax(0,1fr); gap:26px; }
   .publisher-layout { grid-template-columns:minmax(520px,1fr) minmax(360px,430px); gap:20px; }
@@ -69,7 +65,6 @@
   .publisher-options { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .publisher-actions { position:sticky; bottom:10px; z-index:3; padding:10px; margin:16px -6px -6px; border:1px solid rgba(201,155,69,.18); border-radius:15px; background:rgba(255,253,249,.92); backdrop-filter:blur(12px); box-shadow:0 10px 30px rgba(35,25,8,.08); }
 }
-
 @media (min-width:901px) and (max-width:1179px) {
   .admin-v2 { grid-template-columns:205px minmax(0,1fr); gap:16px; padding-left:12px; padding-right:12px; }
   .publisher-layout { grid-template-columns:1fr; }
@@ -77,8 +72,8 @@
   .tg-preview { max-width:620px; }
   .publishing-health-grid { grid-template-columns:1fr; }
 }
-
 @media (max-width:700px) {
   .publishing-health-grid { grid-template-columns:1fr; }
   .publishing-log-list { max-height:330px; }
 }
+@media(max-width:640px){.publication-editor-actions{display:grid;grid-template-columns:1fr 1fr}.publication-editor-actions button{width:100%}.admin-publication-actions{display:flex;gap:6px;flex-wrap:wrap}}
