@@ -100,7 +100,7 @@ jobs:
           grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
           grep -q '/app/view-i18n.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-home.js?v=20260810-app2' public/app/index.html
-          grep -q '/app/view-queue.js?v=20260810-app2' public/app/index.html
+          grep -q '/app/view-queue.js?v=20260810-app3' public/app/index.html
           grep -q '/app/view-suggest.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-requests-account.js?v=20260810-app3' public/app/index.html
           grep -q '/app/view-admin.js?v=20260810-app1' public/app/index.html
