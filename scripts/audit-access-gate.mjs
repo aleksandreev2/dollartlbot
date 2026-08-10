@@ -56,8 +56,8 @@ need(telegram, 'export function isActiveChatMember(', 'Telegram membership seman
 need(auth, 'checkBotAccess(telegramUser.id, env, telegram', 'Mini App shared auth gate');
 need(auth, "request.headers.get('x-access-recheck') === '1'", 'forced Mini App recheck');
 need(auth, 'accessErrorDetails(locale, access)', 'localized Mini App gate details');
-need(baseAccess, "url.pathname === '/api/app/access'", 'Mini App access heartbeat endpoint');
-need(baseAccess, 'authenticateMiniAppRequest(request, env)', 'legacy Mini App gate middleware');
+need(baseAccess, "url.pathname !== '/api/app/access'", 'Mini App access heartbeat endpoint');
+need(baseAccess, 'authenticateMiniAppRequest(request, env)', 'Mini App access heartbeat auth');
 
 for (const token of [
   'ensureBotAccess(from.id, locale, env, telegram)',
