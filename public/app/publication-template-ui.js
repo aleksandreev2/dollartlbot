@@ -6,6 +6,7 @@
   }
 
   const FILES_LINE = '📎 Files are in the comments.';
+  const PENDING_LINK_KEY = 'dtl:publicationSubmissionId';
   let rows = [];
   let loading = null;
   let loadedAt = 0;
@@ -72,6 +73,32 @@
     box.innerHTML = lines.map((line) => `<div>${esc(line)}</div>`).join('');
   }
 
+  function updateRequestHelp(field) {
+    const request = selectedRequest();
+    const help = field.querySelector('.publication-request-help');
+    if (!help) return;
+    help.textContent = request
+      ? (request.requester_username
+        ? `Сейчас: «Requested by: @${String(request.requester_username).replace(/^@/, '')}». Username будет перепроверен перед отправкой.`
+        : `У заявки нет @username. Будет добавлено: «Requested by: request #${request.id}».`)
+      : 'В пост автоматически добавится «Requested by: @username». Перед публикацией username перепроверяется через Telegram.';
+  }
+
+  function applyPendingRequestSelection(select, field) {
+    let pending = 0;
+    try { pending = Number(sessionStorage.getItem(PENDING_LINK_KEY) || 0); } catch {}
+    if (!Number.isSafeInteger(pending) || pending <= 0) return;
+    const option = [...select.options].find((item) => Number(item.value) === pending);
+    if (!option) return;
+    select.value = String(pending);
+    updateRequestHelp(field);
+    updatePreview();
+    try {
+      sessionStorage.removeItem(PENDING_LINK_KEY);
+      sessionStorage.removeItem('dtl:publicationSubmissionTitle');
+    } catch {}
+  }
+
   async function installSelector() {
     const title = document.getElementById('pubTitle');
     if (!title) return;
@@ -103,17 +130,10 @@
         select.append(option);
       }
       select.addEventListener('change', () => {
-        const request = selectedRequest();
-        const help = field.querySelector('.publication-request-help');
-        if (help) {
-          help.textContent = request
-            ? (request.requester_username
-              ? `Сейчас: «Requested by: @${String(request.requester_username).replace(/^@/, '')}». Username будет перепроверен перед отправкой.`
-              : `У заявки нет @username. Будет добавлено: «Requested by: request #${request.id}».`)
-            : 'В пост автоматически добавится «Requested by: @username». Перед публикацией username перепроверяется через Telegram.';
-        }
+        updateRequestHelp(field);
         updatePreview();
       });
+      applyPendingRequestSelection(select, field);
     } catch (error) {
       const select = field.querySelector('#pubSubmissionId');
       if (select) {
@@ -159,6 +179,7 @@
       const linked = await linkResponse.clone().json().catch(() => ({}));
       if (linked?.requester_username) {
         request.requester_username = linked.requester_username;
+        updateRequestHelp(document.querySelector('.publication-request-link'));
         updatePreview();
       }
       return response;

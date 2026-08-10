@@ -5,6 +5,7 @@ import { handleAdminAnalyticsRequest } from './admin-analytics';
 import { handleAdminEventsRequest } from './admin-events-api';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminPublicationsRequest } from './admin-publications';
+import { handleAdminRequestOps } from './admin-request-ops';
 import { handleAdminUsersRequest } from './admin-users';
 import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
 import { handleCoverHealthRequest } from './cover-health';
@@ -22,6 +23,7 @@ import { handlePublicationLinksRequest } from './publication-links';
 import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
 import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
+import { handlePublishingPreflight } from './publishing-preflight';
 import { handlePublishingRequest } from './publishing';
 import { handlePublishingV2Request } from './publishing-v2';
 import { guardPublishingRequest } from './publishing-guard';
@@ -55,6 +57,8 @@ export default {
     if (adminEventsResponse) return adminEventsResponse;
     const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
     if (adminUsersResponse) return adminUsersResponse;
+    const adminRequestOpsResponse = await handleAdminRequestOps(request, env, apiTelegram);
+    if (adminRequestOpsResponse) return adminRequestOpsResponse;
     const adminAnalyticsResponse = await handleAdminAnalyticsRequest(request, env);
     if (adminAnalyticsResponse) return adminAnalyticsResponse;
     const adminPublicationsResponse = await handleAdminPublicationsRequest(request, env, apiTelegram);
@@ -66,6 +70,8 @@ export default {
     const adminActionResponse = await handleAdminActionV2(request, env, apiTelegram);
     if (adminActionResponse) return adminActionResponse;
 
+    const publishingPreflightResponse = await handlePublishingPreflight(request, env, apiTelegram);
+    if (publishingPreflightResponse) return publishingPreflightResponse;
     const publishingCommentsV3Response = await handlePublishingCommentsV3Request(request, env, apiTelegram, ctx);
     if (publishingCommentsV3Response) return publishingCommentsV3Response;
     const publishingV2Response = await handlePublishingV2Request(request, env, apiTelegram, ctx);
@@ -80,8 +86,6 @@ export default {
     if (referralResponse) return referralResponse;
     const baseMiniAppAccessResponse = await handleBaseMiniAppAccess(request, env);
     if (baseMiniAppAccessResponse) {
-      // A first successful access may have just queued a new-user admin event.
-      // Deliver it in the background so user-facing access never waits on Telegram.
       ctx.waitUntil(runAdminEventMaintenance(env, apiTelegram, 4));
       return baseMiniAppAccessResponse;
     }

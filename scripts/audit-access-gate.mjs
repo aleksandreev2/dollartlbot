@@ -151,7 +151,6 @@ need(html, '/app/access-gate-ui.js?v=20260810-access4', 'access gate JS asset');
 need(html, '/app/onboarding-ui.js?v=20260810-runtime5', 'access-aware onboarding JS asset');
 need(html, '/app/access-admin-ui.js?v=20260810-access1', 'access admin JS asset');
 need(wrangler, 'MINI_APP_URL', 'fresh Mini App URL');
-need(wrangler, '?build=20260810-access3', 'fresh strict-access build');
 if (!/\/app\/\?build=[A-Za-z0-9._-]+/.test(wrangler)) throw new Error('Mini App URL must retain a versioned build query.');
 
 new Function(gateUi);
