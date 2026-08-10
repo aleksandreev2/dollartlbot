@@ -5,6 +5,7 @@ import { handleAdminAnalyticsRequest } from './admin-analytics';
 import { handleAdminEventsRequest } from './admin-events-api';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminPublicationsRequest } from './admin-publications';
+import { handleAdminRequestOps } from './admin-request-ops';
 import { handleAdminUsersRequest } from './admin-users';
 import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
 import { handleCoverHealthRequest } from './cover-health';
@@ -55,6 +56,8 @@ export default {
     if (adminEventsResponse) return adminEventsResponse;
     const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
     if (adminUsersResponse) return adminUsersResponse;
+    const adminRequestOpsResponse = await handleAdminRequestOps(request, env, apiTelegram);
+    if (adminRequestOpsResponse) return adminRequestOpsResponse;
     const adminAnalyticsResponse = await handleAdminAnalyticsRequest(request, env);
     if (adminAnalyticsResponse) return adminAnalyticsResponse;
     const adminPublicationsResponse = await handleAdminPublicationsRequest(request, env, apiTelegram);
@@ -80,8 +83,6 @@ export default {
     if (referralResponse) return referralResponse;
     const baseMiniAppAccessResponse = await handleBaseMiniAppAccess(request, env);
     if (baseMiniAppAccessResponse) {
-      // A first successful access may have just queued a new-user admin event.
-      // Deliver it in the background so user-facing access never waits on Telegram.
       ctx.waitUntil(runAdminEventMaintenance(env, apiTelegram, 4));
       return baseMiniAppAccessResponse;
     }
