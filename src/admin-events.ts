@@ -1,4 +1,4 @@
-import { errorText, isAdmin } from './db';
+import { errorText, isAdmin, isAdminEventsSchemaMissing } from './db';
 import { escapeHtml, TelegramApiError, type TelegramClient } from './telegram';
 
 const ADMIN_EVENT_BATCH = 25;
@@ -141,14 +141,20 @@ export async function runAdminEventMaintenance(
   limit = ADMIN_EVENT_BATCH,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const rows = await env.DB.prepare(`
-    SELECT id
-    FROM admin_events
-    WHERE telegram_status IN ('queued','retry','sending')
-      AND COALESCE(telegram_next_attempt_at, created_at) <= ?
-    ORDER BY COALESCE(telegram_next_attempt_at, created_at) ASC, id ASC
-    LIMIT ?
-  `).bind(now, Math.max(1, Math.min(100, limit))).all<{ id: number }>();
+  let rows: D1Result<{ id: number }>;
+  try {
+    rows = await env.DB.prepare(`
+      SELECT id
+      FROM admin_events
+      WHERE telegram_status IN ('queued','retry','sending')
+        AND COALESCE(telegram_next_attempt_at, created_at) <= ?
+      ORDER BY COALESCE(telegram_next_attempt_at, created_at) ASC, id ASC
+      LIMIT ?
+    `).bind(now, Math.max(1, Math.min(100, limit))).all<{ id: number }>();
+  } catch (error) {
+    if (isAdminEventsSchemaMissing(error)) return;
+    throw error;
+  }
 
   for (const row of rows.results) {
     await deliverAdminEventById(env, telegram, Number(row.id));
