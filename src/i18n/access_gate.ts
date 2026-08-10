@@ -7,6 +7,8 @@ export const accessGateTranslations = {
     accessGranted: 'Access confirmed. Welcome back.',
     accessCheckUnavailableTitle: 'Access check is temporarily unavailable',
     accessCheckUnavailableText: 'Telegram did not return a reliable membership check. Please wait a moment and try again.',
+    accessRestrictedTitle: 'Dollar TL access is unavailable',
+    accessRestrictedText: 'Access to Dollar TL is currently unavailable for this account.',
   },
   es: {
     accessRequiredTitle: 'Únete al canal de Dollar TL',
@@ -16,6 +18,8 @@ export const accessGateTranslations = {
     accessGranted: 'Acceso confirmado. Bienvenido de nuevo.',
     accessCheckUnavailableTitle: 'La comprobación de acceso no está disponible temporalmente',
     accessCheckUnavailableText: 'Telegram no devolvió una comprobación fiable de la membresía. Espera un momento e inténtalo de nuevo.',
+    accessRestrictedTitle: 'El acceso a Dollar TL no está disponible',
+    accessRestrictedText: 'El acceso a Dollar TL no está disponible actualmente para esta cuenta.',
   },
   fil: {
     accessRequiredTitle: 'Sumali sa Dollar TL channel',
@@ -25,6 +29,8 @@ export const accessGateTranslations = {
     accessGranted: 'Kumpirmado ang access. Welcome back.',
     accessCheckUnavailableTitle: 'Pansamantalang hindi available ang access check',
     accessCheckUnavailableText: 'Hindi nakapagbigay ang Telegram ng maaasahang membership check. Maghintay sandali at subukan muli.',
+    accessRestrictedTitle: 'Hindi available ang access sa Dollar TL',
+    accessRestrictedText: 'Kasalukuyang hindi available ang access sa Dollar TL para sa account na ito.',
   },
   hi: {
     accessRequiredTitle: 'Dollar TL चैनल से जुड़ें',
@@ -34,6 +40,8 @@ export const accessGateTranslations = {
     accessGranted: 'Access की पुष्टि हो गई। वापस स्वागत है।',
     accessCheckUnavailableTitle: 'Access जाँच अस्थायी रूप से उपलब्ध नहीं है',
     accessCheckUnavailableText: 'Telegram विश्वसनीय membership जाँच नहीं दे पाया। थोड़ी देर बाद फिर कोशिश करें।',
+    accessRestrictedTitle: 'Dollar TL access उपलब्ध नहीं है',
+    accessRestrictedText: 'इस account के लिए Dollar TL access अभी उपलब्ध नहीं है।',
   },
   pt: {
     accessRequiredTitle: 'Entre no canal da Dollar TL',
@@ -43,6 +51,8 @@ export const accessGateTranslations = {
     accessGranted: 'Acesso confirmado. Bem-vindo de volta.',
     accessCheckUnavailableTitle: 'A verificação de acesso está temporariamente indisponível',
     accessCheckUnavailableText: 'O Telegram não retornou uma verificação confiável da participação. Aguarde um pouco e tente novamente.',
+    accessRestrictedTitle: 'O acesso à Dollar TL está indisponível',
+    accessRestrictedText: 'O acesso à Dollar TL não está disponível no momento para esta conta.',
   },
   id: {
     accessRequiredTitle: 'Gabung ke channel Dollar TL',
@@ -52,6 +62,8 @@ export const accessGateTranslations = {
     accessGranted: 'Akses terkonfirmasi. Selamat datang kembali.',
     accessCheckUnavailableTitle: 'Pemeriksaan akses sementara tidak tersedia',
     accessCheckUnavailableText: 'Telegram tidak memberikan hasil pemeriksaan keanggotaan yang dapat diandalkan. Tunggu sebentar lalu coba lagi.',
+    accessRestrictedTitle: 'Akses Dollar TL tidak tersedia',
+    accessRestrictedText: 'Akses Dollar TL saat ini tidak tersedia untuk akun ini.',
   },
   vi: {
     accessRequiredTitle: 'Tham gia kênh Dollar TL',
@@ -61,6 +73,8 @@ export const accessGateTranslations = {
     accessGranted: 'Đã xác nhận quyền truy cập. Chào mừng bạn quay lại.',
     accessCheckUnavailableTitle: 'Tạm thời không thể kiểm tra quyền truy cập',
     accessCheckUnavailableText: 'Telegram không trả về kết quả kiểm tra thành viên đáng tin cậy. Hãy chờ một chút rồi thử lại.',
+    accessRestrictedTitle: 'Không thể truy cập Dollar TL',
+    accessRestrictedText: 'Tài khoản này hiện không thể truy cập Dollar TL.',
   },
   fr: {
     accessRequiredTitle: 'Rejoignez le canal Dollar TL',
@@ -70,6 +84,8 @@ export const accessGateTranslations = {
     accessGranted: 'Accès confirmé. Bon retour.',
     accessCheckUnavailableTitle: 'La vérification d’accès est temporairement indisponible',
     accessCheckUnavailableText: 'Telegram n’a pas renvoyé de vérification fiable de votre abonnement au canal. Patientez un instant puis réessayez.',
+    accessRestrictedTitle: 'L’accès à Dollar TL est indisponible',
+    accessRestrictedText: 'L’accès à Dollar TL est actuellement indisponible pour ce compte.',
   },
   de: {
     accessRequiredTitle: 'Dem Dollar TL-Kanal beitreten',
@@ -79,6 +95,8 @@ export const accessGateTranslations = {
     accessGranted: 'Zugriff bestätigt. Willkommen zurück.',
     accessCheckUnavailableTitle: 'Die Zugriffsprüfung ist vorübergehend nicht verfügbar',
     accessCheckUnavailableText: 'Telegram hat keine zuverlässige Mitgliedschaftsprüfung zurückgegeben. Warte kurz und versuche es erneut.',
+    accessRestrictedTitle: 'Der Zugriff auf Dollar TL ist nicht verfügbar',
+    accessRestrictedText: 'Der Zugriff auf Dollar TL ist für dieses Konto derzeit nicht verfügbar.',
   },
   ru: {
     accessRequiredTitle: 'Вступите в канал Dollar TL',
@@ -88,5 +106,7 @@ export const accessGateTranslations = {
     accessGranted: 'Доступ подтверждён. С возвращением.',
     accessCheckUnavailableTitle: 'Проверка доступа временно недоступна',
     accessCheckUnavailableText: 'Telegram не вернул надёжный результат проверки. Подождите немного и попробуйте снова.',
+    accessRestrictedTitle: 'Доступ к Dollar TL недоступен',
+    accessRestrictedText: 'Доступ к Dollar TL для этого аккаунта сейчас недоступен.',
   },
 } as const;

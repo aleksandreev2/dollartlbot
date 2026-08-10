@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url),'utf8');
 const need = (source, needle, label) => { if (!source.includes(needle)) throw new Error(`${label}: missing ${needle}`); };
 const forbid = (source, needle, label) => { if (source.includes(needle)) throw new Error(`${label}: forbidden ${needle}`); };
 
@@ -57,6 +57,8 @@ need(telegram, 'export function isActiveChatMember(', 'Telegram membership seman
 need(auth, 'checkBotAccess(telegramUser.id, env, telegram', 'Mini App shared auth gate');
 need(auth, "request.headers.get('x-access-recheck') === '1'", 'forced Mini App recheck');
 need(auth, 'accessErrorDetails(locale, access)', 'localized Mini App gate details');
+need(auth, "'access_restricted'", 'administrative Mini App restriction');
+need(auth, 'isUserAdministrativelyBlocked(env, telegramUser.id)', 'administrative Mini App restriction');
 need(baseAccess, "url.pathname !== '/api/app/access'", 'Mini App access heartbeat endpoint');
 need(baseAccess, 'authenticateMiniAppRequest(request, env)', 'Mini App access heartbeat auth');
 
@@ -74,10 +76,11 @@ for (const token of [
   'handleAccessChatMemberUpdate(update.chat_member, env)',
   "runScheduledTask('access_gate_maintenance'",
   'handleBaseMiniAppAccess(request, env)',
+  'denyBlockedPrivateBotUpdate(update, env, telegram)',
 ]) need(indexTs, token, 'Worker routing');
 
 for (const token of [
-  "ACCESS_CODES = new Set(['membership_required', 'access_check_unavailable'])",
+  "ACCESS_CODES = new Set(['membership_required', 'access_check_unavailable', 'access_restricted'])",
   "fetch('/api/app/access'",
   "headers.set('x-access-recheck', '1')",
   'tg?.openTelegramLink',
@@ -93,6 +96,8 @@ for (const token of [
   "emitAccessLifecycle('dtl:accessready'",
   'const result = await requestAccess(true)',
   'void verifyAccess(true)',
+  "const restricted = error.code === 'access_restricted'",
+  '!restricted && joinUrl',
 ]) need(gateUi, token, 'Mini App gate UX');
 for (const token of [
   '.app-shell.access-locked .topbar .brand',
@@ -129,6 +134,7 @@ for (const token of [
 
 need(i18n, "import { accessGateTranslations } from './access_gate'", 'access gate translations');
 for (const locale of ['en','es','fil','hi','pt','id','vi','fr','de','ru']) need(gateCopy, `${locale}: {`, `access gate locale ${locale}`);
+for (const token of ['accessRestrictedTitle','accessRestrictedText']) need(gateCopy, token, 'administrative restriction copy');
 forbid(gateCopy, 'Boosty', 'user-facing access gate copy');
 forbid(gateCopy, 'boosty', 'user-facing access gate copy');
 
@@ -141,7 +147,7 @@ for (const token of [
   "web_app: { url: miniAppUrl }",
 ]) need(configure, token, 'Telegram configuration freshness');
 need(html, '/app/access-gate-ui.css?v=20260810-access1', 'access gate CSS asset');
-need(html, '/app/access-gate-ui.js?v=20260810-access3', 'access gate JS asset');
+need(html, '/app/access-gate-ui.js?v=20260810-access4', 'access gate JS asset');
 need(html, '/app/onboarding-ui.js?v=20260810-runtime5', 'access-aware onboarding JS asset');
 need(html, '/app/access-admin-ui.js?v=20260810-access1', 'access admin JS asset');
 need(wrangler, 'MINI_APP_URL', 'fresh Mini App URL');
@@ -152,4 +158,4 @@ new Function(gateUi);
 new Function(onboardingUi);
 new Function(adminUi);
 
-console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, strict open/resume rechecks for former members, bounded cache/grace, referral-safe onboarding, coordinated access lifecycle, versioned Telegram menu URL, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
+console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, strict open/resume rechecks for former members, administrative account restrictions, bounded cache/grace, referral-safe onboarding, coordinated access lifecycle, versioned Telegram menu URL, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');

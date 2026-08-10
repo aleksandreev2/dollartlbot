@@ -5,8 +5,9 @@ import {
   checkBotAccess,
 } from './access-gate';
 import { getUser, isAdmin, upsertUser } from './db';
-import { normalizeLocale } from './i18n/index';
+import { normalizeLocale, t } from './i18n/index';
 import { TelegramClient, type TelegramUser } from './telegram';
+import { isUserAdministrativelyBlocked } from './user-controls';
 
 const INIT_DATA_MAX_AGE_SECONDS = 24 * 60 * 60;
 
@@ -88,6 +89,20 @@ export async function authenticateMiniAppRequest(
   await upsertUser(env, telegramUser);
   const dbUser = await getUser(env, telegramUser.id);
   const locale = normalizeLocale(dbUser?.language);
+  const admin = isAdmin(telegramUser.id, env);
+
+  if (!admin && await isUserAdministrativelyBlocked(env, telegramUser.id)) {
+    return miniAppJsonError(
+      'access_restricted',
+      t(locale, 'accessRestrictedText'),
+      403,
+      {
+        title: t(locale, 'accessRestrictedTitle'),
+        retry_label: t(locale, 'accessRetryButton'),
+      },
+    );
+  }
+
   const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
   const access = await checkBotAccess(telegramUser.id, env, telegram, {
     force: request.headers.get('x-access-recheck') === '1',
@@ -106,7 +121,7 @@ export async function authenticateMiniAppRequest(
     telegramUser,
     dbUser,
     locale,
-    admin: isAdmin(telegramUser.id, env),
+    admin,
   };
 }
 

@@ -98,9 +98,9 @@ for(const legacy of ['admin-v2.js','admin-v3.js','admin-performance-v3.js','publ
   forbid(index,legacy,'legacy admin runtime');
   if(fs.existsSync(new URL(`../public/app/${legacy}`,import.meta.url)))throw new Error(`Superseded admin runtime must be removed: ${legacy}`);
 }
-for(const asset of ['admin-cache.js?v=20260810-admin1','admin-console.js?v=20260810-admin1','admin-tools.js?v=20260810-admin1','admin-publishing.js?v=20260810-admin1'])need(index,asset,'canonical admin runtime');
+for(const asset of ['admin-cache.js?v=20260810-admin1','admin-console.js?v=20260810-admin1','admin-tools.js?v=20260810-users1','admin-publishing.js?v=20260810-admin1'])need(index,asset,'canonical admin runtime');
 for(const asset of ['novel-presenter.js?v=20260810-runtime4','cover-ui.js?v=20260810-runtime4','referrals-ui.js?v=20260810-runtime4','onboarding-ui.js?v=20260810-runtime5','home-v2.js?v=20260810-runtime4','view-queue.js?v=20260810-app3','view-requests-account.js?v=20260810-app3'])need(index,asset,'event-driven frontend runtime');
-for(const css of ['admin-console.css?v=20260810-app1','admin-tools.css?v=20260810-app1','admin-publishing.css?v=20260810-app1'])need(index,css,'canonical admin CSS');
+for(const css of ['admin-console.css?v=20260810-app1','admin-tools.css?v=20260810-app1','admin-users-control.css?v=20260810-users1','admin-publishing.css?v=20260810-app1'])need(index,css,'canonical admin CSS');
 for(const legacyCss of ['admin-v2.css','admin-v3.css','admin-performance-v3.css','publishing-fixes.css','publication-management.css'])forbid(index,legacyCss,'legacy admin CSS');
 
 need(packageJson,'"lucide": "1.27.0"','pinned Lucide dependency');
