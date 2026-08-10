@@ -54,11 +54,13 @@ const viewI18n=read('public/app/view-i18n.js');
 const home=read('public/app/view-home.js');
 const queue=read('public/app/view-queue.js');
 const suggest=read('public/app/view-suggest.js');
+const suggestPicker=read('public/app/suggest-content-picker.js');
 const account=read('public/app/view-requests-account.js');
 for(const required of ['runtime.copy','runtime.table','app.tr=tr','app.languageName=languageName','app.tagLabel=tagLabel','app.relativeTime=relativeTime','app.requestLabel=requestLabel',"copy('notifications')"])need(viewI18n,required,'render-time view localization helper');
 for(const required of ["copy('thanks')","copy('regular'","copy('noRequests')","copy('progress')",'languageName(row.original_language)',"languageName('English')"])need(home,required,'Home render-time localization');
 for(const required of ["copy('progress')",'languageName(novel.original_language)',"languageName('English')"])need(queue,required,'Queue/detail render-time localization');
-for(const required of ["copy('epubRead')","copy('epubEntry')","copy('epubCompression')","copy('completeDetails')","copy('addTag')","copy('describeSex')","copy('edit')",'tagLabel(tag)','languageName(state.draft.original_language)','requestLabel(data.submission_id)'])need(suggest,required,'Suggest render-time localization');
+for(const required of ["copy('epubRead')","copy('epubEntry')","copy('epubCompression')","copy('completeDetails')","copy('edit')",'tagLabel(x.trim())','languageName(state.draft.original_language)','requestLabel(data.submission_id)'])need(suggest,required,'Suggest render-time localization');
+for(const required of ["app.copy('addTag')","app.copy('describeSex')",'app.tr(\'genresTags\')','app.tr(\'sexualContent\')'])need(suggestPicker,required,'Suggest content-picker localization');
 for(const required of ["copy('noMatching')","copy('guideSub')","copy('rulesSub')","copy('chatSub')","copy('boostySub')","i18nTable('guide')","i18nTable('rules')",'languageName(r.original_language)',"new CustomEvent('dtl:sheetopen'"])need(account,required,'Requests/Account render-time localization');
 for(const phrase of ['Thank you for supporting novel translations!','Chapter Progress','No requests yet.','No matching requests.','Complete the novel details.','Add at least one genre or tag.','Describe the sexual content or fetishes.','>Edit<','Request #','Could not read EPUB structure.','Bad EPUB entry','EPUB compression is not supported on this device.'])for(const [name,source] of Object.entries({home,queue,suggest,account}))forbid(source,phrase,name);
 for(const phrase of ['Dollar TL submission flow','Submission and content rules','5 requests/month · no 250-chapter restriction','1. Suggest a novel. 2. We review it manually.','Do not hide important tags, sexual/fetish content'])forbid(account,phrase,'Account');
@@ -77,4 +79,4 @@ if(index.indexOf('/app/view-i18n.js')>index.indexOf('/app/view-home.js'))throw n
 for(const legacy of ['/app/locale-sync.js','/app/i18n-inline-fixes.js','/app/i18n-wizard.js','/app/i18n-complete.js','/app/ui-polish.js','/app/language-display-fix.js','/app/onboarding-interactions-fix.js'])forbid(index,legacy,'legacy localization/runtime asset');
 for(const removed of ['public/app/i18n-wizard.js','public/app/i18n-complete.js','public/app/ui-polish.js','public/app/onboarding-interactions-fix.js'])if(fs.existsSync(new URL(`../${removed}`,import.meta.url)))throw new Error(`Legacy localization/runtime file must be removed: ${removed}`);
 
-console.log(`Localization audit passed for ${allLocales.length} locales with render-time views, semantic presenter events, localized Guide/Rules, and one fallback catalog pipeline.`);
+console.log(`Localization audit passed for ${allLocales.length} locales with render-time views, canonical Suggest content localization, semantic presenter events, localized Guide/Rules, and one fallback catalog pipeline.`);
