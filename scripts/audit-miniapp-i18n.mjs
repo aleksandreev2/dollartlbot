@@ -37,7 +37,7 @@ const referralCopy=evalObject(between(referrals,'const L = ',';\n\n  function lo
 const onboarding=read('public/app/onboarding-ui.js');
 const onboardingCopy=evalObject(between(onboarding,'const COPY = ',';\n\n  const icons'),'onboarding-ui copy');exactLocales(onboardingCopy,'onboarding-ui copy');sameKeys(onboardingCopy,'onboarding-ui copy');
 const notifications=read('public/app/notifications-ui.js');
-const notificationCopy=evalObject(between(notifications,'const T=',';\n  function lang'),'notifications-ui copy');exactLocales(notificationCopy,'notifications-ui copy');sameKeys(notificationCopy,'notifications-ui copy');
+const notificationCopy=evalObject(between(notifications,'const T=',';\n\n  function lang'),'notifications-ui copy');exactLocales(notificationCopy,'notifications-ui copy');sameKeys(notificationCopy,'notifications-ui copy');
 const quota=read('public/app/quota-unlimited-ui.js');
 const quotaWords=evalObject(between(quota,'const words=',';\n  const captions='),'quota words');
 const quotaCaptions=evalObject(between(quota,'const captions=',';\n  function norm'),'quota captions');exactLocales(quotaWords,'quota words');exactLocales(quotaCaptions,'quota captions');
