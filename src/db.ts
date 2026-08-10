@@ -38,21 +38,26 @@ export async function upsertUser(env: Env, user: TelegramUser): Promise<void> {
   const now = new Date().toISOString();
   const initialLanguage = localeFromTelegramLanguageCode(user.language_code);
   await env.DB.prepare(`
-    INSERT INTO users (telegram_id, username, first_name, language, language_selected, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 0, ?, ?)
+    INSERT INTO users (
+      telegram_id, username, first_name, language, language_selected,
+      created_at, updated_at, last_seen_at
+    )
+    VALUES (?, ?, ?, ?, 0, ?, ?, ?)
     ON CONFLICT(telegram_id) DO UPDATE SET
       username = excluded.username,
       first_name = excluded.first_name,
       language = CASE WHEN users.language_selected = 0 THEN excluded.language ELSE users.language END,
-      updated_at = excluded.updated_at
+      updated_at = excluded.updated_at,
+      last_seen_at = excluded.last_seen_at
   `)
-    .bind(user.id, user.username ?? null, user.first_name ?? null, initialLanguage, now, now)
+    .bind(user.id, user.username ?? null, user.first_name ?? null, initialLanguage, now, now, now)
     .run();
 }
 
 export function getUser(env: Env, userId: number): Promise<UserRow | null> {
   return env.DB.prepare(`
     SELECT telegram_id, username, first_name, language, language_selected,
+           created_at, updated_at, activated_at, activated_via, last_seen_at,
            last_limit_reset_notified_month, last_promo_at, promo_opt_out,
            miniapp_onboarded_at, adult_confirmed_at
     FROM users WHERE telegram_id = ?
