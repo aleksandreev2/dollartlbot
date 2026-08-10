@@ -10,11 +10,13 @@
     "typecheck": "npm run cf-typegen && tsc --noEmit",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
+    "prepare:vendor": "node scripts/prepare-vendor.mjs",
     "configure-bot": "node scripts/configure-bot.mjs",
     "discover-ids": "node scripts/discover-ids.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "lucide": "1.27.0",
     "typescript": "^5.8.0",
     "wrangler": "^4.0.0"
   }
