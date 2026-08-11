@@ -31,6 +31,7 @@ const vendorScript=read('scripts/prepare-vendor.mjs');
 need(presenter,"const FLAG_BASE = '/app/flags';",'novel presenter Circle Flags');
 need(presenter,'runtime.detectLanguage','novel presenter semantic language detection');
 need(presenter,'runtime.languageLabel','novel presenter semantic language labels');
+need(presenter,'language-picker-circle-flag','language picker Circle Flag injection');
 for(const event of ["'dtl:viewrender'","'dtl:adminrender'","'dtl:sheetopen'","'dtl:localechange'"])need(presenter,event,'novel presenter event lifecycle');
 forbid(presenter,'runtime.registerPatcher','novel presenter broad scheduler');
 forbid(presenter,'new MutationObserver','novel presenter scheduling');
@@ -88,7 +89,9 @@ need(queueView,'state.queueSegment=btn.dataset.qSegment;app.render()','Queue seg
 need(accountView,'state.requestFilter=btn.dataset.rFilter;app.render()','Requests filter semantic rerender');
 need(accountView,'app.renderNav();app.render()','Account locale semantic rerender');
 for(const token of ['language-picker-option','data-language-picker-stamp','aria-current','language-picker-check-spacer'])need(accountView,token,'source-rendered language picker');
-for(const token of ['grid-template-columns:minmax(0,1fr) 24px','white-space:normal','@media(max-width:700px)'])need(languageCss,token,'responsive language picker');
+for(const token of ['display:flex','justify-content:flex-start','white-space:nowrap','word-break:normal','@media(max-width:700px)'])need(languageCss,token,'responsive language picker');
+forbid(languageCss,'grid-template-columns:minmax(0,1fr) 24px','language picker injected-flag grid conflict');
+forbid(languageCss,'overflow-wrap:anywhere','language picker character wrapping');
 forbid(languageCss,'text-overflow:ellipsis','language picker truncation');
 
 need(quota,"document.addEventListener('dtl:bootstrap'",'quota bootstrap reuse');
@@ -106,7 +109,7 @@ for(const legacy of ['admin-v2.js','admin-v3.js','admin-performance-v3.js','publ
 }
 for(const asset of ['admin-cache.js?v=20260810-admin1','admin-console.js?v=20260811-admin2','admin-tools.js?v=20260810-users1','admin-publishing.js?v=20260810-admin1'])need(index,asset,'canonical admin runtime');
 for(const asset of ['novel-presenter.js?v=20260810-runtime4','cover-ui.js?v=20260810-runtime4','referrals-ui.js?v=20260810-runtime4','onboarding-ui.js?v=20260810-runtime5','home-v2.js?v=20260810-runtime4','view-queue.js?v=20260810-app3','view-requests-account.js?v=20260811-lang1'])need(index,asset,'event-driven frontend runtime');
-need(index,'language-switch.css?v=20260811-lang1','fresh language picker CSS');
+need(index,'language-switch.css?v=20260811-lang2','fresh language picker CSS');
 for(const css of ['admin-console.css?v=20260810-app1','admin-tools.css?v=20260810-app1','admin-users-control.css?v=20260810-users1','admin-publishing.css?v=20260810-app1'])need(index,css,'canonical admin CSS');
 for(const legacyCss of ['admin-v2.css','admin-v3.css','admin-performance-v3.css','publishing-fixes.css','publication-management.css'])forbid(index,legacyCss,'legacy admin CSS');
 
@@ -124,4 +127,4 @@ const notices=read('THIRD_PARTY_NOTICES.md');
 need(notices,'## Circle Flags','Circle Flags license notice');
 need(notices,'## Lucide','Lucide license notice');
 
-console.log('Frontend stability audit passed: semantic view/sheet enhancement events, source-rendered non-truncating language picker, access-aware onboarding, lifecycle-safe internal rerenders, one fallback observer, canonical admin modules, self-hosted Lucide, and no duplicate Home/onboarding patch layers.');
+console.log('Frontend stability audit passed: semantic view/sheet enhancement events, source-rendered non-truncating language picker, injected flag-safe flex layout, access-aware onboarding, lifecycle-safe internal rerenders, one fallback observer, canonical admin modules, self-hosted Lucide, and no duplicate Home/onboarding patch layers.');
