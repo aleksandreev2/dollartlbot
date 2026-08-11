@@ -64,6 +64,10 @@ export async function applyAdminSubmissionAction(
   switch (action) {
     case 'accept': {
       requireState(before.status === 'pending', 'Request is no longer pending.');
+      requireState(
+        (before.review_state ?? 'ready') === 'ready' && !before.withdrawn_at,
+        'Review the requester’s latest information before accepting this request.',
+      );
       const result = await env.DB.prepare(`
         UPDATE submissions
         SET status='accepted',
@@ -80,6 +84,8 @@ export async function applyAdminSubmissionAction(
             progress_updated_at=NULL,
             updated_at=?
         WHERE id=? AND status='pending'
+          AND COALESCE(review_state,'ready')='ready'
+          AND withdrawn_at IS NULL
       `).bind(now, now, submissionId).run();
       changed = oneRow(result);
       normalizeQueue = true;
