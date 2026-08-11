@@ -28,9 +28,13 @@
     label('[data-admin-section="settings"]', 'Настройки');
   }
 
+  function activityPageVisible() {
+    return Boolean(document.querySelector('.admin-content > .admin-activity-page'));
+  }
+
   function visibleRouteSelector() {
     const heading = document.querySelector('.admin-work-head h1')?.textContent?.trim();
-    if (heading === 'Активность') return '[data-admin-activity]';
+    if (heading === 'Активность' && activityPageVisible()) return '[data-admin-activity]';
 
     const route = admin.activeRoute?.();
     if (!route) return '';
@@ -126,7 +130,10 @@
     settle();
   }, true);
 
-  document.addEventListener('dtl:adminroutechange', settle);
+  document.addEventListener('dtl:adminroutechange', event => {
+    if (event.detail?.id) document.querySelectorAll('[data-admin-activity]').forEach(button => button.classList.remove('active'));
+    settle();
+  });
   document.addEventListener('dtl:adminrender', settle);
 
   runtime.registerPatcher(install);

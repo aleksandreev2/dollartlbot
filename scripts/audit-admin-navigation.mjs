@@ -15,8 +15,8 @@ const js = read('public/app/admin-navigation.js');
 const css = read('public/app/admin-navigation.css');
 
 need(index, '/app/admin-navigation.css?v=20260811-nav2', 'admin navigation CSS asset');
-need(index, '/app/admin-navigation.js?v=20260811-nav4', 'admin navigation JS asset');
-need(index, '/app/admin-ui-utils.js?v=20260811-ui1', 'admin UI utils asset');
+need(index, '/app/admin-navigation.js?v=20260811-nav5', 'admin navigation JS asset');
+need(index, '/app/admin-ui-utils.js?v=20260811-ui2', 'admin UI utils asset');
 
 for (const token of [
   'admin-nav-more',
@@ -29,10 +29,12 @@ for (const token of [
   'window.DTL_ADMIN_NAVIGATION',
   'runtime.registerPatcher(install)',
   'visibleRouteSelector',
+  'activityPageVisible',
   'dtl:adminroutechange',
   'dtl:adminrender',
   'details.open = !details.open',
   'requestAnimationFrame',
+  "document.querySelectorAll('[data-admin-activity]').forEach(button => button.classList.remove('active'))",
 ]) need(js, token, 'admin navigation runtime');
 
 for (const token of [
@@ -55,4 +57,4 @@ for (const token of [
 ]) need(css, token, 'admin navigation CSS');
 forbid(css, '.admin-publishing-shortcuts', 'dead Publishing shortcut CSS');
 
-console.log('Admin navigation audit passed: More toggles explicitly, active state settles after route/render events, and Publishing navigation stays unified.');
+console.log('Admin navigation audit passed: More toggles explicitly, canonical routes clear stale Activity state, and Publishing navigation stays unified.');
