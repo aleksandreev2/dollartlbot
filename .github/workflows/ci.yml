@@ -192,7 +192,7 @@ jobs:
           grep -q '/app/publication-template-ui.js?v=20260810-pubtemplate2' public/app/index.html
           grep -q '/app/publication-stability-ui.css?v=20260810-pubstable1' public/app/index.html
           grep -q '/app/publication-stability-ui.js?v=20260810-pubstable1' public/app/index.html
-          grep -q '/app/admin-console.js?v=20260810-admin1' public/app/index.html
+          grep -q '/app/admin-console.js?v=20260811-admin2&routes=20260811f' public/app/index.html
           grep -q '/app/admin-tools.js?v=20260810-users1' public/app/index.html
           grep -q '/app/admin-publishing.js?v=20260810-admin1' public/app/index.html
           grep -q '/app/admin-cache.js?v=20260810-admin1' public/app/index.html
