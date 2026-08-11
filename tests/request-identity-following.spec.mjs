@@ -84,11 +84,34 @@ test('Discover gets a separate Follow updates action without changing demand sta
   await expect(page.locator('[data-title-follow-kind="submission"][data-title-follow-id="7"]')).toBeVisible();
   await expect(page.locator('[data-title-follow-kind="catalog"][data-title-follow-id="501"]')).toBeVisible();
   await page.locator('[data-title-follow-kind="submission"][data-title-follow-id="7"]').click();
+  await expect(page.locator('[data-title-follow-kind="submission"][data-title-follow-id="7"]')).toContainText('Following');
   const followCall=await page.evaluate(()=>window.__calls.find(entry=>entry.path==='/api/app/following/submission'));
   expect(JSON.parse(followCall.options.body)).toEqual({submission_id:7,following:true});
   expect(await page.evaluate(()=>window.__calls.some(entry=>entry.path==='/api/app/discovery/interest'))).toBe(false);
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('Detail follow action is mutation-stable and does not refetch or duplicate itself',async({page})=>{
+  await boot(page,{view:'detail'});
+  await page.evaluate(()=>{
+    const app=window.DTL_APP;
+    app.state.detailNovel={id:42,title:'The Prince’s Nanny'};
+    app.viewRoot.innerHTML='<section><div class="live-detail-actions"><button type="button" id="detailOriginal">Open original</button><button type="button" id="detailQueue">View queue</button></div></section>';
+    document.dispatchEvent(new CustomEvent('dtl:viewrender',{detail:{view:'detail'}}));
+  });
+  const button=page.locator('.title-follow-detail');
+  await expect(button).toBeVisible();
+  await page.waitForTimeout(150);
+  expect(await page.locator('.title-follow-detail').count()).toBe(1);
+  expect(await page.evaluate(()=>window.__calls.filter(entry=>entry.path==='/api/app/following').length)).toBe(1);
+  await button.click();
+  await expect(page.locator('.title-follow-detail')).toContainText('Following');
+  await page.waitForTimeout(100);
+  expect(await page.locator('.title-follow-detail').count()).toBe(1);
+  expect(await page.evaluate(()=>window.__calls.filter(entry=>entry.path==='/api/app/following').length)).toBe(1);
+  const actionOrder=await page.locator('.live-detail-actions > *').evaluateAll(nodes=>nodes.map(node=>node.id||node.className));
+  expect(actionOrder[1]).toContain('title-follow-detail');
 });
 
 test('Account exposes Following and lets a user open and unfollow a real title',async({page})=>{
