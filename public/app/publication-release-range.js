@@ -1,7 +1,7 @@
 (() => {
   const runtime = window.DTL_RUNTIME;
   const admin = window.DTL_ADMIN;
-  if (!runtime?.registerPatcher || !runtime?.registerFetchMiddleware || !admin?.api) {
+  if (!runtime?.registerPatcher || !runtime?.registerFetchMiddleware || !runtime?.registerResponseHandler || !admin?.api) {
     throw new Error('Publication release range UI requires canonical runtime/admin APIs.');
   }
 
@@ -13,11 +13,9 @@
   let suppress = false;
   let chapterStart = '';
   let chapterEnd = '';
+  let pendingCreatedPublicationId = 0;
 
   const isPublishing = () => admin.activeRoute?.() === 'section:publishing';
-  const esc = (value = '') => String(value).replace(/[&<>"']/g, char => ({
-    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;',
-  }[char]));
   const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 
   function install() {
@@ -170,11 +168,9 @@
     const payload = await response.clone().json().catch(() => ({}));
     const publicationId = Number(payload?.publication?.publication?.id || 0);
     if (!Number.isSafeInteger(publicationId) || publicationId <= 0) return response;
+    pendingCreatedPublicationId = publicationId;
 
-    if (parsed.empty) {
-      void clearDraftState();
-      return response;
-    }
+    if (parsed.empty) return response;
 
     try {
       await admin.api(`/api/app/admin/publications/${publicationId}/release-range`, {
@@ -182,12 +178,23 @@
         headers:{ 'content-type':'application/json' },
         body:JSON.stringify({ chapter_start:parsed.chapter_start, chapter_end:parsed.chapter_end }),
       });
-      await clearDraftState();
       return response;
     } catch (error) {
+      pendingCreatedPublicationId = 0;
       await admin.api(`/api/app/admin/publications/${publicationId}`, { method:'DELETE' }).catch(() => undefined);
       return errorResponse(error?.message || 'Не удалось сохранить диапазон глав. Черновик публикации отменён.', 409);
     }
+  });
+
+  runtime.registerResponseHandler(async (response, context) => {
+    if (context.pathname !== '/api/app/admin/publications' || !pendingCreatedPublicationId) return response;
+    if (!response.ok) {
+      pendingCreatedPublicationId = 0;
+      return response;
+    }
+    pendingCreatedPublicationId = 0;
+    queueMicrotask(() => void clearDraftState());
+    return response;
   });
 
   document.addEventListener('dtl:adminrender', install);
