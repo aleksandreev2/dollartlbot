@@ -44,7 +44,8 @@ if(suggestApi.includes('new MutationObserver'))throw new Error('Canonical Sugges
 need(account,"registerView('requests'",'Requests view registration');
 need(account,"registerView('account'",'Account view registration');
 need(admin,"registerView('admin'",'Admin view registration');
-need(admin,'DTL_ADMIN_CONSOLE.open()','direct canonical admin route');
+need(admin,'DTL_ADMIN.restore()','canonical Admin restore route');
+forbid(admin,'DTL_ADMIN_CONSOLE.open()','direct Admin console entry');
 forbid(admin,'.admin-stats','admin direct route');
 
 const jsOrder=['/app/app-core.js','/app/view-i18n.js','/app/admin-console.js','/app/view-home.js','/app/view-queue.js','/app/view-suggest.js','/app/suggest-content-picker.js','/app/suggest-content-api.js','/app/view-requests-account.js','/app/view-admin.js','/app/app.js'];
@@ -58,4 +59,4 @@ need(read('public/app/admin-console.css'),'.admin-v2','admin console stylesheet'
 need(read('public/app/admin-tools.css'),'.admin-users-layout','admin tools stylesheet');
 need(read('public/app/admin-publishing.css'),'.publishing-health','admin publishing stylesheet');
 
-console.log('App architecture audit passed: tiny bootstrap, registered view modules, canonical Suggest content API, render-time localization helpers, direct admin routing, semantic view events, and canonical admin CSS ownership.');
+console.log('App architecture audit passed: tiny bootstrap, registered view modules, canonical Suggest content API, render-time localization helpers, restored canonical admin routing, semantic view events, and canonical admin CSS ownership.');
