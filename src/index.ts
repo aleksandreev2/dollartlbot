@@ -13,6 +13,7 @@ import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
 import { handleCoverHealthRequest } from './cover-health';
 import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
+import { handleDiscoveryCatalogRequest } from './discovery-catalog-api';
 import { handleDiscoveryFeedRequest } from './discovery-feed';
 import { handleDiscoveryRequest } from './discovery';
 import { runDailyEngagement } from './engagement';
@@ -22,6 +23,7 @@ import { handleBaseMiniAppAccess } from './miniapp-access';
 import { handleMiniAppCoreRequest } from './miniapp-core';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleNotificationApiRequest, runNotificationMaintenance } from './notifications';
+import { runNovelpiaDiscoveryIngestion } from './novelpia-discovery';
 import { handleOnboardingRequest } from './onboarding';
 import { handlePublicationLinksRequest } from './publication-links';
 import { handlePublicationReleaseRangeRequest } from './publication-release-range';
@@ -59,6 +61,8 @@ export default {
     if (releasesResponse) return releasesResponse;
     const discoveryFeedResponse = await handleDiscoveryFeedRequest(request, env);
     if (discoveryFeedResponse) return discoveryFeedResponse;
+    const discoveryCatalogResponse = await handleDiscoveryCatalogRequest(request, env);
+    if (discoveryCatalogResponse) return discoveryCatalogResponse;
     const discoveryResponse = await handleDiscoveryRequest(request, env);
     if (discoveryResponse) return discoveryResponse;
 
@@ -172,6 +176,10 @@ export default {
     await runScheduledTask('notification_maintenance', () => runNotificationMaintenance(env, telegram));
     await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenanceWithLease(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
+
+    if (scheduledAt.getUTCMinutes() % 20 === 0) {
+      await runScheduledTask('novelpia_discovery_ingest', () => runNovelpiaDiscoveryIngestion(env, scheduledAt));
+    }
 
     if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
       await runScheduledTask('daily_engagement', () => runDailyEngagement(env, telegram, scheduledAt));
