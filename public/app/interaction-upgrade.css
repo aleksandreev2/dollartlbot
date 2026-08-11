@@ -55,8 +55,62 @@
   transform: translateX(var(--edge-swipe-x, 0));
   transition: none;
 }
+
+/* Shared bottom-sheet geometry. Keep the background page still, bound every sheet
+   to the visible Telegram viewport and let long Help/Rules content scroll inside. */
+html.dtl-sheet-open,
+html.dtl-sheet-open body {
+  overflow: hidden;
+}
+.sheet-backdrop {
+  overscroll-behavior: contain;
+}
 .bottom-sheet {
   transform: translate(-50%, var(--sheet-drag-y, 0));
+  min-height: 0;
+  max-height: calc(100vh - 10px);
+  max-height: calc(100dvh - max(10px, env(safe-area-inset-top, 0px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+.bottom-sheet .sheet-handle,
+.bottom-sheet .sheet-title {
+  touch-action: pan-y;
+}
+.bottom-sheet > .sheet-copy {
+  overflow-wrap: break-word;
+}
+/* Help/Rules put their close action directly after the long copy. Keep that action
+   reachable while the copy itself scrolls; the language list is intentionally not sticky. */
+.bottom-sheet > .sheet-copy + .sheet-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  padding-top: 12px;
+  padding-bottom: 2px;
+  background: linear-gradient(180deg, rgba(255,255,255,0), var(--surface) 24%);
+}
+
+@media (min-width: 700px) {
+  .bottom-sheet {
+    width: min(calc(100% - 40px), 680px);
+    bottom: 18px;
+    max-height: min(calc(100vh - 36px), 760px);
+    max-height: min(calc(100dvh - 36px), 760px);
+    border-radius: 24px;
+    padding: 12px 22px 22px;
+    box-shadow: 0 18px 58px rgba(0,0,0,.18);
+  }
+}
+
+@media (max-width: 699px) {
+  .bottom-sheet {
+    width: 100%;
+    max-height: calc(100vh - 10px);
+    max-height: calc(100dvh - max(10px, env(safe-area-inset-top, 0px)));
+  }
 }
 
 /* Timeline: replace generic dots with meaningful Lucide stage icons. */
