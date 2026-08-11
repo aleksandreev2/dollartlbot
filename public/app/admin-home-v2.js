@@ -6,7 +6,7 @@
   let timer = 0;
   let sequence = 0;
   const ico = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
-  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[char]));
   const isHome = () => admin.activeRoute?.() === 'section:overview';
 
   function renameHome() {
@@ -102,7 +102,8 @@
   }
 
   function requestRow(row) {
-    return `<button type="button" class="admin-home-row" data-home-request="${Number(row.id)}"><span class="admin-home-row-icon">${ico('book-open')}</span><span><strong>#${Number(row.id)} · ${esc(row.title)}</strong><small>${esc(row.original_language || '—')} · ${Number(row.chapter_count || 0)} глав${row.username ? ` · @${esc(row.username)}` : ''}</small></span>${ico('chevron-right')}</button>`;
+    const id = Number(row.id);
+    return `<div class="admin-home-request-item"><button type="button" class="admin-home-row" data-home-request="${id}"><span class="admin-home-row-icon">${ico('book-open')}</span><span><strong>#${id} · ${esc(row.title)}</strong><small>${esc(row.original_language || '—')} · ${Number(row.chapter_count || 0)} глав${row.username ? ` · @${esc(row.username)}` : ''}</small></span>${ico('chevron-right')}</button><button type="button" class="admin-home-request-edit" data-home-edit-request="${id}" aria-label="Редактировать заявку #${id}">${ico('pencil')}<span>Редактировать</span></button></div>`;
   }
 
   function activeRow(row) {
@@ -117,6 +118,14 @@
       const id = Number(button.dataset.homeRequest);
       await admin.open('section:requests');
       setTimeout(() => document.querySelector(`[data-workflow-request="${id}"]`)?.click(), 30);
+    }));
+    host.querySelectorAll('[data-home-edit-request]').forEach(button => button.addEventListener('click', async () => {
+      const id = Number(button.dataset.homeEditRequest);
+      await admin.open('section:requests');
+      setTimeout(() => {
+        if (window.DTL_ADMIN_REQUEST_OPS?.open) void window.DTL_ADMIN_REQUEST_OPS.open(id);
+        else document.querySelector(`[data-workflow-request="${id}"]`)?.click();
+      }, 40);
     }));
   }
 
