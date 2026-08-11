@@ -16,7 +16,7 @@ const suggest=read('public/app/view-suggest.js');
 const bot=read('scripts/configure-bot.mjs');
 
 const requireText=(source,needle,label)=>{
-  if(!source.includes(needle))throw new Error(`Discovery audit failed: ${label}`);
+  if(!source.includes(needle))throw new Error(`Discovery audit failed: ${label}: missing ${needle}`);
 };
 
 requireText(migration,'CREATE TABLE IF NOT EXISTS discovery_interests','interest table');
@@ -89,7 +89,7 @@ requireText(feed,'novelpia_ingest: ingestPresentation','ingestion health project
 
 for(const token of [
   "['fresh_novelpia','telescope',tx('fresh')]",
-  "'/api/app/discovery/catalog/search",
+  '/api/app/discovery/catalog/search',
   "'/api/app/discovery/catalog/interest'",
   'data-catalog-request',
   'data-catalog-interest',
