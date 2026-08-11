@@ -57,8 +57,14 @@ export async function handleSubmissionIdentityPreflight(
   if (!identity) return miniAppJson({ ok: true, identity: null });
 
   const duplicate = await activeDuplicate(env, identity);
-  if (duplicate) return duplicateResponse(duplicate, identity);
-  return miniAppJson({ ok: true, identity: identityKey(identity) });
+  if (duplicate) {
+    return miniAppJson({
+      ok: true,
+      identity: identityKey(identity),
+      duplicate: duplicateDetails(duplicate, identity),
+    });
+  }
+  return miniAppJson({ ok: true, identity: identityKey(identity), duplicate: null });
 }
 
 /**
@@ -427,6 +433,20 @@ function identityBindingError(
   );
 }
 
+function duplicateDetails(row: DuplicateRow, identity: CanonicalIdentity) {
+  return {
+    submission_id: row.id,
+    title: row.title,
+    request_status: row.status,
+    queue_status: row.queue_status,
+    queue_position: row.queue_position,
+    chapter_count: row.chapter_count,
+    current_chapter: row.current_chapter,
+    identity: identityKey(identity),
+    quota_used: false,
+  };
+}
+
 function duplicateResponse(row: DuplicateRow, identity: CanonicalIdentity): Response {
   const state = row.status === 'pending'
     ? 'under review'
@@ -441,17 +461,7 @@ function duplicateResponse(row: DuplicateRow, identity: CanonicalIdentity): Resp
     'duplicate_title',
     `This exact NovelPia title is already in Dollar TL as request #${row.id} (${state}). Your quota was not used.`,
     409,
-    {
-      submission_id: row.id,
-      title: row.title,
-      request_status: row.status,
-      queue_status: row.queue_status,
-      queue_position: row.queue_position,
-      chapter_count: row.chapter_count,
-      current_chapter: row.current_chapter,
-      identity: identityKey(identity),
-      quota_used: false,
-    },
+    duplicateDetails(row, identity),
   );
 }
 
