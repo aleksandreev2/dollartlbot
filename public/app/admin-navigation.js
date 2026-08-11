@@ -1,12 +1,14 @@
 (() => {
   const runtime = window.DTL_RUNTIME;
-  if (!runtime?.registerPatcher) throw new Error('DTL runtime must load before admin-navigation.js');
+  const admin = window.DTL_ADMIN;
+  if (!runtime?.registerPatcher || !admin?.activeRoute) throw new Error('DTL runtime must load before admin-navigation.js');
 
   const ico = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
   const secondarySelectors = [
     '[data-admin-tools="analytics"]',
     '[data-admin-section="settings"]',
   ];
+  const publishingRoutes = new Set(['section:publishing', 'tools:publications', 'section:broadcasts']);
 
   function icons() {
     try { window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } }); } catch {}
@@ -26,6 +28,27 @@
     label('[data-admin-section="settings"]', 'Настройки');
   }
 
+  function visibleRouteSelector() {
+    const heading = document.querySelector('.admin-work-head h1')?.textContent?.trim();
+    if (heading === 'Активность') return '[data-admin-activity]';
+
+    const route = admin.activeRoute?.();
+    if (!route) return '';
+    if (publishingRoutes.has(route)) return '[data-admin-section="publishing"]';
+    return admin.selectorForRoute?.(route) || '';
+  }
+
+  function syncActive(root) {
+    const selector = visibleRouteSelector();
+    for (const nav of root.querySelectorAll('.admin-side-nav,.admin-mobile-nav')) {
+      nav.querySelectorAll('[data-admin-section],[data-admin-tools],[data-admin-health],[data-admin-activity]').forEach(button => {
+        button.classList.remove('active');
+      });
+      if (!selector) continue;
+      nav.querySelectorAll(selector).forEach(button => button.classList.add('active'));
+    }
+  }
+
   function desktopNav(nav) {
     let details = nav.querySelector('.admin-nav-more');
     if (!details) {
@@ -39,7 +62,11 @@
       const button = nav.querySelector(selector) || document.querySelector(`.admin-side-nav ${selector}`);
       if (button && button.parentElement !== body) body.append(button);
     }
-    details.open = Boolean(body?.querySelector('.active'));
+
+    // Never force a manually opened menu closed on a patch pass. The old
+    // `details.open = Boolean(active)` made the native <details> toggle appear
+    // broken because opening it immediately scheduled another pass that closed it.
+    if (body?.querySelector('.active')) details.open = true;
   }
 
   function mobileNav(nav) {
@@ -53,21 +80,28 @@
       more.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
-        nav.classList.toggle('admin-mobile-more-open');
-        more.classList.toggle('active', nav.classList.contains('admin-mobile-more-open'));
+        const open = nav.classList.toggle('admin-mobile-more-open');
+        more.classList.toggle('active', open);
       });
     }
     for (const selector of secondarySelectors) {
       const button = nav.querySelector(selector);
       if (button) button.classList.add('admin-mobile-secondary');
     }
-    nav.classList.toggle('admin-mobile-more-open', Boolean(nav.querySelector('.admin-mobile-secondary.active')));
+
+    // Same rule as desktop: an active secondary page may open More, but a
+    // patch pass must not undo a user's explicit toggle.
+    if (nav.querySelector('.admin-mobile-secondary.active')) {
+      nav.classList.add('admin-mobile-more-open');
+      more.classList.add('active');
+    }
   }
 
   function install() {
     const root = document.querySelector('.admin-v2');
     if (!root) return;
     rename();
+    syncActive(root);
     const side = root.querySelector('.admin-side-nav');
     const mobile = root.querySelector('.admin-mobile-nav');
     if (side) desktopNav(side);
@@ -76,10 +110,12 @@
   }
 
   document.addEventListener('click', event => {
-    const navigated = event.target.closest?.('[data-admin-section],[data-admin-tools],[data-admin-health]');
+    const navigated = event.target.closest?.('[data-admin-section],[data-admin-tools],[data-admin-health],[data-admin-activity]');
     if (!navigated) return;
-    queueMicrotask(() => runtime.schedule());
+    queueMicrotask(install);
   }, true);
+
+  document.addEventListener('dtl:adminroutechange', () => queueMicrotask(install));
 
   runtime.registerPatcher(install);
   window.DTL_ADMIN_NAVIGATION = Object.freeze({ refresh: install });
