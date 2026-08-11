@@ -1,18 +1,18 @@
-import {
-  authenticateMiniAppRequest,
-  miniAppJson,
-  miniAppJsonError,
-  type MiniAppAuthContext,
-} from './miniapp-auth';
+import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
 
-const CLAIM_TTL_MS = 20 * 60 * 1000;
-const REQUEST_ID_RE = /^[A-Za-z0-9_-]{16,80}$/;
+const CLAIM_TTL_MS = 35 * 60 * 1000;
 const NOVELPIA_ID_RE = /^\d{2,9}$/;
 
 type CanonicalIdentity = {
   type: 'novelpia';
   value: string;
   provider: 'novelpia' | 'raw_fucknovelpia' | 'source_url';
+};
+
+export type SubmissionIdentityInput = {
+  provider: string;
+  externalId: string;
+  sourceUrl: string;
 };
 
 export type SubmissionIdentityGuard = {
@@ -48,11 +48,11 @@ export async function handleSubmissionIdentityPreflight(
   const auth = await authenticateMiniAppRequest(request, env);
   if (auth instanceof Response) return auth;
   const body = await readJson<Record<string, unknown>>(request);
-  const identity = canonicalIdentity(
-    String(body.provider ?? ''),
-    String(body.external_id ?? ''),
-    String(body.source_url ?? ''),
-  );
+  const identity = canonicalIdentity({
+    provider: String(body.provider ?? ''),
+    externalId: String(body.external_id ?? ''),
+    sourceUrl: String(body.source_url ?? ''),
+  });
   if (!identity) return miniAppJson({ ok: true, identity: null });
 
   const duplicate = await activeDuplicate(env, identity);
@@ -60,67 +60,40 @@ export async function handleSubmissionIdentityPreflight(
   return miniAppJson({ ok: true, identity: identityKey(identity) });
 }
 
-export async function prepareSubmissionIdentityGuard(
-  request: Request,
+/**
+ * Claims one exact external title identity after the normal submit payload has
+ * already been parsed and a quota reservation exists, but before Telegram file
+ * upload begins. This deliberately accepts parsed values rather than Request so
+ * a large multipart body is never cloned / parsed twice inside the Worker.
+ */
+export async function claimSubmissionIdentity(
   env: Env,
+  userId: number,
+  requestId: string,
+  input: SubmissionIdentityInput,
 ): Promise<SubmissionIdentityGuard | Response | null> {
-  const url = new URL(request.url);
-  if (request.method !== 'POST' || url.pathname !== '/api/app/submit') return null;
-
-  const auth = await authenticateMiniAppRequest(request, env);
-  if (auth instanceof Response) return auth;
-
-  let form: FormData;
-  try {
-    form = await request.clone().formData();
-  } catch {
-    return null; // The canonical submit handler owns malformed multipart errors.
-  }
-
-  const identity = canonicalIdentity(
-    field(form, 'identity_provider'),
-    field(form, 'identity_external_id'),
-    field(form, 'source_url'),
-  );
+  const identity = canonicalIdentity(input);
   if (!identity) return null;
 
   const duplicate = await activeDuplicate(env, identity);
   if (duplicate) return duplicateResponse(duplicate, identity);
 
-  const claimRequestId = await guardRequestId(auth, form, identity);
-  const claimed = await claimIdentity(env, auth.telegramUser.id, claimRequestId, identity);
+  const claimed = await claimIdentity(env, userId, requestId, identity);
   if (claimed instanceof Response) return claimed;
-  return { identity, userId: auth.telegramUser.id, claimRequestId };
+  return { identity, userId, claimRequestId: requestId };
 }
 
-export async function finalizeSubmissionIdentityGuard(
-  response: Response,
-  guard: SubmissionIdentityGuard | null,
+/**
+ * Binds a successfully committed submission to the claim it held while its raw
+ * file was being transferred. A failure is intentionally surfaced: the same
+ * request ID can be retried without uploading the file again and reconciled.
+ */
+export async function bindSubmissionIdentity(
   env: Env,
-): Promise<Response> {
-  if (!guard) return response;
-
-  let data: any = null;
-  try {
-    data = await response.clone().json();
-  } catch {
-    data = null;
-  }
-
-  if (!response.ok) {
-    const code = String(data?.error?.code ?? '');
-    if (!['submission_in_progress', 'submission_commit_failed'].includes(code)) {
-      await releaseClaim(env, guard).catch(() => undefined);
-    }
-    return response;
-  }
-
-  const submissionId = Number(data?.submission_id);
-  if (!Number.isSafeInteger(submissionId) || submissionId <= 0) {
-    await releaseClaim(env, guard).catch(() => undefined);
-    return response;
-  }
-
+  guard: SubmissionIdentityGuard | null,
+  submissionId: number,
+): Promise<Response | null> {
+  if (!guard) return null;
   const now = new Date().toISOString();
   const bound = await env.DB.prepare(`
     UPDATE title_identities
@@ -146,25 +119,99 @@ export async function finalizeSubmissionIdentityGuard(
     guard.claimRequestId,
   ).run();
 
-  if (Number(bound.meta.changes ?? 0) < 1) {
-    const row = await identityRow(env, guard.identity);
-    if (Number(row?.submission_id) !== submissionId) {
-      console.error(JSON.stringify({
-        event: 'submission_identity_bind_failed',
+  if (Number(bound.meta.changes ?? 0) >= 1) return null;
+  const row = await identityRow(env, guard.identity);
+  if (Number(row?.submission_id) === submissionId) return null;
+  return identityBindingError(submissionId, guard.identity, row?.submission_id ?? null);
+}
+
+/**
+ * Handles idempotent retries where the submission was already committed before
+ * the caller received a success response. It never creates a second request;
+ * it only makes sure the exact identity points at that already committed row.
+ */
+export async function reconcileCommittedSubmissionIdentity(
+  env: Env,
+  submissionId: number,
+  input: SubmissionIdentityInput,
+): Promise<Response | null> {
+  const identity = canonicalIdentity(input);
+  if (!identity) return null;
+
+  const duplicate = await activeDuplicate(env, identity);
+  if (duplicate && duplicate.id !== submissionId) {
+    console.error(JSON.stringify({
+      event: 'submission_identity_reconcile_conflict',
+      submission_id: submissionId,
+      identity: identityKey(identity),
+      canonical_submission_id: duplicate.id,
+    }));
+    return miniAppJsonError(
+      'submission_identity_conflict',
+      'This request already exists, but its exact title identity belongs to a different Dollar TL request. No new upload was performed; contact support so the duplicate can be reconciled safely.',
+      503,
+      {
         submission_id: submissionId,
-        identity: identityKey(guard.identity),
-        current_submission_id: row?.submission_id ?? null,
-      }));
-      return miniAppJsonError(
-        'submission_identity_unconfirmed',
-        'Your request was created, but Dollar TL could not confirm the title identity. Retry the same submission so it can be reconciled safely.',
-        503,
-        { submission_id: submissionId, retry_same_request: true },
-      );
-    }
+        canonical_submission_id: duplicate.id,
+        identity: identityKey(identity),
+        retry_same_request: true,
+      },
+    );
   }
 
-  return response;
+  const now = new Date().toISOString();
+  await clearRejectedOwner(env, identity, now);
+  await env.DB.prepare(`
+    INSERT OR IGNORE INTO title_identities (
+      identity_type,identity_value,submission_id,claim_user_id,claim_request_id,claim_expires_at,
+      source_provider,created_at,updated_at
+    ) VALUES (?,?,?,NULL,NULL,NULL,?,?,?)
+  `).bind(
+    identity.type,
+    identity.value,
+    submissionId,
+    identity.provider,
+    now,
+    now,
+  ).run();
+  await env.DB.prepare(`
+    UPDATE title_identities
+    SET submission_id=?, claim_user_id=NULL, claim_request_id=NULL, claim_expires_at=NULL,
+        source_provider=?, updated_at=?
+    WHERE identity_type=? AND identity_value=?
+      AND (submission_id IS NULL OR submission_id=?)
+  `).bind(
+    submissionId,
+    identity.provider,
+    now,
+    identity.type,
+    identity.value,
+    submissionId,
+  ).run();
+
+  const row = await identityRow(env, identity);
+  if (Number(row?.submission_id) === submissionId) return null;
+  return identityBindingError(submissionId, identity, row?.submission_id ?? null);
+}
+
+export async function releaseSubmissionIdentityGuard(
+  env: Env,
+  guard: SubmissionIdentityGuard | null,
+): Promise<void> {
+  if (!guard) return;
+  const now = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE title_identities
+    SET claim_user_id=NULL,claim_request_id=NULL,claim_expires_at=NULL,updated_at=?
+    WHERE identity_type=? AND identity_value=? AND submission_id IS NULL
+      AND claim_user_id=? AND claim_request_id=?
+  `).bind(
+    now,
+    guard.identity.type,
+    guard.identity.value,
+    guard.userId,
+    guard.claimRequestId,
+  ).run();
 }
 
 export async function canonicalIdentityKeysForSubmission(env: Env, submissionId: number): Promise<string[]> {
@@ -186,9 +233,9 @@ export function novelpiaFollowKey(externalId: string): string | null {
   return id ? `novelpia:${id}` : null;
 }
 
-function canonicalIdentity(providerRaw: string, externalIdRaw: string, sourceUrlRaw: string): CanonicalIdentity | null {
-  const provider = providerRaw.trim().toLowerCase();
-  const externalId = cleanNovelpiaId(externalIdRaw);
+function canonicalIdentity(input: SubmissionIdentityInput): CanonicalIdentity | null {
+  const provider = input.provider.trim().toLowerCase();
+  const externalId = cleanNovelpiaId(input.externalId);
   if (externalId && ['novelpia', 'raw_fucknovelpia'].includes(provider)) {
     return {
       type: 'novelpia',
@@ -197,7 +244,7 @@ function canonicalIdentity(providerRaw: string, externalIdRaw: string, sourceUrl
     };
   }
 
-  const fromUrl = extractNovelpiaId(sourceUrlRaw);
+  const fromUrl = extractNovelpiaId(input.sourceUrl);
   if (fromUrl) return { type: 'novelpia', value: fromUrl, provider: 'source_url' };
   return null;
 }
@@ -260,14 +307,7 @@ async function claimIdentity(
   const nowIso = now.toISOString();
   const expires = new Date(now.getTime() + CLAIM_TTL_MS).toISOString();
 
-  // Rejected submissions no longer own a canonical identity and may be resubmitted.
-  await env.DB.prepare(`
-    UPDATE title_identities
-    SET submission_id=NULL, claim_user_id=NULL, claim_request_id=NULL, claim_expires_at=NULL, updated_at=?
-    WHERE identity_type=? AND identity_value=?
-      AND submission_id IN (SELECT id FROM submissions WHERE status='rejected')
-  `).bind(nowIso, identity.type, identity.value).run();
-
+  await clearRejectedOwner(env, identity, nowIso);
   await env.DB.prepare(`
     UPDATE title_identities
     SET claim_user_id=NULL, claim_request_id=NULL, claim_expires_at=NULL, updated_at=?
@@ -325,24 +365,18 @@ async function claimIdentity(
     'duplicate_in_progress',
     'Another request for this exact NovelPia title is being submitted right now. Wait a moment and open the title again instead of using another quota slot.',
     409,
-    { identity: identityKey(identity), retry_after_seconds: 20 },
+    { identity: identityKey(identity), retry_after_seconds: 20, quota_used: false },
   );
 }
 
-async function releaseClaim(env: Env, guard: SubmissionIdentityGuard): Promise<void> {
-  const now = new Date().toISOString();
+async function clearRejectedOwner(env: Env, identity: CanonicalIdentity, now: string): Promise<void> {
+  // Rejected submissions no longer own a canonical identity and may be resubmitted.
   await env.DB.prepare(`
     UPDATE title_identities
-    SET claim_user_id=NULL,claim_request_id=NULL,claim_expires_at=NULL,updated_at=?
-    WHERE identity_type=? AND identity_value=? AND submission_id IS NULL
-      AND claim_user_id=? AND claim_request_id=?
-  `).bind(
-    now,
-    guard.identity.type,
-    guard.identity.value,
-    guard.userId,
-    guard.claimRequestId,
-  ).run();
+    SET submission_id=NULL, claim_user_id=NULL, claim_request_id=NULL, claim_expires_at=NULL, updated_at=?
+    WHERE identity_type=? AND identity_value=?
+      AND submission_id IN (SELECT id FROM submissions WHERE status='rejected')
+  `).bind(now, identity.type, identity.value).run();
 }
 
 async function identityRow(env: Env, identity: CanonicalIdentity): Promise<IdentityRow | null> {
@@ -353,25 +387,28 @@ async function identityRow(env: Env, identity: CanonicalIdentity): Promise<Ident
   `).bind(identity.type, identity.value).first<IdentityRow>();
 }
 
-async function guardRequestId(
-  auth: MiniAppAuthContext,
-  form: FormData,
+function identityBindingError(
+  submissionId: number,
   identity: CanonicalIdentity,
-): Promise<string> {
-  const supplied = field(form, 'request_id');
-  if (REQUEST_ID_RE.test(supplied)) return supplied;
-  const file = form.get('file');
-  const filePart = file instanceof File ? `${file.name}:${file.size}:${file.type}` : '';
-  const seed = [
-    auth.telegramUser.id,
-    identityKey(identity),
-    field(form, 'title'),
-    field(form, 'chapter_count'),
-    filePart,
-  ].join('|');
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed));
-  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  return `guard_${hex.slice(0, 56)}`;
+  currentSubmissionId: number | null,
+): Response {
+  console.error(JSON.stringify({
+    event: 'submission_identity_bind_failed',
+    submission_id: submissionId,
+    identity: identityKey(identity),
+    current_submission_id: currentSubmissionId,
+  }));
+  return miniAppJsonError(
+    'submission_identity_unconfirmed',
+    'Your request was created, but Dollar TL could not confirm the title identity. Retry the same submission so it can be reconciled safely.',
+    503,
+    {
+      submission_id: submissionId,
+      current_submission_id: currentSubmissionId,
+      identity: identityKey(identity),
+      retry_same_request: true,
+    },
+  );
 }
 
 function duplicateResponse(row: DuplicateRow, identity: CanonicalIdentity): Response {
@@ -404,11 +441,6 @@ function duplicateResponse(row: DuplicateRow, identity: CanonicalIdentity): Resp
 
 function identityKey(identity: CanonicalIdentity): string {
   return `${identity.type}:${identity.value}`;
-}
-
-function field(form: FormData, key: string): string {
-  const value = form.get(key);
-  return typeof value === 'string' ? value.trim() : '';
 }
 
 async function readJson<T>(request: Request): Promise<T> {
