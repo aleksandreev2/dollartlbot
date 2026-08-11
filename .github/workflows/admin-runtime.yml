@@ -18,5 +18,9 @@ jobs:
         run: node --check public/app/admin-runtime.js
       - name: Syntax check admin entry
         run: node --check public/app/view-admin.js
+      - name: Syntax check admin tools routes
+        run: node --check public/app/admin-tools.js
       - name: Audit admin runtime architecture
         run: node scripts/audit-admin-runtime.mjs
+      - name: Audit admin tools routes
+        run: node scripts/audit-admin-tools-routes.mjs
