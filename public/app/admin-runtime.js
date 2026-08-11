@@ -11,6 +11,7 @@
   let replayDepth = 0;
   let transitionDepth = 0;
   let bootstrapping = false;
+  let navigationSequence = 0;
 
   const esc = value => {
     try { return CSS.escape(String(value || '')); }
@@ -79,8 +80,12 @@
   async function api(path, options = {}) {
     const headers = new Headers(options.headers || {});
     headers.set('x-telegram-init-data', tg?.initData || '');
-    const signal = options.signal || controller?.signal;
-    const response = await fetch(path, { ...options, headers, signal, cache: options.cache || 'no-store' });
+    const response = await fetch(path, {
+      ...options,
+      headers,
+      signal: options.signal || controller?.signal,
+      cache: options.cache || 'no-store',
+    });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.error?.message || data?.message || `HTTP ${response.status}`);
     return data;
@@ -89,26 +94,28 @@
   function registerRoute(id, config = {}) {
     const key = String(id || '').trim();
     if (!key) throw new Error('Admin route id is required.');
-    routes.set(key, Object.freeze({ ...config, id: key }));
+    const record = Object.freeze({ ...config, id: key });
+    routes.set(key, record);
     return () => {
-      if (routes.get(key)?.id === key) routes.delete(key);
+      if (routes.get(key) === record) routes.delete(key);
     };
   }
 
   function contextFor(id, sourceElement) {
     const localGeneration = generation;
+    const localController = controller;
     const cleanups = new Set();
     const context = {
       id,
-      signal: controller?.signal,
+      signal: localController?.signal,
       generation: localGeneration,
       sourceElement,
-      api,
+      api: (path, options = {}) => api(path, { ...options, signal: options.signal || localController?.signal }),
       content,
       setHead,
       toast,
       icons,
-      isCurrent: () => current?.id === id && generation === localGeneration && !controller?.signal?.aborted,
+      isCurrent: () => current?.id === id && generation === localGeneration && !localController?.signal?.aborted,
       onCleanup(fn) {
         if (typeof fn === 'function') cleanups.add(fn);
         return () => cleanups.delete(fn);
@@ -120,8 +127,9 @@
   async function unmountCurrent(reason = 'route-change') {
     const previous = current;
     current = null;
-    if (controller && !controller.signal.aborted) controller.abort(reason);
+    const previousController = controller;
     controller = null;
+    if (previousController && !previousController.signal.aborted) previousController.abort(reason);
     if (!previous) return;
     for (const cleanup of [...previous.cleanups]) {
       try { await cleanup(); } catch (error) { console.error('[DTL admin] cleanup failed', error); }
@@ -137,6 +145,11 @@
     document.body.dataset.dtlAdminRoute = id;
   }
 
+  function clearRouteMarker() {
+    delete document.documentElement.dataset.dtlAdminRoute;
+    delete document.body.dataset.dtlAdminRoute;
+  }
+
   function replayLegacyNavigation(id, sourceElement) {
     const button = navElementForRoute(id, sourceElement);
     if (!(button instanceof HTMLButtonElement)) return false;
@@ -146,21 +159,29 @@
     return true;
   }
 
-  async function ensureShell() {
-    if (document.querySelector('.admin-v2')) return true;
-    if (!window.DTL_ADMIN_CONSOLE?.open || bootstrapping) return false;
+  function ensureShell() {
+    if (document.querySelector('.admin-v2')) return { ready: true, bootstrapped: false };
+    if (!window.DTL_ADMIN_CONSOLE?.open || bootstrapping) return { ready: false, bootstrapped: false };
     bootstrapping = true;
-    try { await window.DTL_ADMIN_CONSOLE.open(); }
-    finally { bootstrapping = false; }
-    return Boolean(document.querySelector('.admin-v2'));
+    try {
+      const pending = window.DTL_ADMIN_CONSOLE.open();
+      if (pending && typeof pending.catch === 'function') {
+        pending.catch(error => console.error('[DTL admin] bootstrap render failed', error));
+      }
+    } finally {
+      bootstrapping = false;
+    }
+    return { ready: Boolean(document.querySelector('.admin-v2')), bootstrapped: true };
   }
 
   async function open(id, options = {}) {
     const routeId = String(id || 'section:overview');
+    const sequence = ++navigationSequence;
     const sameRoute = current?.id === routeId;
     const route = routes.get(routeId) || Object.freeze({ id: routeId, legacy: true });
+    const shell = ensureShell();
+    if (!shell.ready || sequence !== navigationSequence) return false;
 
-    if (!(await ensureShell())) return false;
     if (sameRoute && !options.force && typeof route.refresh === 'function') {
       await route.refresh(current.context);
       return true;
@@ -169,27 +190,31 @@
     transitionDepth += 1;
     try {
       await unmountCurrent(sameRoute ? 'refresh' : 'route-change');
+      if (sequence !== navigationSequence) return false;
       try { window.DTL_ADMIN_STABILITY?.abortReads?.(); } catch {}
       try { window.__DTL_ADMIN_CACHE__?.clear?.(); } catch {}
 
       generation += 1;
+      const localGeneration = generation;
       controller = new AbortController();
       const built = contextFor(routeId, options.sourceElement || null);
       current = { id: routeId, route, context: built.context, cleanups: built.cleanups };
       markRoute(routeId);
       persist(routeId);
 
-      let mounted = false;
-      if (typeof route.mount === 'function') {
+      let mounted = shell.bootstrapped && routeId === 'section:overview' && !options.sourceElement;
+      if (!mounted && typeof route.mount === 'function') {
         await route.mount(built.context);
-        mounted = true;
-      } else {
+        mounted = built.context.isCurrent();
+      } else if (!mounted) {
         mounted = replayLegacyNavigation(routeId, options.sourceElement || null);
       }
 
-      document.dispatchEvent(new CustomEvent('dtl:adminroutechange', {
-        detail: { id: routeId, generation, legacy: typeof route.mount !== 'function', mounted },
-      }));
+      if (generation === localGeneration && current?.id === routeId) {
+        document.dispatchEvent(new CustomEvent('dtl:adminroutechange', {
+          detail: { id: routeId, generation: localGeneration, legacy: typeof route.mount !== 'function', mounted },
+        }));
+      }
       return mounted;
     } finally {
       transitionDepth = Math.max(0, transitionDepth - 1);
@@ -225,13 +250,21 @@
       ? event.target.closest('[data-admin-section],[data-admin-tools],[data-admin-health],[data-jump]')
       : null;
     const id = routeIdFromElement(target);
-    if (!id) return;
-    if (!target?.closest('.admin-v2')) return;
+    if (!id || !target?.closest('.admin-v2')) return;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
     void open(id, { sourceElement: target });
+  }, true);
+
+  document.addEventListener('click', event => {
+    if (replayDepth > 0 || !current) return;
+    const nav = event.target instanceof Element ? event.target.closest('[data-nav]') : null;
+    if (!nav || nav.getAttribute('data-nav') === 'admin') return;
+    navigationSequence += 1;
+    void unmountCurrent('leave-admin');
+    clearRouteMarker();
   }, true);
 
   document.addEventListener('dtl:adminrender', event => {
@@ -250,9 +283,9 @@
 
   document.addEventListener('dtl:viewchange', event => {
     if (event.detail?.view === 'admin') return;
+    navigationSequence += 1;
     if (current) void unmountCurrent('leave-admin');
-    delete document.documentElement.dataset.dtlAdminRoute;
-    delete document.body.dataset.dtlAdminRoute;
+    clearRouteMarker();
   });
 
   window.DTL_ADMIN = Object.freeze({
