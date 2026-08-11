@@ -49,20 +49,27 @@
   function isProgress(row){return row?.queue_status==='in_progress'||row?.queue_status==='completed'||Number(row?.current_chapter)>0;}
 
   function mount(){
-    if(app.state.view!=='detail'||!app.state.detailNovel?.id)return;
-    const detail=document.querySelector('.live-detail');
-    const host=document.querySelector('.live-detail-discovery')||detail?.querySelector('.live-detail-requester')?.parentElement;
+    const row=app.state.detailNovel;
+    if(app.state.view!=='detail'||!row?.id)return;
+    const host=document.querySelector('.live-detail .live-detail-actions');
     if(!host)return;
-    let button=host.querySelector('.public-title-share');
-    const progress=isProgress(app.state.detailNovel);
+
+    const progress=isProgress(row);
     const label=copy(progress?'progress':'title');
+    const stamp=`${Number(row.id)}:${progress?'progress':'title'}:${app.state.locale||'en'}`;
+    let button=host.querySelector('.public-title-share');
+    if(button?.dataset.shareStamp===stamp)return;
+
     if(!button){
       button=document.createElement('button');
       button.type='button';
-      button.className='live-detail-interest public-title-share';
-      host.appendChild(button);
+      button.className='secondary-button public-title-share';
+      const queueButton=host.querySelector('#detailQueue');
+      if(queueButton)host.insertBefore(button,queueButton);
+      else host.appendChild(button);
     }
-    button.innerHTML=`<i data-lucide="share-2" aria-hidden="true"></i> <span>${label}</span>`;
+    button.dataset.shareStamp=stamp;
+    button.innerHTML=`<i data-lucide="share-2" aria-hidden="true"></i><span>${label}</span>`;
     button.onclick=()=>share(progress);
     try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}
   }
@@ -80,7 +87,15 @@
     try{app.tg?.openTelegramLink?.(target);}catch{window.open(target,'_blank','noopener,noreferrer');}
   }
 
-  document.addEventListener('dtl:detail',()=>queueMicrotask(mount));
-  document.addEventListener('dtl:viewrender',event=>{if(event.detail?.view==='detail')queueMicrotask(mount);});
-  document.addEventListener('dtl:localechange',()=>queueMicrotask(mount));
+  const remount=()=>queueMicrotask(mount);
+  document.addEventListener('dtl:detail',remount);
+  document.addEventListener('dtl:viewrender',event=>{if(event.detail?.view==='detail')remount();});
+  document.addEventListener('dtl:localechange',remount);
+
+  const root=document.getElementById('viewRoot');
+  if(root&&typeof MutationObserver!=='undefined'){
+    const observer=new MutationObserver(()=>{if(app.state.view==='detail')remount();});
+    observer.observe(root,{childList:true,subtree:true});
+  }
+  remount();
 })();
