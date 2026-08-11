@@ -14,6 +14,7 @@ const css=[
   'public/app/title-release-history.css',
 ].map(read).join('\n');
 const sources={
+  presenter:read('public/app/novel-presenter.js'),
   core:read('public/app/app-core.js'),
   i18n:read('public/app/view-i18n.js'),
   home:read('public/app/view-home.js'),
@@ -25,20 +26,28 @@ const TITLE='The Grand Duke of the Northern Territory Who Became the Academy’s
 
 async function boot(page,{width,height,compact=false}){
   await page.setViewportSize({width,height});
-  await page.route('https://detail.test/**',route=>route.fulfill({status:200,contentType:'text/html',body:`<!doctype html><html><head><style>${css}\n*{transition:none!important}</style></head><body><div id="app" class="app-shell" aria-busy="true"><header class="topbar"><button class="brand" data-nav="home">Dollar TL</button></header><div id="previewBanner" hidden></div><main id="viewRoot" class="view-root"></main><nav id="bottomNav" class="bottom-nav"></nav><div id="toastRegion"></div><div id="sheetRoot"></div></div><input id="novelFilePicker" type="file" hidden></body></html>`}));
+  await page.route('https://detail.test/**',route=>{
+    const url=new URL(route.request().url());
+    if(url.pathname.startsWith('/app/flags/')){
+      return route.fulfill({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#ddd"/></svg>'});
+    }
+    return route.fulfill({status:200,contentType:'text/html',body:`<!doctype html><html><head><style>${css}\n*{transition:none!important}</style></head><body><div id="app" class="app-shell" aria-busy="true"><header class="topbar"><button class="brand" data-nav="home">Dollar TL</button></header><div id="previewBanner" hidden></div><main id="viewRoot" class="view-root"></main><nav id="bottomNav" class="bottom-nav"></nav><div id="toastRegion"></div><div id="sheetRoot"></div></div><input id="novelFilePicker" type="file" hidden></body></html>`});
+  });
   await page.goto('https://detail.test/');
   await page.evaluate(({compact})=>{
     if(compact)document.documentElement.classList.add('dtl-telegram-desktop','dtl-compact-desktop');
     window.Telegram={WebApp:{ready(){},expand(){},setHeaderColor(){},setBackgroundColor(){},HapticFeedback:{selectionChanged(){}}}};
     window.lucide={createIcons(){}};
     const labels={en:'English',ko:'한국어',ja:'日本語',zh:'中文',es:'Español',fil:'Filipino',hi:'हिन्दी',pt:'Português',id:'Bahasa Indonesia',vi:'Tiếng Việt',fr:'Français',de:'Deutsch',ru:'Русский'};
-    const detect=value=>{const v=String(value||'').toLowerCase();if(v.includes('korean'))return'ko';if(v.includes('japanese'))return'ja';if(v.includes('chinese'))return'zh';return'';};
+    const detect=value=>{const v=String(value||'').toLowerCase();if(v.includes('korean')||v.includes('한국'))return'ko';if(v.includes('japanese')||v.includes('日本'))return'ja';if(v.includes('chinese')||v.includes('中文'))return'zh';if(v.includes('english'))return'en';return'';};
     window.DTL_I18N={
       copy(key){const map={reader:'Reader',progress:'Translation progress',justNow:'just now'};return map[key]||key;},
       table(){return{};},detectLanguage:detect,languageLabel:code=>labels[code]||code,tagLabel:value=>String(value||''),
+      locale(){return window.DTL_APP?.state?.locale||'en';},
     };
     window.DTL_RUNTIME={detectLanguage:detect,locale(){return window.DTL_APP?.state?.locale||'en';},schedule(){}};
   },{compact});
+  await page.addScriptTag({content:sources.presenter});
   for(const key of ['core','i18n','home','queue','history'])await page.addScriptTag({content:sources[key]});
   await page.evaluate(async title=>{
     await window.DTL_APP.init();
@@ -64,6 +73,10 @@ async function render(page,locale){
   await expect(page.locator('.live-progress-stat strong').nth(0)).toHaveText('151');
   await expect(page.locator('.live-progress-stat strong').nth(1)).toHaveText('209');
   await expect(page.locator('.live-progress-stat strong').nth(2)).toHaveText('42%');
+  await expect(page.locator('.live-detail-language-flag')).toHaveCount(2);
+  await expect(page.locator('.live-detail-language-flag').nth(0)).toHaveAttribute('src','/app/flags/kr.svg');
+  await expect(page.locator('.live-detail-language-flag').nth(1)).toHaveAttribute('src','/app/flags/gb.svg');
+  await expect(page.locator('.live-detail-language')).not.toContainText('🇰🇷');
   await expect(page.locator('.live-tag')).toHaveCount(6);
   await expect(page.locator('.live-activity-item')).toHaveCount(2);
   await expect(page.locator('.live-detail-title')).toContainText('Grand Duke');
@@ -76,12 +89,21 @@ async function render(page,locale){
   await expect(page.locator('.title-release-row.published').first().locator('strong')).toContainText('78');
   await expect(page.locator('.title-release-row.published').first().locator('strong')).toContainText('85');
   await expect(page.locator('.title-release-open').first()).toHaveAttribute('href','https://t.me/dollartl/20');
-  const layout=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,hero:document.querySelector('.detail-hero')?.getBoundingClientRect(),history:document.querySelector('.title-release-history')?.getBoundingClientRect(),width:document.documentElement.clientWidth}));
+  const layout=await page.evaluate(()=>({
+    overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
+    hero:document.querySelector('.detail-hero')?.getBoundingClientRect(),
+    history:document.querySelector('.title-release-history')?.getBoundingClientRect(),
+    railHeight:document.querySelector('.live-progress-rail')?.getBoundingClientRect().height,
+    flagSizes:[...document.querySelectorAll('.live-detail-language-flag')].map(node=>node.getBoundingClientRect().width),
+    width:document.documentElement.clientWidth,
+  }));
   expect(layout.overflow,`${locale}: horizontal overflow`).toBeLessThanOrEqual(1);
   expect(layout.hero.left,`${locale}: hero left edge`).toBeGreaterThanOrEqual(-1);
   expect(layout.hero.right,`${locale}: hero right edge`).toBeLessThanOrEqual(layout.width+1);
   expect(layout.history.left,`${locale}: history left edge`).toBeGreaterThanOrEqual(-1);
   expect(layout.history.right,`${locale}: history right edge`).toBeLessThanOrEqual(layout.width+1);
+  expect(layout.railHeight,`${locale}: progress rail visual height`).toBeGreaterThanOrEqual(26);
+  expect(Math.min(...layout.flagSizes),`${locale}: language flag visible size`).toBeGreaterThanOrEqual(16);
 }
 
 for(const viewport of [
