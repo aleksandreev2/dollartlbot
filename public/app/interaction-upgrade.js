@@ -11,6 +11,8 @@
   let lastMainNav = 'home';
   let nativeBackBound = false;
   let pointer = null;
+  let sheetWasOpen = false;
+  let sheetReturnFocus = null;
 
   const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const interactiveSelector = 'button,a,input,textarea,select,label,[role="button"],.filter-row,.segmented,.timeline,.tag-list,.quick-tags';
@@ -31,13 +33,42 @@
     return true;
   }
 
+  function visibleSheetBackdrop() {
+    return document.querySelector('#sheetBackdrop, .sheet-backdrop');
+  }
+
   function closeVisibleSheet() {
-    const backdrop = document.getElementById('sheetBackdrop');
+    const backdrop = visibleSheetBackdrop();
     if (!backdrop) return false;
-    const close = backdrop.querySelector('[data-close-sheet]');
+    const close = backdrop.querySelector('[data-close-sheet], .content-sheet-close, #blockedClose');
     if (close) close.click();
     else backdrop.dispatchEvent(new MouseEvent('click', { bubbles:true }));
     return true;
+  }
+
+  function syncSheetState() {
+    const backdrop = visibleSheetBackdrop();
+    const open = Boolean(backdrop);
+    if (open && !sheetWasOpen) {
+      sheetWasOpen = true;
+      sheetReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      document.documentElement.classList.add('dtl-sheet-open');
+      const sheet = backdrop.querySelector('.bottom-sheet');
+      if (sheet && !sheet.hasAttribute('tabindex')) sheet.tabIndex = -1;
+      requestAnimationFrame(() => {
+        if (!sheet?.isConnected) return;
+        try { sheet.focus({ preventScroll:true }); } catch {}
+      });
+    } else if (!open && sheetWasOpen) {
+      sheetWasOpen = false;
+      document.documentElement.classList.remove('dtl-sheet-open');
+      const target = sheetReturnFocus;
+      sheetReturnFocus = null;
+      queueMicrotask(() => {
+        if (!target?.isConnected) return;
+        try { target.focus({ preventScroll:true }); } catch {}
+      });
+    }
   }
 
   function wizardBack() {
@@ -58,7 +89,7 @@
   }
 
   function canGoBack() {
-    return Boolean(document.getElementById('sheetBackdrop') || document.getElementById('detailBack') || document.getElementById('reviewBack') || document.getElementById('contentBack') || document.getElementById('detailsBack'));
+    return Boolean(visibleSheetBackdrop() || document.getElementById('detailBack') || document.getElementById('reviewBack') || document.getElementById('contentBack') || document.getElementById('detailsBack'));
   }
 
   function syncNativeBack() {
@@ -113,6 +144,7 @@
   function patch() {
     decorateBackButton();
     upgradeTimelines(document);
+    syncSheetState();
     syncNativeBack();
   }
 
@@ -131,6 +163,25 @@
     event.stopImmediatePropagation();
     smartBack();
   }, true);
+
+  // Desktop/web fallback: Escape should close any visible sheet, including the custom
+  // Suggest content picker that does not use the account sheet's close button markup.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !visibleSheetBackdrop()) return;
+    event.preventDefault();
+    closeVisibleSheet();
+  });
+
+  document.addEventListener('dtl:sheetopen', () => {
+    syncSheetState();
+    syncNativeBack();
+  });
+  document.addEventListener('dtl:sheetclose', () => {
+    queueMicrotask(() => {
+      syncSheetState();
+      syncNativeBack();
+    });
+  });
 
   // Pointer gesture layer: native-feeling edge-back, tab swipes on non-interactive space,
   // and a downward swipe on the bottom-sheet handle/header.
