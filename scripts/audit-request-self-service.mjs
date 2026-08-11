@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const read=path=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 const migration=read('migrations/0029_request_self_service.sql');
 const service=read('src/request-self-service.ts');
+const finalizer=read('src/request-self-service-finalize.ts');
 const readLayer=read('src/request-self-service-read.ts');
 const actions=read('src/admin-actions-v2.ts');
 const index=read('src/index.ts');
@@ -50,6 +51,17 @@ const formParses=(service.match(/request\.formData\(\)/g)||[]).length;
 if(formParses!==1)throw new Error(`RAW replacement must parse multipart exactly once; found ${formParses}`);
 
 for(const token of [
+  'finalizeRequestSelfServiceMutation',
+  "(edit|raw|message)",
+  "review_state='user_replied'",
+  'review_resolved_at=NULL',
+  "status='pending'",
+  'withdrawn_at IS NULL',
+  "if (!response.ok) return response",
+])need(finalizer,token,'mutation finalizer');
+if(finalizer.includes('request.formData'))throw new Error('mutation finalizer must never reparse a RAW multipart body');
+
+for(const token of [
   '/api/app/bootstrap',
   '/api/app/requests',
   "'withdrawn'",
@@ -66,12 +78,14 @@ for(const token of [
 
 for(const token of [
   'handleRequestSelfService',
+  'finalizeRequestSelfServiceMutation',
   'enhanceRequestSelfServiceRead',
   'handleMiniAppCoreRequest',
 ])need(index,token,'index wiring');
 const serviceAt=index.indexOf('handleRequestSelfService(request, env, apiTelegram, ctx)');
+const finalizeAt=index.indexOf('finalizeRequestSelfServiceMutation(request, requestSelfServiceResponse, env)');
 const coreAt=index.indexOf('handleMiniAppCoreRequest(request, env)');
-if(serviceAt<0||coreAt<0||serviceAt>coreAt)throw new Error('self-service routes must run before legacy Mini App core routes');
+if(serviceAt<0||finalizeAt<0||coreAt<0||!(serviceAt<finalizeAt&&finalizeAt<coreAt))throw new Error('self-service mutation finalizer must run immediately after self-service routes and before legacy Mini App core routes');
 
 for(const token of [
   'dataset.selfServiceStamp',
