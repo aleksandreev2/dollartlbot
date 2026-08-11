@@ -4,6 +4,7 @@ import { test, expect } from '@playwright/test';
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const css = [
   'public/app/app.css',
+  'public/app/ui-polish.css',
   'public/app/card-upgrade.css',
   'public/app/interaction-upgrade.css',
   'public/app/feature-upgrades.css',
@@ -25,10 +26,6 @@ const sources = {
 };
 
 const LOCALES = ['en','es','fil','hi','pt','id','vi','fr','de','ru'];
-const LANGUAGE_LABELS = {
-  en:'English',es:'Español',fil:'Filipino',hi:'हिन्दी',pt:'Português',id:'Bahasa Indonesia',vi:'Tiếng Việt',fr:'Français',de:'Deutsch',ru:'Русский',
-  ko:'한국어',ja:'日本語',zh:'中文',
-};
 const LONG_TITLE = 'The Grand Duke of the Northern Territory Who Became the Academy’s Unreasonably Overqualified Translation Manager';
 
 const VIEWPORTS = [
