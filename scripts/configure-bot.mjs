@@ -27,7 +27,7 @@ if (miniAppUrl && !/^https:\/\//i.test(miniAppUrl)) {
   process.exit(1);
 }
 
-const api = async (method, body) => {
+const api = async (method, body = {}) => {
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -40,6 +40,7 @@ const api = async (method, body) => {
   return json.result;
 };
 
+const bot = await api('getMe');
 const commands = [
   { command: 'start', description: 'Open the main menu' },
   { command: 'queue', description: 'View the translation queue' },
@@ -79,6 +80,14 @@ await api('setWebhook', {
 });
 
 console.log(`Telegram commands, Mini App menu button${miniAppUrl ? ` (${miniAppUrl})` : ''} and webhook configured.`);
+if (miniAppUrl && bot?.username) {
+  console.log('');
+  console.log('Main Mini App profile button (one-time Telegram setup):');
+  console.log(`  @BotFather → /mybots → @${bot.username} → Bot Settings → Configure Mini App → Enable Mini App`);
+  console.log(`  Main Mini App URL: ${miniAppUrl}`);
+  console.log(`  Direct Main Mini App link after enabling: https://t.me/${bot.username}?startapp`);
+  console.log('  Telegram requires Main Mini App profile configuration through @BotFather; the Bot API only configures the chat menu button.');
+}
 
 function readConfiguredMiniAppUrl() {
   try {
