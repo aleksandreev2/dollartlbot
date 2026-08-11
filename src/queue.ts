@@ -37,21 +37,31 @@ export async function getLiveQueuePosition(env: Env, submissionId: number): Prom
   return positions.get(submissionId) ?? null;
 }
 
+/**
+ * Canonical queue repair. Ranking and writes happen inside one SQLite statement,
+ * so the ordering snapshot cannot go stale between a SELECT and a later batch.
+ */
 export async function normalizeQueuePositions(env: Env): Promise<void> {
-  const rows = await env.DB.prepare(`
-    SELECT id, queue_position
-    FROM submissions
-    WHERE status = 'accepted' AND queue_status = 'queued'
-    ORDER BY COALESCE(queue_position, 2147483647) ASC, id ASC
-  `).all<QueueOrderRow>();
   const now = new Date().toISOString();
-  const updates = rows.results
-    .map((row, index) => ({ id: Number(row.id), old: row.queue_position, next: index + 1 }))
-    .filter((row) => Number(row.old) !== row.next)
-    .map((row) => env.DB.prepare(
-      "UPDATE submissions SET queue_position = ?, updated_at = ? WHERE id = ? AND status = 'accepted' AND queue_status = 'queued'",
-    ).bind(row.next, now, row.id));
-  if (updates.length) await env.DB.batch(updates);
+  await env.DB.prepare(`
+    WITH ranked AS (
+      SELECT id,
+             queue_position,
+             ROW_NUMBER() OVER (ORDER BY COALESCE(queue_position, 2147483647), id) AS next_position
+      FROM submissions
+      WHERE status='accepted' AND queue_status='queued'
+    ), changed AS (
+      SELECT id,next_position
+      FROM ranked
+      WHERE queue_position IS NULL OR queue_position<>next_position
+    )
+    UPDATE submissions
+    SET queue_position=(SELECT next_position FROM changed WHERE changed.id=submissions.id),
+        updated_at=?
+    WHERE id IN (SELECT id FROM changed)
+      AND status='accepted'
+      AND queue_status='queued'
+  `).bind(now).run();
 }
 
 export function applyLiveQueuePosition<T extends { id: number; queue_status?: string | null; queue_position?: number | null }>(

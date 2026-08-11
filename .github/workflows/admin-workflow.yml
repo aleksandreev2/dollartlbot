@@ -19,5 +19,7 @@ jobs:
           node --check public/app/admin-navigation.js
       - name: Audit admin workflow invariants
         run: node scripts/audit-admin-workflow.mjs
+      - name: Audit admin data integrity
+        run: node scripts/audit-admin-data-integrity.mjs
       - name: Audit admin navigation invariants
         run: node scripts/audit-admin-navigation.mjs
