@@ -30,7 +30,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/webhook", "/media/*"]
+    "run_worker_first": ["/api/*", "/webhook", "/media/*", "/title/*", "/share/*"]
   },
   "d1_databases": [
     {
