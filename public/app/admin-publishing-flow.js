@@ -40,6 +40,12 @@
     try { sessionStorage.removeItem(KEY); } catch {}
   }
 
+  function publicationTimestamp(row) {
+    const value = row?.published_at || row?.updated_at || row?.created_at || '';
+    const timestamp = Date.parse(String(value));
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
   async function maybeShowResult() {
     if (!isPublishing() || checking) return;
     const pending = intent();
@@ -49,7 +55,10 @@
       const data = await admin.api('/api/app/admin/publishing');
       if (!isPublishing()) return;
       const rows = Array.isArray(data.publications) ? data.publications : [];
-      const published = rows.find(row => row.status === 'published' && String(row.internal_title || '') === String(pending.title));
+      const threshold = Number(pending.at) - 30_000;
+      const published = rows.find(row => row.status === 'published'
+        && String(row.internal_title || '') === String(pending.title)
+        && publicationTimestamp(row) >= threshold);
       if (!published) return;
       const layout = document.querySelector('.publisher-layout');
       if (!layout) return;
