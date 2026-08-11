@@ -2,14 +2,20 @@ import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const adapterSource = fs.readFileSync(new URL('../public/app/admin-data-v2.js', import.meta.url), 'utf8');
+const fixtureHtml = `
+  <span class="admin-workflow-count"></span>
+  <section class="admin-inbox-list">
+    <div class="admin-inbox-list-body"></div>
+  </section>
+`;
 
 async function boot(page) {
-  await page.setContent(`
-    <span class="admin-workflow-count"></span>
-    <section class="admin-inbox-list">
-      <div class="admin-inbox-list-body"></div>
-    </section>
-  `);
+  await page.route('https://dtl.test/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: fixtureHtml,
+  }));
+  await page.goto('https://dtl.test/');
   await page.evaluate(() => {
     window.__adminDataTest = {
       middleware: null,
