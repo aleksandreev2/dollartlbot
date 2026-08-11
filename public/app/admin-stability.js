@@ -1,17 +1,15 @@
 (() => {
   const runtime = window.DTL_RUNTIME;
-  if (!runtime?.registerFetchMiddleware || !runtime?.registerPatcher) {
-    throw new Error('DTL runtime core must load before admin-stability.js');
+  const admin = window.DTL_ADMIN;
+  if (!runtime?.registerFetchMiddleware || !runtime?.registerPatcher || !admin?.refresh) {
+    throw new Error('Canonical admin runtime must load before admin-stability.js');
   }
 
-  const STORAGE_KEY = 'dtl:admin:last-section';
   const ADMIN_PREFIX = '/api/app/admin/';
   const activeReads = new Set();
   const pendingMutations = new Map();
   const nativeConfirm = window.confirm.bind(window);
   let confirmBypassDepth = 0;
-  let restored = false;
-  let restoring = false;
   let currentMutationButton = null;
 
   const riskyHealthActions = new Set([
@@ -29,7 +27,11 @@
   function requestMeta(input, init = {}) {
     let url;
     try {
-      const raw = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input || '');
+      const raw = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input || '');
       url = new URL(raw, location.href);
     } catch {
       url = new URL(location.href);
@@ -139,7 +141,10 @@
       const controller = new AbortController();
       const record = { controller, superseded: false };
       activeReads.add(record);
-      const signal = mergeSignals(init?.signal || (input instanceof Request ? input.signal : null), controller.signal);
+      const signal = mergeSignals(
+        init?.signal || (input instanceof Request ? input.signal : null),
+        controller.signal,
+      );
       try {
         return await next(input, { ...init, headers, cache: 'no-store', signal });
       } catch (error) {
@@ -166,65 +171,14 @@
     }
   });
 
-  function navToken(element) {
-    if (!(element instanceof Element)) return null;
-    if (element.matches('[data-admin-section]')) return `section:${element.getAttribute('data-admin-section')}`;
-    if (element.matches('[data-admin-tools]')) return `tools:${element.getAttribute('data-admin-tools')}`;
-    if (element.matches('[data-admin-health]')) return 'health:1';
-    return null;
-  }
-
-  function saveNav(element) {
-    const token = navToken(element);
-    if (!token) return;
-    try { sessionStorage.setItem(STORAGE_KEY, token); } catch {}
-  }
-
-  function selectorForToken(token) {
-    const [kind, value] = String(token || '').split(':', 2);
-    if (kind === 'section') return `[data-admin-section="${CSS.escape(value || '')}"]`;
-    if (kind === 'tools') return `[data-admin-tools="${CSS.escape(value || '')}"]`;
-    if (kind === 'health') return '[data-admin-health]';
-    return '';
-  }
-
-  function restoreNav() {
-    if (restored || restoring || !document.querySelector('.admin-v2')) return;
-    let token = '';
-    try { token = sessionStorage.getItem(STORAGE_KEY) || ''; } catch {}
-    if (!token || token === 'section:overview') {
-      restored = true;
-      return;
-    }
-
-    const selector = selectorForToken(token);
-    if (!selector) {
-      restored = true;
-      return;
-    }
-    const button = document.querySelector(selector);
-    if (!(button instanceof HTMLButtonElement)) return;
-
-    restored = true;
-    restoring = true;
-    queueMicrotask(() => {
-      try { button.click(); }
-      finally { restoring = false; }
-    });
-  }
-
-  function activeNavButton() {
-    const candidates = [
-      ...document.querySelectorAll('[data-admin-health].active,[data-admin-tools].active,.admin-side-nav [data-admin-section].active,.admin-mobile-nav [data-admin-section].active'),
-    ];
-    return candidates.find((node) => node instanceof HTMLButtonElement) || null;
-  }
-
-  function refreshCurrentSection() {
+  async function refreshCurrentSection() {
     abortAdminReads();
     try { window.__DTL_ADMIN_CACHE__?.clear?.(); } catch {}
-    const button = activeNavButton() || document.querySelector('[data-admin-section="overview"]');
-    if (button instanceof HTMLButtonElement) button.click();
+    try {
+      await admin.refresh();
+    } catch (error) {
+      if (error?.name !== 'AbortError') admin.toast?.(error?.message || 'Не удалось обновить раздел.', true);
+    }
   }
 
   function installRefreshButton() {
@@ -236,8 +190,9 @@
     button.className = 'admin-stability-refresh';
     button.dataset.adminRefresh = '1';
     button.innerHTML = '<i data-lucide="refresh-cw" aria-hidden="true"></i><span>Обновить</span>';
-    button.addEventListener('click', refreshCurrentSection);
-    if (live) live.before(button); else header.append(button);
+    button.addEventListener('click', () => void refreshCurrentSection());
+    if (live) live.before(button);
+    else header.append(button);
     try { window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } }); } catch {}
   }
 
@@ -252,7 +207,9 @@
     if (element.classList.contains('publication-delete-button')) return { title: 'Удалить пост из Telegram?', body: 'Запись, вложения и журнал останутся в Dollar TL, но сообщение исчезнет из Telegram.', confirm: 'Удалить', danger: true };
     if (element.id === 'toggleUserBlock' && !/разблок/i.test(element.textContent || '')) return { title: 'Заблокировать пользователя?', body: 'Пользователь потеряет доступ к боту и Mini App до ручной разблокировки.', confirm: 'Заблокировать', danger: true };
     const healthAction = element.getAttribute('data-health-action');
-    if (healthAction && riskyHealthActions.has(healthAction)) return { title: 'Запустить обслуживание?', body: 'Операция может повторно отправить отложенные Telegram-доставки. Дубли защищены серверными ограничителями.', confirm: 'Запустить' };
+    if (healthAction && riskyHealthActions.has(healthAction)) {
+      return { title: 'Запустить обслуживание?', body: 'Операция может повторно отправить отложенные Telegram-доставки. Дубли защищены серверными ограничителями.', confirm: 'Запустить' };
+    }
     return null;
   }
 
@@ -269,14 +226,14 @@
 
   function confirmAction(config) {
     const root = ensureConfirmRoot();
-    return new Promise((resolve) => {
-      const finish = (value) => {
+    return new Promise(resolve => {
+      const finish = value => {
         root.hidden = true;
         root.replaceChildren();
         document.removeEventListener('keydown', onKey, true);
         resolve(value);
       };
-      const onKey = (event) => {
+      const onKey = event => {
         if (event.key === 'Escape') {
           event.preventDefault();
           finish(false);
@@ -287,7 +244,7 @@
       root.querySelector('#adminConfirmTitle').textContent = config.title;
       root.querySelector('.admin-confirm-copy p').textContent = config.body;
       root.querySelector('[data-confirm-ok]').textContent = config.confirm || 'Подтвердить';
-      root.querySelectorAll('[data-confirm-cancel]').forEach((node) => node.addEventListener('click', () => finish(false), { once: true }));
+      root.querySelectorAll('[data-confirm-cancel]').forEach(node => node.addEventListener('click', () => finish(false), { once: true }));
       root.querySelector('[data-confirm-ok]')?.addEventListener('click', () => finish(true), { once: true });
       document.addEventListener('keydown', onKey, true);
       try { window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } }); } catch {}
@@ -318,17 +275,11 @@
     ].join(','));
   }
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', event => {
     const button = event.target.closest?.('button');
     if (!(button instanceof HTMLButtonElement)) return;
-
-    if (navToken(button)) {
-      abortAdminReads();
-      saveNav(button);
-      return;
-    }
-
     if (!button.closest('.admin-v2') && !button.closest('.admin-confirm-root')) return;
+
     if (button.dataset.dtlAdminBusy === '1') {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -339,7 +290,7 @@
     if (confirmation && button.dataset.dtlAdminConfirmed !== '1') {
       event.preventDefault();
       event.stopImmediatePropagation();
-      void confirmAction(confirmation).then((ok) => {
+      void confirmAction(confirmation).then(ok => {
         if (ok && button.isConnected) replayConfirmedClick(button);
       });
       return;
@@ -353,7 +304,7 @@
     }
   }, true);
 
-  document.addEventListener('dtl:viewchange', (event) => {
+  document.addEventListener('dtl:viewchange', event => {
     if (event?.detail?.view !== 'admin') abortAdminReads();
   });
 
@@ -366,7 +317,6 @@
   runtime.registerPatcher(() => {
     if (!document.querySelector('.admin-v2')) return;
     installRefreshButton();
-    restoreNav();
   });
 
   window.DTL_ADMIN_STABILITY = Object.freeze({

@@ -13,12 +13,13 @@ function forbidToken(source, token, label = token) {
   if (source.includes(token)) throw new Error(`Forbidden ${label}`);
 }
 
-const runtimeTag = '/app/admin-runtime.js?v=20260811-runtime1&routes=20260811b&canonical=20260811g';
-requireToken(index, runtimeTag, 'admin runtime canonical cache-bust');
+const runtimeTag = '/app/admin-runtime.js?v=20260811-runtime2&canonical=20260811h';
+requireToken(index, runtimeTag, 'admin runtime final cache-bust');
 const runtimeAt = index.indexOf(runtimeTag);
 for (const later of [
   '/app/admin-stability.js',
   '/app/admin-console.js',
+  '/app/admin-publishing-view.js',
   '/app/admin-health.js',
   '/app/admin-tools.js',
   '/app/admin-workflow.js',
@@ -31,7 +32,6 @@ for (const later of [
 
 for (const token of [
   "const STORAGE_KEY = 'dtl:admin:route:v2'",
-  "const LEGACY_STORAGE_KEY = 'dtl:admin:last-section'",
   'const routes = new Map()',
   'new AbortController()',
   'async function unmountCurrent',
@@ -47,7 +47,6 @@ for (const token of [
   'navigationSequence',
   'adoptBootstrapOverview',
   'function restoredRouteId()',
-  'sessionStorage.removeItem(LEGACY_STORAGE_KEY)',
   "routes.has('section:overview')",
   'function rejectUnknownRoute(routeId)',
   'if (!route) return rejectUnknownRoute(routeId)',
@@ -61,6 +60,8 @@ for (const token of [
 ]) requireToken(runtime, token);
 
 for (const token of [
+  'dtl:admin:last-section',
+  'LEGACY_STORAGE_KEY',
   'replayLegacyNavigation',
   'replayDepth',
   'legacy: true',
@@ -79,4 +80,4 @@ requireToken(view, 'return window.DTL_ADMIN.restore()', 'canonical restored admi
 forbidToken(view, 'DTL_ADMIN_CONSOLE.open()', 'direct console entry');
 forbidToken(view, "DTL_ADMIN.open('section:overview')", 'hard-coded overview entry');
 
-console.log('Admin runtime architecture audit passed: registered routes only, fail-closed unknown routes, canonical restore migration, route-scoped reads and mutation-safe navigation.');
+console.log('Admin runtime architecture audit passed: registered routes only, v2 restore only, fail-closed unknown routes, route-scoped reads and mutation-safe navigation.');

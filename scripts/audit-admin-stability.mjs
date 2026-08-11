@@ -16,12 +16,12 @@ const cache = read('public/app/admin-cache.js');
 const css = read('public/app/admin-stability.css');
 
 need(index, '/app/admin-stability.css?v=20260811-stability1', 'admin stability CSS asset');
-need(index, '/app/admin-stability.js?v=20260811-stability1', 'admin stability JS asset');
+need(index, '/app/admin-stability.js?v=20260811-stability2', 'admin stability JS asset');
 need(index, '/app/admin-cache.js?v=20260810-admin1&stability=20260811', 'admin cache cache-bust');
 
-const stabilityPos = index.indexOf('/app/admin-stability.js?v=20260811-stability1');
+const stabilityPos = index.indexOf('/app/admin-stability.js?v=20260811-stability2');
 const cachePos = index.indexOf('/app/admin-cache.js?v=20260810-admin1&stability=20260811');
-const consolePos = index.indexOf('/app/admin-console.js?v=20260810-admin1');
+const consolePos = index.indexOf('/app/admin-console.js?v=20260811-admin2');
 if (!(stabilityPos >= 0 && stabilityPos < cachePos && cachePos < consolePos)) {
   throw new Error('Admin stability runtime must load before admin cache and admin console.');
 }
@@ -36,15 +36,25 @@ for (const token of [
   'stableBodyKey',
   'confirmAction',
   'replayConfirmedClick',
-  'sessionStorage.setItem(STORAGE_KEY',
+  'await admin.refresh()',
   'admin-stability-refresh',
   'window.DTL_ADMIN_STABILITY',
 ]) need(stability, token, 'admin stability runtime');
 
-forbid(stability, 'window.fetch =', 'admin stability fetch ownership');
-need(stability, "document.addEventListener('click'", 'admin navigation/mutation capture');
+for (const token of [
+  'window.fetch =',
+  "dtl:admin:last-section",
+  'function navToken(',
+  'function saveNav(',
+  'function selectorForToken(',
+  'function restoreNav(',
+  'function activeNavButton(',
+  'sessionStorage.',
+]) forbid(stability, token, 'admin stability legacy navigation');
+
+need(stability, "document.addEventListener('click'", 'admin mutation capture');
 need(stability, "document.addEventListener('visibilitychange'", 'admin freshness on resume');
-need(stability, "event.stopImmediatePropagation()", 'duplicate/destructive click guard');
+need(stability, 'event.stopImmediatePropagation()', 'duplicate/destructive click guard');
 
 need(cache, "const CACHEABLE = new Set(['/api/app/admin/analytics']);", 'admin cache allowlist');
 need(cache, "headers.get('x-dtl-admin-no-cache') === '1'", 'admin cache freshness bypass');
@@ -63,4 +73,4 @@ for (const token of [
   '.dtl-admin-action-busy',
 ]) need(css, token, 'admin stability UX');
 
-console.log('Admin stability audit passed: live operational reads, stale-read cancellation, mutation dedupe, persistent navigation, unified confirmations and manual refresh are wired before legacy admin modules.');
+console.log('Admin stability audit passed: live reads, mutation dedupe, canonical refresh and unified confirmations are wired with no route/navigation ownership.');

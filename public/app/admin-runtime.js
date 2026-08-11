@@ -4,7 +4,6 @@
   if (!runtime?.registerPatcher) throw new Error('DTL runtime must load before admin-runtime.js');
 
   const STORAGE_KEY = 'dtl:admin:route:v2';
-  const LEGACY_STORAGE_KEY = 'dtl:admin:last-section';
   const routes = new Map();
   let current = null;
   let controller = null;
@@ -36,21 +35,12 @@
   }
 
   function persist(id) {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, id);
-      sessionStorage.removeItem(LEGACY_STORAGE_KEY);
-    } catch {}
+    try { sessionStorage.setItem(STORAGE_KEY, id); } catch {}
   }
 
   function restoredRouteId() {
     let id = '';
-    try {
-      id = sessionStorage.getItem(STORAGE_KEY) || '';
-      const legacy = sessionStorage.getItem(LEGACY_STORAGE_KEY) || '';
-      if (!id && legacy) id = legacy;
-      sessionStorage.removeItem(LEGACY_STORAGE_KEY);
-      if (id) sessionStorage.setItem(STORAGE_KEY, id);
-    } catch {}
+    try { id = sessionStorage.getItem(STORAGE_KEY) || ''; } catch {}
     if (!id || !routes.has(id)) return routes.has('section:overview') ? 'section:overview' : '';
     return id;
   }
@@ -185,7 +175,9 @@
 
   function rejectUnknownRoute(routeId) {
     console.error(`[DTL admin] Refusing unregistered route: ${routeId}`);
-    document.dispatchEvent(new CustomEvent('dtl:adminrouteerror', { detail: { id: routeId, reason: 'unregistered' } }));
+    document.dispatchEvent(new CustomEvent('dtl:adminrouteerror', {
+      detail: { id: routeId, reason: 'unregistered' },
+    }));
     return false;
   }
 

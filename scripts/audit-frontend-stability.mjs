@@ -48,13 +48,16 @@ for(const [name,source] of [
   if(/window\.fetch\s*=/.test(source))throw new Error(`${name} must not wrap fetch directly.`);
 }
 for(const [name,source] of [
-  ['icons',icons],['interaction-upgrade',interactions],['quota-unlimited-ui',quota],['admin-console',adminConsole],['admin-tools',adminTools],['admin-publishing',adminPublishing],
+  ['icons',icons],['interaction-upgrade',interactions],['quota-unlimited-ui',quota],['admin-tools',adminTools],['admin-publishing',adminPublishing],
 ]){
   forbid(source,'new MutationObserver',`${name} shared scheduling`);
   need(source,'DTL_RUNTIME',`${name} shared runtime`);
   need(source,'registerPatcher',`${name} shared patcher registration`);
   if(/window\.fetch\s*=/.test(source))throw new Error(`${name} must not wrap fetch directly.`);
 }
+forbid(adminConsole,'new MutationObserver','admin-console shared scheduling');
+need(adminConsole,'DTL_RUNTIME','admin-console shared runtime');
+if(/window\.fetch\s*=/.test(adminConsole))throw new Error('admin-console must not wrap fetch directly.');
 need(adminCache,'DTL_RUNTIME','admin cache shared runtime');
 need(adminCache,'runtime.registerFetchMiddleware','admin cache shared fetch middleware');
 forbid(adminCache,'window.fetch =','admin cache direct fetch wrapper');
@@ -88,7 +91,6 @@ need(quota,"document.addEventListener('dtl:bootstrap'",'quota bootstrap reuse');
 forbid(quota,"fetch('/api/app/bootstrap'",'quota duplicate bootstrap request');
 
 need(adminConsole,'window.DTL_ADMIN_CONSOLE','canonical admin console API');
-need(adminConsole,"document.dispatchEvent(new CustomEvent('dtl:adminrender'",'admin render event');
 need(adminTools,"data-admin-tools","admin tools navigation ownership");
 need(adminPublishing,'injectNativeCommentsNote','publishing native comments preview ownership');
 need(adminPublishing,'installManagement','publication management consolidation');
@@ -98,7 +100,7 @@ for(const legacy of ['admin-v2.js','admin-v3.js','admin-performance-v3.js','publ
   forbid(index,legacy,'legacy admin runtime');
   if(fs.existsSync(new URL(`../public/app/${legacy}`,import.meta.url)))throw new Error(`Superseded admin runtime must be removed: ${legacy}`);
 }
-for(const asset of ['admin-cache.js?v=20260810-admin1','admin-console.js?v=20260810-admin1','admin-tools.js?v=20260810-users1','admin-publishing.js?v=20260810-admin1'])need(index,asset,'canonical admin runtime');
+for(const asset of ['admin-cache.js?v=20260810-admin1','admin-console.js?v=20260811-admin2','admin-tools.js?v=20260810-users1','admin-publishing.js?v=20260810-admin1'])need(index,asset,'canonical admin runtime');
 for(const asset of ['novel-presenter.js?v=20260810-runtime4','cover-ui.js?v=20260810-runtime4','referrals-ui.js?v=20260810-runtime4','onboarding-ui.js?v=20260810-runtime5','home-v2.js?v=20260810-runtime4','view-queue.js?v=20260810-app3','view-requests-account.js?v=20260810-app3'])need(index,asset,'event-driven frontend runtime');
 for(const css of ['admin-console.css?v=20260810-app1','admin-tools.css?v=20260810-app1','admin-users-control.css?v=20260810-users1','admin-publishing.css?v=20260810-app1'])need(index,css,'canonical admin CSS');
 for(const legacyCss of ['admin-v2.css','admin-v3.css','admin-performance-v3.css','publishing-fixes.css','publication-management.css'])forbid(index,legacyCss,'legacy admin CSS');
