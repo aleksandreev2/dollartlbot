@@ -40,6 +40,7 @@ import { normalizeQueuePositions } from './queue';
 import { runRawCatalogEnrichment } from './raw-fucknovelpia';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
 import { handleSubmissionIdentityPreflight } from './request-identity';
+import { handleRequestSelfService } from './request-self-service';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { handleTitleFollowingRequest, runTitleFollowingMaintenance } from './title-following';
@@ -77,6 +78,8 @@ export default {
     if (followingResponse) return followingResponse;
 
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+    const requestSelfServiceResponse = await handleRequestSelfService(request, env, apiTelegram, ctx);
+    if (requestSelfServiceResponse) return requestSelfServiceResponse;
     const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
     if (accessAdminResponse) return accessAdminResponse;
     const adminBroadcastResponse = await handleAdminBroadcastRequest(request, env, apiTelegram, ctx);
