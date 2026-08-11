@@ -46,6 +46,8 @@ for(const token of [
 ])need(index,token,'health route');
 
 for(const token of [
+  'const admin=window.DTL_ADMIN',
+  "admin?.registerRoute",
   "dataset.adminHealth='1'",
   'Operations & Health',
   "api('/api/app/admin/health')",
@@ -56,9 +58,14 @@ for(const token of [
   "actionButton('normalize_queue'",
   'window.confirm(',
   "document.querySelector('[data-admin-section=\"publishing\"]')?.click()",
+  "admin.registerRoute('health:1'",
+  'unmount:()=>deactivate()',
   'window.DTL_ADMIN_HEALTH=Object.freeze',
 ])need(ui,token,'health UI');
 
+forbid(ui,"b.addEventListener('click'",'Health nav must be owned by canonical admin runtime');
+forbid(ui,"document.addEventListener('click'",'Health must not own global route clicks');
+forbid(ui,"fetch(path",'Health must use shared admin API');
 forbid(backend,"sendMessage(settings.publish_channel_id",'health must not republish failed channel posts');
 forbid(backend,"SET status='draft'",'health must not reset ambiguous publication state');
 for(const token of ['.ops-health-status','.ops-health-actions','.ops-health-grid','.ops-health-issues'])need(css,token,'health CSS');
@@ -66,4 +73,4 @@ need(html,'/app/admin-health.css?v=20260811-health1','health CSS asset');
 need(html,'/app/admin-health.js?v=20260811-health1','health JS asset');
 new Function(ui);
 
-console.log('Admin Operations & Health audit passed: unified queue/publication/notification/Telegram diagnostics, bounded manual retries, safe maintenance, audit logging, and no automatic republish of ambiguous failed channel posts.');
+console.log('Admin Operations & Health audit passed: canonical route lifecycle, shared API, bounded retries, safe maintenance, audit logging, and no automatic republish of ambiguous failed channel posts.');
