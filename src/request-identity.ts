@@ -47,17 +47,38 @@ export async function handleSubmissionIdentityPreflight(
 
   const auth = await authenticateMiniAppRequest(request, env);
   if (auth instanceof Response) return auth;
-  const body = await readJson<Record<string, unknown>>(request);
-  const identity = canonicalIdentity({
-    provider: String(body.provider ?? ''),
-    externalId: String(body.external_id ?? ''),
-    sourceUrl: String(body.source_url ?? ''),
-  });
+  const input: SubmissionIdentityInput = {
+    provider: String((await readJson<Record<string, unknown>>(request)).provider ?? ''),
+    externalId: '',
+    sourceUrl: '',
+  };
+
+  // Read JSON only once while preserving the public snake_case request shape.
+  const body = await readJson<Record<string, unknown>>(request.clone());
+  input.provider = String(body.provider ?? input.provider);
+  input.externalId = String(body.external_id ?? '');
+  input.sourceUrl = String(body.source_url ?? '');
+  const identity = canonicalIdentity(input);
   if (!identity) return miniAppJson({ ok: true, identity: null });
 
   const duplicate = await activeDuplicate(env, identity);
   if (duplicate) return duplicateResponse(duplicate, identity);
   return miniAppJson({ ok: true, identity: identityKey(identity) });
+}
+
+/**
+ * Exact duplicate check for the real submit route. The caller invokes this
+ * after ordinary payload validation but before Boosty / quota work so direct API
+ * calls receive the same quota-safe behavior as the Mini App preflight.
+ */
+export async function checkSubmissionIdentityDuplicate(
+  env: Env,
+  input: SubmissionIdentityInput,
+): Promise<Response | null> {
+  const identity = canonicalIdentity(input);
+  if (!identity) return null;
+  const duplicate = await activeDuplicate(env, identity);
+  return duplicate ? duplicateResponse(duplicate, identity) : null;
 }
 
 /**
