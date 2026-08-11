@@ -24,6 +24,7 @@ import {
 import { applyLiveQueuePosition, getQueuePositionMap } from './queue';
 import {
   bindSubmissionIdentity,
+  checkSubmissionIdentityDuplicate,
   claimSubmissionIdentity,
   reconcileCommittedSubmissionIdentity,
   releaseSubmissionIdentityGuard,
@@ -111,6 +112,11 @@ export async function handleEnhancedMiniAppRequest(
   if (!sexualContent || sexualContent.length > MAX_LONG) return miniAppJsonError('invalid_content', 'Complete the sexual content disclosure.', 400);
   if (!sensitiveContent || sensitiveContent.length > MAX_LONG) return miniAppJsonError('invalid_sensitive', 'Complete the sensitive content disclosure.', 400);
   if (notes.length > MAX_LONG) return miniAppJsonError('invalid_notes', 'Additional notes are too long.', 400);
+
+  // This server check is independent from the Mini App preflight. A direct API
+  // caller still cannot spend quota or upload a file for an existing exact ID.
+  const duplicateIdentity = await checkSubmissionIdentityDuplicate(env, identityInput);
+  if (duplicateIdentity) return duplicateIdentity;
 
   const subscription = await getSubscriptionState(auth.telegramUser.id, env, telegram);
   const baseLimit = subscription.subscriber
