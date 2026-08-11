@@ -116,7 +116,6 @@
   }, true);
 
   document.addEventListener('dtl:adminroutechange', () => queueMicrotask(install));
-  document.addEventListener('dtl:adminrender', () => queueMicrotask(install));
 
   runtime.registerPatcher(install);
   window.DTL_ADMIN_NAVIGATION = Object.freeze({ refresh: install });
