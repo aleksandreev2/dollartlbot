@@ -1,6 +1,7 @@
 import { getSubmission } from './db';
 import { notifySubmissionStatus, resetProgressNotificationState, type RequestNotificationKind } from './notifications';
 import { normalizeQueuePositions } from './queue';
+import { notifySubmissionFollowers, type FollowLifecycleKind } from './title-following';
 import type { SubmissionRow } from './domain';
 import type { TelegramClient } from './telegram';
 
@@ -255,6 +256,9 @@ export async function applyAdminSubmissionAction(
 
   if (notification) {
     await notifySubmissionStatus(env, telegram, submissionId, notification);
+    if (['accepted', 'started', 'completed', 'progress'].includes(notification)) {
+      await notifySubmissionFollowers(env, telegram, submissionId, notification as FollowLifecycleKind);
+    }
   }
 
   return after;

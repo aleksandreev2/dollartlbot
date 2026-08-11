@@ -22,6 +22,14 @@ import {
   reserveSubmissionQuota,
 } from './quota';
 import { applyLiveQueuePosition, getQueuePositionMap } from './queue';
+import {
+  bindSubmissionIdentity,
+  checkSubmissionIdentityDuplicate,
+  claimSubmissionIdentity,
+  reconcileCommittedSubmissionIdentity,
+  releaseSubmissionIdentityGuard,
+  type SubmissionIdentityInput,
+} from './request-identity';
 import { getSubscriptionState } from './subscription';
 import { deliverSubmissionToAdmin } from './submissions';
 import { TelegramClient } from './telegram';
@@ -53,6 +61,8 @@ export async function handleEnhancedMiniAppRequest(
     return miniAppJsonError('file_too_large', 'TXT/EPUB files must be 45 MB or smaller.', 413);
   }
 
+  // The multipart body is deliberately parsed exactly once. Exact-title race
+  // protection below receives these parsed fields instead of cloning Request.
   const form = await request.formData();
   const fileValue = form.get('file');
   if (!(fileValue instanceof File) || fileValue.size <= 0) {
@@ -77,6 +87,11 @@ export async function handleEnhancedMiniAppRequest(
   const sensitiveContent = field(form, 'sensitive_content');
   const notes = field(form, 'notes');
   const rulesAccepted = field(form, 'rules_accepted') === 'true';
+  const identityInput: SubmissionIdentityInput = {
+    provider: field(form, 'identity_provider'),
+    externalId: field(form, 'identity_external_id'),
+    sourceUrl,
+  };
 
   if (suppliedRequestId && !REQUEST_ID_RE.test(suppliedRequestId)) {
     return miniAppJsonError('invalid_request_id', 'Restart the submission form and try again.', 400);
@@ -97,6 +112,11 @@ export async function handleEnhancedMiniAppRequest(
   if (!sexualContent || sexualContent.length > MAX_LONG) return miniAppJsonError('invalid_content', 'Complete the sexual content disclosure.', 400);
   if (!sensitiveContent || sensitiveContent.length > MAX_LONG) return miniAppJsonError('invalid_sensitive', 'Complete the sensitive content disclosure.', 400);
   if (notes.length > MAX_LONG) return miniAppJsonError('invalid_notes', 'Additional notes are too long.', 400);
+
+  // This server check is independent from the Mini App preflight. A direct API
+  // caller still cannot spend quota or upload a file for an existing exact ID.
+  const duplicateIdentity = await checkSubmissionIdentityDuplicate(env, identityInput);
+  if (duplicateIdentity) return duplicateIdentity;
 
   const subscription = await getSubscriptionState(auth.telegramUser.id, env, telegram);
   const baseLimit = subscription.subscriber
@@ -137,6 +157,12 @@ export async function handleEnhancedMiniAppRequest(
   });
 
   if (reservationResult?.status === 'committed') {
+    const identityError = await reconcileCommittedSubmissionIdentity(
+      env,
+      reservationResult.submissionId,
+      identityInput,
+    );
+    if (identityError) return identityError;
     return submissionResultResponse(
       env,
       auth.telegramUser.id,
@@ -168,6 +194,19 @@ export async function handleEnhancedMiniAppRequest(
   }
 
   const reservation = reservationResult.reservation;
+  const identityGuard = await claimSubmissionIdentity(
+    env,
+    auth.telegramUser.id,
+    requestId,
+    identityInput,
+  );
+  if (identityGuard instanceof Response) {
+    // The reservation has no Telegram file yet, so failing it immediately makes
+    // the slot available again. Exact duplicates therefore never consume quota.
+    await failSubmissionReservation(env, reservation.id, 'identity_guard_rejected');
+    return identityGuard;
+  }
+
   let extractedCover = null;
   if (extension === 'epub') {
     try {
@@ -186,7 +225,10 @@ export async function handleEnhancedMiniAppRequest(
         `📎 Mini App raw file from ${auth.telegramUser.username ? `@${auth.telegramUser.username}` : auth.telegramUser.first_name ?? auth.telegramUser.id}`,
       );
     } catch (error) {
-      await failSubmissionReservation(env, reservation.id, errorText(error));
+      await Promise.all([
+        failSubmissionReservation(env, reservation.id, errorText(error)),
+        releaseSubmissionIdentityGuard(env, identityGuard),
+      ]);
       console.warn(JSON.stringify({
         event: 'miniapp_raw_upload_failed',
         user_id: auth.telegramUser.id,
@@ -198,7 +240,10 @@ export async function handleEnhancedMiniAppRequest(
 
     const fileId = uploaded.document?.file_id;
     if (!fileId) {
-      await failSubmissionReservation(env, reservation.id, 'Telegram returned no document file_id.');
+      await Promise.all([
+        failSubmissionReservation(env, reservation.id, 'Telegram returned no document file_id.'),
+        releaseSubmissionIdentityGuard(env, identityGuard),
+      ]);
       return miniAppJsonError('telegram_upload_failed', 'Telegram did not return a reusable file ID.', 502);
     }
 
@@ -208,6 +253,7 @@ export async function handleEnhancedMiniAppRequest(
       mime: fileValue.type || null,
     });
     if (!attached) {
+      await releaseSubmissionIdentityGuard(env, identityGuard);
       console.error(JSON.stringify({
         event: 'miniapp_raw_upload_untracked',
         user_id: auth.telegramUser.id,
@@ -245,6 +291,8 @@ export async function handleEnhancedMiniAppRequest(
       now,
     });
   } catch (error) {
+    // Keep the short-lived exact-title claim. The raw file is already safely
+    // attached to the reservation and the same request ID should resume it.
     console.error(JSON.stringify({
       event: 'miniapp_submission_commit_failed',
       user_id: auth.telegramUser.id,
@@ -258,6 +306,9 @@ export async function handleEnhancedMiniAppRequest(
       503,
     );
   }
+
+  const identityError = await bindSubmissionIdentity(env, identityGuard, insert.submissionId);
+  if (identityError) return identityError;
 
   if (extractedCover) {
     ctx.waitUntil(
