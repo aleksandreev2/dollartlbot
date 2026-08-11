@@ -3,60 +3,58 @@ import { test, expect } from '@playwright/test';
 
 const runtimeSource = fs.readFileSync(new URL('../public/app/admin-runtime.js', import.meta.url), 'utf8');
 
-const harness = String.raw`
-  window.__adminTest = {
-    legacyClicks: Object.create(null),
-    abortReads: 0,
-    mounts: Object.create(null),
-    unmounts: Object.create(null),
-  };
-  window.Telegram = { WebApp: { initData: 'signed-browser-test' } };
-  window.DTL_RUNTIME = {
-    registerPatcher() {},
-    schedule() {},
-  };
-  window.DTL_ADMIN_STABILITY = {
-    abortReads() { window.__adminTest.abortReads += 1; },
-  };
-  window.DTL_ADMIN_CONSOLE = {
-    open() {
-      const host = document.getElementById('fixture');
-      if (!host.querySelector('.admin-v2')) {
-        host.innerHTML = `
-          <div id="toastRegion"></div>
-          <div class="admin-v2">
-            <div class="admin-work-head"><h1></h1><p></p></div>
-            <nav class="admin-side-nav">
-              <button type="button" data-admin-section="overview">Overview</button>
-              <button type="button" data-admin-section="requests">Requests</button>
-              <button type="button" data-admin-section="queue">Queue</button>
-              <button type="button" data-admin-tools="users">Users</button>
-              <button type="button" data-admin-tools="analytics">Analytics</button>
-              <button type="button" data-admin-health>Health</button>
-            </nav>
-            <main class="admin-content"></main>
-          </div>`;
-        host.querySelectorAll('[data-admin-section],[data-admin-tools],[data-admin-health]').forEach(button => {
-          button.addEventListener('click', () => {
-            const token = button.dataset.adminSection
-              ? `section:${button.dataset.adminSection}`
-              : button.dataset.adminTools
-                ? `tools:${button.dataset.adminTools}`
-                : 'health:legacy';
-            window.__adminTest.legacyClicks[token] = (window.__adminTest.legacyClicks[token] || 0) + 1;
-            const area = host.querySelector('.admin-content');
-            if (area) area.textContent = `legacy:${token}`;
-          });
-        });
-      }
-      return Promise.resolve();
-    },
-  };
-`;
-
 async function boot(page) {
   await page.setContent('<div id="fixture"></div><button id="leaveAdmin" data-nav="home">Leave admin</button>');
-  await page.addScriptTag({ content: harness });
+  await page.evaluate(() => {
+    window.__adminTest = {
+      legacyClicks: Object.create(null),
+      abortReads: 0,
+      mounts: Object.create(null),
+      unmounts: Object.create(null),
+    };
+    window.Telegram = { WebApp: { initData: 'signed-browser-test' } };
+    window.DTL_RUNTIME = {
+      registerPatcher() {},
+      schedule() {},
+    };
+    window.DTL_ADMIN_STABILITY = {
+      abortReads() { window.__adminTest.abortReads += 1; },
+    };
+    window.DTL_ADMIN_CONSOLE = {
+      open() {
+        const host = document.getElementById('fixture');
+        if (!host.querySelector('.admin-v2')) {
+          host.innerHTML = `
+            <div id="toastRegion"></div>
+            <div class="admin-v2">
+              <div class="admin-work-head"><h1></h1><p></p></div>
+              <nav class="admin-side-nav">
+                <button type="button" data-admin-section="overview">Overview</button>
+                <button type="button" data-admin-section="requests">Requests</button>
+                <button type="button" data-admin-section="queue">Queue</button>
+                <button type="button" data-admin-tools="users">Users</button>
+                <button type="button" data-admin-tools="analytics">Analytics</button>
+                <button type="button" data-admin-health>Health</button>
+              </nav>
+              <main class="admin-content"></main>
+            </div>`;
+          host.querySelectorAll('[data-admin-section],[data-admin-tools],[data-admin-health]').forEach(button => {
+            button.addEventListener('click', () => {
+              const token = button.dataset.adminSection
+                ? `section:${button.dataset.adminSection}`
+                : button.dataset.adminTools
+                  ? `tools:${button.dataset.adminTools}`
+                  : 'health:legacy';
+              window.__adminTest.legacyClicks[token] = (window.__adminTest.legacyClicks[token] || 0) + 1;
+              const area = host.querySelector('.admin-content');
+              if (area) area.textContent = `legacy:${token}`;
+            });
+          });
+        }
+        return Promise.resolve();
+      },
+    };
+  });
   await page.addScriptTag({ content: runtimeSource });
   await page.evaluate(() => window.DTL_ADMIN.open('section:overview'));
   await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:overview');
