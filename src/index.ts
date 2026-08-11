@@ -13,6 +13,7 @@ import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
 import { handleCoverHealthRequest } from './cover-health';
 import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
+import { handleDiscoveryRequest } from './discovery';
 import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
 import { handleHomeReleasesRequest } from './home-releases';
@@ -52,6 +53,8 @@ export default {
     if (coverResponse) return coverResponse;
     const releasesResponse = await handleHomeReleasesRequest(request, env);
     if (releasesResponse) return releasesResponse;
+    const discoveryResponse = await handleDiscoveryRequest(request, env);
+    if (discoveryResponse) return discoveryResponse;
 
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
