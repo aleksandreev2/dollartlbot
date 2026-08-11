@@ -67,6 +67,27 @@
 .discover-score{width:42px;height:42px;border:1px solid #ddcfb4;border-radius:50%;display:grid;place-items:center;background:#fffaf0;color:#76511e;font-size:11px;font-weight:900}
 .discover-opportunity-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:850;color:#302b25}
 .discover-opportunity-meta{margin-top:3px;color:#8d857b;font-size:9px}
+
+/* Fresh NovelPia catalog */
+.discover-fresh-hero .discover-section-head h2{display:flex;align-items:center;gap:7px}
+.discover-fresh-feature{background:linear-gradient(145deg,#fff,#fffcf4);border-color:#e9dfcd}
+.discover-catalog-cover{position:relative;display:grid;place-items:center;overflow:hidden;background:linear-gradient(145deg,#eee8de,#d9cdb8);color:#7f6b4c;font:800 22px/1 var(--serif)}
+.discover-catalog-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#eee8de}
+.discover-catalog-cover-fallback{position:relative;z-index:0}
+.discover-catalog-original{margin-top:3px;color:#91887c;font-size:9.5px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.discover-catalog-row .discover-row-title{text-decoration:none}
+.discover-catalog-row .discover-row-meta svg{width:11px;height:11px}
+.discover-badge.source{border-color:#ddd7ce;background:#f8f7f4;color:#65605a}
+.discover-badge.source.plus{border-color:#dfceaa;background:#fff8e7;color:#805b22}
+.discover-badge.fresh{border-color:#d9e7dc;background:#f1f8f3;color:#31704c}
+.discover-badge.rank{border-color:#ead8b8;background:#fff9ef;color:#8a6125}
+.discover-action-link{display:inline-flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;box-sizing:border-box}
+.discover-action-link svg{width:12px;height:12px}
+.discover-fresh-sync{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;color:#8d8579;font-size:9px;line-height:1.35}
+.discover-fresh-sync>svg{width:11px;height:11px}
+.discover-fresh-sync.is-degraded{color:#946a29}
+.discover-fresh-warning{width:100%;margin-left:17px;color:#9a6c2b}
+
 @media(max-width:760px){
   .discover-heading{align-items:flex-start}.discover-heading h1{font-size:27px}.discover-request-button{margin-top:1px}
   .discover-hero-grid{grid-template-columns:repeat(3,78vw);overflow-x:auto;scroll-snap-type:x mandatory;padding:0 3px 5px;margin:0 -3px;scrollbar-width:none}.discover-hero-grid::-webkit-scrollbar{display:none}.discover-feature{scroll-snap-align:start}
@@ -77,5 +98,6 @@
   .discover-feature{grid-template-columns:68px minmax(0,1fr)}.discover-feature .novel-cover{width:68px;height:98px}
   .discover-filters{display:grid;grid-template-columns:1fr 1fr}.discover-filter{width:100%;max-width:none}.discover-filter:last-child{grid-column:1/-1}
   .discover-external-row{grid-template-columns:1fr}.discover-external-row .discover-action{width:100%}.discover-opportunity{grid-template-columns:44px minmax(0,1fr)}.discover-opportunity .discover-action{grid-column:2;justify-self:start}
+  .discover-catalog-row .discover-row-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.discover-catalog-row .discover-row-actions .primary{grid-column:1/-1}.discover-catalog-row .discover-action{width:100%}
 }
 @media(prefers-reduced-motion:reduce){.discover-state.is-loading svg{animation:none}.discover-hero-grid{scroll-behavior:auto}}
