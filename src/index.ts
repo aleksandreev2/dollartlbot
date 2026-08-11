@@ -88,7 +88,14 @@ export default {
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     const requestSelfServiceResponse = await handleRequestSelfService(request, env, apiTelegram, ctx);
     if (requestSelfServiceResponse) {
-      return finalizeRequestSelfServiceMutation(request, requestSelfServiceResponse, env, requestMutationGuard);
+      return finalizeRequestSelfServiceMutation(
+        request,
+        requestSelfServiceResponse,
+        env,
+        requestMutationGuard,
+        apiTelegram,
+        ctx,
+      );
     }
     const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
     if (accessAdminResponse) return accessAdminResponse;
