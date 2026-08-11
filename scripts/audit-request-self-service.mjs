@@ -22,6 +22,9 @@ for(const token of [
   'withdrawn_at TEXT',
   'CREATE TABLE IF NOT EXISTS submission_conversation',
   'CREATE TABLE IF NOT EXISTS submission_raw_history',
+  'CREATE TRIGGER IF NOT EXISTS trg_submission_raw_history_active_replace',
+  'raw_file_id = NEW.new_file_id',
+  'DELETE FROM submission_raw_history WHERE id = NEW.id',
 ])need(migration,token,'migration');
 
 for(const token of [
