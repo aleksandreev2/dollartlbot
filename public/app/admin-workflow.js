@@ -234,7 +234,7 @@
       ${working ? `<button type="button" class="ok" data-workflow-action="complete" data-action="complete" data-id="${r.id}">${ico('circle-check')} Завершить</button><button type="button" data-workflow-action="backqueue" data-action="backqueue" data-id="${r.id}">${ico('undo-2')} Вернуть в очередь</button>` : ''}
       ${completed ? `<button type="button" data-workflow-action="reopen" data-action="reopen" data-id="${r.id}">${ico('rotate-ccw')} Вернуть в работу</button>` : ''}
     </div>
-    <div class="admin-inbox-secondary-actions"><button type="button" data-workflow-raw="${r.id}">${ico('paperclip')} Raw-файл</button><button type="button" data-workflow-publication="${r.id}" data-title="${esc(r.title)}">${ico('send')} Создать публикацию</button></div>
+    <div class="admin-inbox-secondary-actions"><button type="button" data-workflow-raw="${r.id}">${ico('paperclip')} Raw-файл</button><button type="button" data-workflow-publication="${r.id}" data-title="${esc(r.title)}">${ico('send')} Создать публикацию</button><button type="button" data-workflow-advanced="${r.id}">${ico('sliders-horizontal')} Расширенное управление</button></div>
     <div class="admin-inbox-meta-line"><span>${pubs.length} связанных публикаций</span><span>${audit.length} событий в истории</span></div>`;
 
     box.querySelectorAll('[data-workflow-action]').forEach(button => button.addEventListener('click', () => {
@@ -245,6 +245,13 @@
     box.querySelector('[data-workflow-save-notes]')?.addEventListener('click', event => void saveNotes(Number(event.currentTarget.dataset.workflowSaveNotes)));
     box.querySelector('[data-workflow-raw]')?.addEventListener('click', event => void sendRaw(Number(event.currentTarget.dataset.workflowRaw)));
     box.querySelector('[data-workflow-publication]')?.addEventListener('click', event => createPublication(Number(event.currentTarget.dataset.workflowPublication), event.currentTarget.dataset.title || ''));
+    box.querySelector('[data-workflow-advanced]')?.addEventListener('click', event => {
+      clearTimeout(requestSearchTimer);
+      const id = Number(event.currentTarget.dataset.workflowAdvanced);
+      const ops = window.DTL_ADMIN_REQUEST_OPS;
+      if (!ops?.open) { toast('Расширенное управление временно недоступно.', true); return; }
+      void ops.open(id);
+    });
     icons();
   }
 
