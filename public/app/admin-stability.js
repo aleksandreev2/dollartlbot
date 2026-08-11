@@ -13,7 +13,6 @@
   let restored = false;
   let restoring = false;
   let currentMutationButton = null;
-  let navEpoch = 0;
 
   const riskyHealthActions = new Set([
     'run_maintenance',
@@ -53,11 +52,9 @@
     return controller.signal;
   }
 
-  function abortAdminReads(reason = 'navigation') {
-    navEpoch += 1;
+  function abortAdminReads() {
     for (const record of [...activeReads]) {
       record.superseded = true;
-      record.reason = reason;
       record.controller.abort();
     }
     activeReads.clear();
@@ -74,11 +71,9 @@
     if (body instanceof FormData) {
       const parts = [];
       for (const [key, value] of body.entries()) {
-        if (value instanceof File) {
-          parts.push(`${key}=file:${value.name}:${value.size}:${value.type}:${value.lastModified}`);
-        } else {
-          parts.push(`${key}=${String(value)}`);
-        }
+        parts.push(value instanceof File
+          ? `${key}=file:${value.name}:${value.size}:${value.type}:${value.lastModified}`
+          : `${key}=${String(value)}`);
       }
       return parts.sort().join('&');
     }
@@ -112,8 +107,8 @@
     });
   }
 
-  function mutationKey(pathname, search, method, init) {
-    return `${method}:${pathname}${search}:${hash(stableBodyKey(init?.body))}`;
+  function mutationKey(meta, init) {
+    return `${meta.method}:${meta.pathname}${meta.search}:${hash(stableBodyKey(init?.body))}`;
   }
 
   function beginButtonBusy(button) {
@@ -142,7 +137,7 @@
     if (meta.method === 'GET') {
       headers.set('x-dtl-admin-no-cache', '1');
       const controller = new AbortController();
-      const record = { controller, superseded: false, reason: '', epoch: navEpoch };
+      const record = { controller, superseded: false };
       activeReads.add(record);
       const signal = mergeSignals(init?.signal || (input instanceof Request ? input.signal : null), controller.signal);
       try {
@@ -155,16 +150,13 @@
       }
     }
 
-    const key = mutationKey(meta.pathname, meta.search, meta.method, init);
+    const key = mutationKey(meta, init);
     const existing = pendingMutations.get(key);
     if (existing) return materialize(await existing);
 
     const button = currentMutationButton instanceof HTMLButtonElement ? currentMutationButton : null;
     beginButtonBusy(button);
-    const job = (async () => {
-      const response = await next(input, { ...init, headers, cache: 'no-store' });
-      return snapshotResponse(response);
-    })();
+    const job = (async () => snapshotResponse(await next(input, { ...init, headers, cache: 'no-store' })))();
     pendingMutations.set(key, job);
     try {
       return materialize(await job);
@@ -182,36 +174,38 @@
     return null;
   }
 
-  function activeNavButton() {
-    return document.querySelector(
-      '.admin-side-nav button.active, .admin-mobile-nav button.active, [data-admin-health].active, [data-admin-tools].active',
-    );
-  }
-
   function saveNav(element) {
     const token = navToken(element);
     if (!token) return;
     try { sessionStorage.setItem(STORAGE_KEY, token); } catch {}
   }
 
+  function selectorForToken(token) {
+    const [kind, value] = String(token || '').split(':', 2);
+    if (kind === 'section') return `[data-admin-section="${CSS.escape(value || '')}"]`;
+    if (kind === 'tools') return `[data-admin-tools="${CSS.escape(value || '')}"]`;
+    if (kind === 'health') return '[data-admin-health]';
+    return '';
+  }
+
   function restoreNav() {
     if (restored || restoring || !document.querySelector('.admin-v2')) return;
-    restored = true;
     let token = '';
     try { token = sessionStorage.getItem(STORAGE_KEY) || ''; } catch {}
-    if (!token || token === 'section:overview') return;
+    if (!token || token === 'section:overview') {
+      restored = true;
+      return;
+    }
 
-    const [kind, value] = token.split(':', 2);
-    const selector = kind === 'section'
-      ? `[data-admin-section="${CSS.escape(value || '')}"]`
-      : kind === 'tools'
-        ? `[data-admin-tools="${CSS.escape(value || '')}"]`
-        : kind === 'health'
-          ? '[data-admin-health]'
-          : '';
-    if (!selector) return;
+    const selector = selectorForToken(token);
+    if (!selector) {
+      restored = true;
+      return;
+    }
     const button = document.querySelector(selector);
     if (!(button instanceof HTMLButtonElement)) return;
+
+    restored = true;
     restoring = true;
     queueMicrotask(() => {
       try { button.click(); }
@@ -219,15 +213,18 @@
     });
   }
 
+  function activeNavButton() {
+    const candidates = [
+      ...document.querySelectorAll('[data-admin-health].active,[data-admin-tools].active,.admin-side-nav [data-admin-section].active,.admin-mobile-nav [data-admin-section].active'),
+    ];
+    return candidates.find((node) => node instanceof HTMLButtonElement) || null;
+  }
+
   function refreshCurrentSection() {
-    abortAdminReads('manual-refresh');
+    abortAdminReads();
     try { window.__DTL_ADMIN_CACHE__?.clear?.(); } catch {}
-    const button = activeNavButton();
-    if (button instanceof HTMLButtonElement) {
-      button.click();
-      return;
-    }
-    document.querySelector('[data-admin-section="overview"]')?.click();
+    const button = activeNavButton() || document.querySelector('[data-admin-section="overview"]');
+    if (button instanceof HTMLButtonElement) button.click();
   }
 
   function installRefreshButton() {
@@ -299,8 +296,7 @@
   }
 
   window.confirm = function dtlAdminConfirm(message) {
-    if (confirmBypassDepth > 0) return true;
-    return nativeConfirm(message);
+    return confirmBypassDepth > 0 ? true : nativeConfirm(message);
   };
 
   function replayConfirmedClick(button) {
@@ -316,19 +312,18 @@
   function isMutationButton(button) {
     if (!(button instanceof HTMLButtonElement)) return false;
     if (button.matches('[data-action],[data-progress],[data-health-action]')) return true;
-    return Boolean(button.matches([
+    return button.matches([
       '#pubSave', '#pubTest', '#pubPublish', '#requestOpsSave', '#requestOpsMetaSave', '#requestOpsMove', '#requestOpsRestore', '#requestOpsRaw',
       '#toggleUserBlock', '#toggleUnlimited', '#applyQuota', '#sendAdminUserMessage', '#saveUserControl', '[data-quota-delta]', '[data-edit-save]', '.publication-delete-button',
-    ].join(',')));
+    ].join(','));
   }
 
   document.addEventListener('click', (event) => {
     const button = event.target.closest?.('button');
     if (!(button instanceof HTMLButtonElement)) return;
 
-    const token = navToken(button);
-    if (token) {
-      abortAdminReads('navigation');
+    if (navToken(button)) {
+      abortAdminReads();
       saveNav(button);
       return;
     }
@@ -359,7 +354,7 @@
   }, true);
 
   document.addEventListener('dtl:viewchange', (event) => {
-    if (event?.detail?.view !== 'admin') abortAdminReads('leave-admin');
+    if (event?.detail?.view !== 'admin') abortAdminReads();
   });
 
   document.addEventListener('visibilitychange', () => {
