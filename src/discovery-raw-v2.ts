@@ -5,6 +5,7 @@ import {
   miniAppJsonError,
   type MiniAppAuthContext,
 } from './miniapp-auth';
+import { cacheRawResultForCatalog } from './raw-fucknovelpia-cache';
 import {
   extractNovelpiaId,
   inspectRawFuckNovelpiaPage,
@@ -67,6 +68,14 @@ export async function handleDiscoveryRawV2Request(request: Request, env: Env): P
       if (directLookup || (!cachedRaw.length && query.length >= 3)) {
         try {
           const live = await searchRawFuckNovelpia(query);
+          await Promise.all(live.map((item) => cacheRawResultForCatalog(env, item).catch((error) => {
+            console.warn(JSON.stringify({
+              event: 'raw_live_result_cache_failed',
+              external_id: item.external_id,
+              error: errorMessage(error),
+            }));
+            return null;
+          })));
           external = mergeExternalResults(cachedRaw, live, query);
           providerStatus = 'ok';
           providerSource = live.length ? 'live' : cachedRaw.length ? 'cache' : 'live';
@@ -201,6 +210,18 @@ export async function handleDiscoveryRawV2Request(request: Request, env: Env): P
           return miniAppJsonError('source_already_linked', 'This RAW source is already linked to another request.', 409);
         }
         throw error;
+      }
+
+      if (inspected) {
+        await cacheRawResultForCatalog(env, inspected).catch((error) => {
+          console.warn(JSON.stringify({
+            event: 'raw_attached_source_cache_failed',
+            submission_id: submissionId,
+            external_id: inspected?.external_id,
+            error: errorMessage(error),
+          }));
+          return null;
+        });
       }
 
       return miniAppJson({
