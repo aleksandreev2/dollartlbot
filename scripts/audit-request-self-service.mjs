@@ -67,6 +67,9 @@ for(const token of [
   'previousReviewResolvedAt',
   'previousUpdatedAt',
   "AND updated_at=? AND review_state='user_replied'",
+  "guard.action === 'edit'",
+  'ctx.waitUntil(notifyAdminEdit',
+  'Review the newest information before accepting',
 ])need(finalizer,token,'mutation review lock');
 if(finalizer.includes('request.formData'))throw new Error('mutation review lock must never parse or clone a RAW multipart body');
 
@@ -99,9 +102,9 @@ for(const token of [
 ])need(index,token,'index wiring');
 const prepareAt=index.indexOf('prepareRequestSelfServiceMutation(request, env)');
 const serviceAt=index.indexOf('handleRequestSelfService(request, env, apiTelegram, ctx)');
-const finalizeAt=index.indexOf('finalizeRequestSelfServiceMutation(request, requestSelfServiceResponse, env, requestMutationGuard)');
+const finalizeAt=index.indexOf('finalizeRequestSelfServiceMutation(\n        request,\n        requestSelfServiceResponse,\n        env,\n        requestMutationGuard,\n        apiTelegram,\n        ctx,');
 const coreAt=index.indexOf('handleMiniAppCoreRequest(request, env)');
-if([prepareAt,serviceAt,finalizeAt,coreAt].some(value=>value<0)||!(prepareAt<serviceAt&&serviceAt<finalizeAt&&finalizeAt<coreAt))throw new Error('self-service flow must be authenticated review lock -> handler -> failure restoration -> legacy Mini App core');
+if([prepareAt,serviceAt,finalizeAt,coreAt].some(value=>value<0)||!(prepareAt<serviceAt&&serviceAt<finalizeAt&&finalizeAt<coreAt))throw new Error('self-service flow must be authenticated review lock -> handler -> failure restoration/notification -> legacy Mini App core');
 
 for(const token of [
   'dataset.selfServiceStamp',
