@@ -97,6 +97,6 @@ for(const token of ['.admin-activity-badge','.admin-activity-event.unread','.adm
 need(deeplink,"new Set(['home','queue','suggest','requests','account','admin'])",'admin deep link support');
 need(html,'/app/admin-activity.css?v=20260810-adminactivity1','admin activity CSS asset');
 need(html,'/app/admin-activity.js?v=20260810-adminactivity1','admin activity JS asset');
-need(html,'/app/notification-deeplink.js?v=20260810-notify2','fresh notification deep link');
+need(html,'/app/notification-deeplink.js?v=20260812-self2','fresh notification deep link');
 
 console.log('Admin activity audit passed: legacy users are backfilled without alert spam, first real access creates one deduped durable event, Telegram delivery is non-blocking with bounded retries, public auth survives a temporarily unapplied 0019 migration, and the Admin Activity Center has unread/problem filters and deep links.');
