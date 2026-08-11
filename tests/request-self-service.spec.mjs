@@ -5,7 +5,13 @@ const read=path=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 const requestsView=read('public/app/view-requests-account.js');
 const selfService=read('public/app/request-self-service-ui-v2.js');
 const deeplink=read('public/app/notification-deeplink.js');
-const css=[read('public/app/app.css'),read('public/app/ui-polish.css'),read('public/app/account-page.css'),read('public/app/request-self-service-ui.css')].join('\n');
+const css=[
+  read('public/app/app.css'),
+  read('public/app/ui-polish.css'),
+  read('public/app/account-page.css'),
+  read('public/app/interaction-upgrade.css'),
+  read('public/app/request-self-service-ui.css'),
+].join('\n');
 
 const baseRequest={
   id:42,user_id:10,title:'Academy Survival',original_language:'Korean',chapter_count:120,publication_status:'ongoing',
@@ -14,9 +20,12 @@ const baseRequest={
   review_requested_at:'2026-08-12T00:00:00.000Z',review_resolved_at:null,withdrawn_at:null,created_at:'2026-08-11T20:00:00.000Z',updated_at:'2026-08-12T00:00:00.000Z',
 };
 
+const userHtml=`<!doctype html><html><head><style>${css}</style></head><body><main id="viewRoot"></main><div id="sheetRoot"></div><div id="toastRegion"></div></body></html>`;
+
 async function bootUser(page,{request=baseRequest,loadDeeplink=false}={}){
   await page.setViewportSize({width:390,height:820});
-  await page.setContent(`<!doctype html><html><head><style>${css}</style></head><body><main id="viewRoot"></main><div id="sheetRoot"></div><div id="toastRegion"></div></body></html>`);
+  await page.route('https://dollartl.test/**',route=>route.fulfill({status:200,contentType:'text/html',body:userHtml}));
+  await page.goto('https://dollartl.test/app/');
   await page.evaluate(request=>{
     const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
     const views={};const calls=[];const toasts=[];const patchers=[];
@@ -32,8 +41,8 @@ async function bootUser(page,{request=baseRequest,loadDeeplink=false}={}){
     const components={
       statusPill:s=>`<span class="status-pill">${escapeHtml(s)}</span>`,emptyCard:()=>'<div class="empty-card">Empty</div>',bindNovelLinks(){},
       accountCard:()=>'',
-      showSheet(content){sheetRoot.innerHTML=`<div class="sheet-backdrop"><div class="bottom-sheet">${content}</div></div>`;document.dispatchEvent(new CustomEvent('dtl:sheetopen',{detail:{root:sheetRoot}}));},
-      closeSheet(){sheetRoot.innerHTML='';document.dispatchEvent(new CustomEvent('dtl:sheetclose'));},
+      showSheet(content){sheetRoot.innerHTML=`<div class="sheet-backdrop"><div class="bottom-sheet">${content}</div></div>`;document.documentElement.classList.add('dtl-sheet-open');document.dispatchEvent(new CustomEvent('dtl:sheetopen',{detail:{root:sheetRoot}}));},
+      closeSheet(){sheetRoot.innerHTML='';document.documentElement.classList.remove('dtl-sheet-open');document.dispatchEvent(new CustomEvent('dtl:sheetclose'));},
     };
     const app={
       state,viewRoot,sheetRoot,components,escapeHtml,LANGUAGE_NAMES:{en:'English'},
@@ -135,17 +144,20 @@ test('replacement RAW is sent as one file mutation and updates the existing requ
   await expect(page.locator('[data-request-manage="42"]')).toContainText('replacement.txt');
 });
 
-test('withdraw closes management, marks the same request withdrawn and never creates a replacement request',async({page})=>{
+test('withdraw closes management, returns the slot and removes the request from Active without creating a replacement',async({page})=>{
   await bootUser(page);
   await page.locator('[data-manage-request="42"]').click();
   await page.locator('[data-self-withdraw]').click();
   await expect.poll(()=>page.evaluate(()=>window.__calls.some(call=>call.path==='/api/app/requests/42/withdraw'))).toBe(true);
   expect(await page.locator('[data-request-manage="42"]').count()).toBe(0);
+  await expect(page.locator('.request-card[data-novel="42"]')).toHaveCount(0);
+  const result=await page.evaluate(()=>({state:window.DTL_APP.state.bootstrap.my_requests[0].state,slotReturned:window.DTL_APP.state.bootstrap.my_requests[0].slot_returned,submit:window.__calls.some(call=>call.path==='/api/app/submit')}));
+  expect(result.state).toBe('withdrawn');
+  expect(result.slotReturned).toBe(1);
+  expect(result.submit).toBe(false);
+  await page.evaluate(()=>{window.DTL_APP.state.requestFilter='all';window.DTL_APP.render();});
   await expect(page.locator('[data-self-review-for="42"]')).toContainText('quota returned');
   expect(await page.locator('[data-manage-request="42"]').count()).toBe(0);
-  const result=await page.evaluate(()=>({state:window.DTL_APP.state.bootstrap.my_requests[0].state,submit:window.__calls.some(call=>call.path==='/api/app/submit')}));
-  expect(result.state).toBe('withdrawn');
-  expect(result.submit).toBe(false);
 });
 
 test('admin Needs Info locks Accept until the reply is explicitly reviewed',async({page})=>{
