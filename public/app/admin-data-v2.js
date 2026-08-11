@@ -117,11 +117,11 @@
 
   document.addEventListener('dtl:adminroutechange', event => {
     if (event.detail?.id === 'section:requests') {
-      reset();
+      // The route-change event fires after the async route mount has already fetched
+      // the first server page. Keep that freshly populated cursor state intact.
       queueMicrotask(decorate);
     } else {
-      loadMoreRequested = false;
-      loadingMore = false;
+      reset('');
     }
   });
   runtime.registerPatcher(decorate);
