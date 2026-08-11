@@ -35,9 +35,7 @@
     document.querySelectorAll('[data-admin-section]').forEach(button => {
       button.classList.toggle('active', button.dataset.adminSection === section);
     });
-    if (section) {
-      document.querySelectorAll('[data-admin-tools],[data-admin-health]').forEach(button => button.classList.remove('active'));
-    }
+    if (section) document.querySelectorAll('[data-admin-tools],[data-admin-health]').forEach(button => button.classList.remove('active'));
   }
 
   function shell(content, subtitle = 'Рабочая панель Dollar TL') {
@@ -70,6 +68,7 @@
     document.querySelector('[data-nav="admin"] span:last-child')?.replaceChildren(document.createTextNode('Админ'));
     refreshIcons();
     runtime.schedule();
+    document.dispatchEvent(new CustomEvent('dtl:adminrender', { detail: { section: state.section } }));
     return admin;
   }
 
@@ -84,20 +83,14 @@
     syncSection('overview');
     shell(`<div class="admin-loading">${icon('loader-circle')} Загружаем данные…</div>`, 'Заявки, очередь и публикации в одном месте');
     try {
-      const [req, pub] = await Promise.all([
-        api('/api/app/admin/list?kind=pending'),
-        api('/api/app/admin/publishing'),
-      ]);
+      const [req, pub] = await Promise.all([api('/api/app/admin/list?kind=pending'), api('/api/app/admin/publishing')]);
       if (!isActive('overview')) return false;
       state.publishing = pub;
       const counts = req.counts || {};
       const recent = (req.requests || []).slice(0, 4);
       const publications = (pub.publications || []).slice(0, 4);
       shell(`<div class="admin-stat-grid">
-        ${stat('clock-3', counts.pending || 0, 'На проверке', 'orange')}
-        ${stat('layers-3', counts.queued || 0, 'В очереди', 'blue')}
-        ${stat('languages', counts.in_progress || 0, 'В работе', 'green')}
-        ${stat('circle-check-big', counts.completed || 0, 'Завершено', 'gold')}
+        ${stat('clock-3', counts.pending || 0, 'На проверке', 'orange')}${stat('layers-3', counts.queued || 0, 'В очереди', 'blue')}${stat('languages', counts.in_progress || 0, 'В работе', 'green')}${stat('circle-check-big', counts.completed || 0, 'Завершено', 'gold')}
       </div>
       <div class="admin-dashboard-grid">
         <section class="admin-panel"><div class="admin-panel-head"><div><h2>Требуют внимания</h2><p>Новые заявки пользователей</p></div><button data-jump="requests">Все заявки ${icon('arrow-right')}</button></div>${recent.length ? recent.map(requestCompact).join('') : '<div class="admin-empty">Новых заявок нет.</div>'}</section>
@@ -110,25 +103,11 @@
     }
   }
 
-  function stat(ic, number, label, tone) {
-    return `<div class="admin-stat ${tone}"><div class="admin-stat-icon">${icon(ic)}</div><div><strong>${number}</strong><span>${label}</span></div></div>`;
-  }
-
-  function requestCompact(request) {
-    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('book-open')}</div><div class="admin-compact-copy"><strong>${esc(request.title)}</strong><span>${esc(request.original_language)} · ${request.chapter_count} глав${request.username ? ` · @${esc(request.username)}` : ''}</span></div><span class="admin-badge pending">На проверке</span></div>`;
-  }
-
-  function publicationCompact(publication) {
-    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon(publication.image_key ? 'image' : 'file-text')}</div><div class="admin-compact-copy"><strong>${esc(publication.internal_title)}</strong><span>${date(publication.created_at)} · ${Number(publication.file_count || 0)} файл(ов)</span></div>${pubBadge(publication.status)}</div>`;
-  }
-
+  function stat(ic, number, label, tone) { return `<div class="admin-stat ${tone}"><div class="admin-stat-icon">${icon(ic)}</div><div><strong>${number}</strong><span>${label}</span></div></div>`; }
+  function requestCompact(request) { return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('book-open')}</div><div class="admin-compact-copy"><strong>${esc(request.title)}</strong><span>${esc(request.original_language)} · ${request.chapter_count} глав${request.username ? ` · @${esc(request.username)}` : ''}</span></div><span class="admin-badge pending">На проверке</span></div>`; }
+  function publicationCompact(publication) { return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon(publication.image_key ? 'image' : 'file-text')}</div><div class="admin-compact-copy"><strong>${esc(publication.internal_title)}</strong><span>${date(publication.created_at)} · ${Number(publication.file_count || 0)} файл(ов)</span></div>${pubBadge(publication.status)}</div>`; }
   function pubBadge(status) {
-    const map = {
-      draft: ['draft', 'Черновик'],
-      publishing: ['queued', 'Отправляется'],
-      published: ['done', 'Опубликовано'],
-      failed: ['bad', 'Ошибка'],
-    };
+    const map = { draft: ['draft', 'Черновик'], publishing: ['queued', 'Отправляется'], published: ['done', 'Опубликовано'], failed: ['bad', 'Ошибка'] };
     const [className, label] = map[status] || ['draft', status || '—'];
     return `<span class="admin-badge ${className}">${esc(label)}</span>`;
   }
@@ -175,22 +154,13 @@
         bot_username: document.getElementById('setBot')?.value || '',
         donation_url: document.getElementById('setDonate')?.value || '',
       };
-      await api('/api/app/admin/publishing/settings', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      await api('/api/app/admin/publishing/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       state.publishing = null;
       toast('Настройки сохранены.');
-    } catch (error) {
-      toast(error.message, true);
-    }
+    } catch (error) { toast(error.message, true); }
   }
 
-  function errorBox(text) {
-    return `<div class="admin-panel admin-error">${icon('triangle-alert')}<strong>Не удалось выполнить действие</strong><span>${esc(text)}</span></div>`;
-  }
-
+  function errorBox(text) { return `<div class="admin-panel admin-error">${icon('triangle-alert')}<strong>Не удалось выполнить действие</strong><span>${esc(text)}</span></div>`; }
   function date(value) {
     if (!value) return '—';
     try { return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }
@@ -198,19 +168,10 @@
   }
 
   for (const section of ['overview', 'settings']) {
-    adminRuntime.registerRoute(routeId(section), {
-      mount: () => renderSection(section),
-      refresh: () => renderSection(section),
-    });
+    adminRuntime.registerRoute(routeId(section), { mount: () => renderSection(section), refresh: () => renderSection(section) });
   }
 
-  document.addEventListener('dtl:viewchange', event => {
-    if (event.detail?.view !== 'admin') activateAdminClass(false);
-  });
+  document.addEventListener('dtl:viewchange', event => { if (event.detail?.view !== 'admin') activateAdminClass(false); });
 
-  window.DTL_ADMIN_CONSOLE = Object.freeze({
-    open: () => renderSection('overview'),
-    section: () => state.section,
-    markSection: syncSection,
-  });
+  window.DTL_ADMIN_CONSOLE = Object.freeze({ open: () => renderSection('overview'), section: () => state.section, markSection: syncSection });
 })();
