@@ -38,6 +38,26 @@ export async function handleAdminActionV2(
     return miniAppJsonError('invalid_action', 'Invalid admin action.', 400);
   }
 
+  if (action === 'accept') {
+    const review = await env.DB.prepare(`
+      SELECT COALESCE(review_state,'ready') AS review_state,withdrawn_at
+      FROM submissions WHERE id=?
+    `).bind(id).first<{ review_state: string; withdrawn_at: string | null }>();
+    if (review?.withdrawn_at) {
+      return miniAppJsonError('request_withdrawn', 'The requester withdrew this request.', 409);
+    }
+    if (review && review.review_state !== 'ready') {
+      return miniAppJsonError(
+        'review_unresolved',
+        review.review_state === 'needs_info'
+          ? 'This request is waiting for information from the requester.'
+          : 'The requester replied. Review the new information and mark it reviewed before accepting.',
+        409,
+        { review_state: review.review_state },
+      );
+    }
+  }
+
   try {
     const novel = await applyAdminSubmissionAction(env, telegram, id, action, {
       adminUserId: auth.telegramUser.id,
