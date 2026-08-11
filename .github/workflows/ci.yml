@@ -68,6 +68,7 @@ jobs:
           node --check public/app/view-i18n.js
           node --check public/app/view-home.js
           node --check public/app/view-queue.js
+          node --check public/app/title-release-history.js
           node --check public/app/view-suggest.js
           node --check public/app/suggest-content-picker.js
           node --check public/app/suggest-content-api.js
@@ -93,6 +94,7 @@ jobs:
           node --check public/app/admin-activity.js
           node --check public/app/admin-publishing-view.js
           node --check public/app/publication-template-ui.js
+          node --check public/app/publication-release-range.js
           node --check public/app/admin-publishing-flow.js
           node --check public/app/admin-publishing.js
           node --check public/app/publication-stability-ui.js
@@ -115,6 +117,8 @@ jobs:
           test -f public/app/admin-publishing-flow.js
           test -f public/app/publication-template-ui.css
           test -f public/app/publication-template-ui.js
+          test -f public/app/publication-release-range.css
+          test -f public/app/publication-release-range.js
           test -f public/app/publication-stability-ui.css
           test -f public/app/publication-stability-ui.js
           test -f public/app/access-admin-ui.css
@@ -141,6 +145,9 @@ jobs:
           test -f public/app/view-i18n.js
           test -f public/app/view-home.js
           test -f public/app/view-queue.js
+          test -f public/app/title-release-history.js
+          test -f public/app/title-release-history.css
+          test -f public/app/novel-detail.css
           test -f public/app/view-suggest.js
           test -f public/app/suggest-content-picker.js
           test -f public/app/suggest-content-api.js
@@ -159,6 +166,7 @@ jobs:
           test ! -e public/app/onboarding-interactions-fix.js
           test ! -e src/miniapp.ts
           test -f src/miniapp-core.ts
+          test -f src/publication-release-range.ts
           grep -q '/app/app-core.js?v=20260810-app1' public/app/index.html
           grep -q '/app/access-gate-ui.css?v=20260810-access1' public/app/index.html
           grep -q '/app/access-gate-ui.js?v=20260810-access4' public/app/index.html
@@ -170,6 +178,9 @@ jobs:
           grep -q '/app/view-i18n.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-home.js?v=20260810-app2' public/app/index.html
           grep -q '/app/view-queue.js?v=20260810-app3' public/app/index.html
+          grep -q '/app/title-release-history.js?v=20260811-release1' public/app/index.html
+          grep -q '/app/title-release-history.css?v=20260811-release1' public/app/index.html
+          grep -q '/app/novel-detail.css?v=20260811-detail1' public/app/index.html
           grep -q '/app/view-suggest.js?v=20260810-app4' public/app/index.html
           grep -q '/app/suggest-content-picker.css?v=20260810-content4' public/app/index.html
           grep -q '/app/suggest-content-picker.js?v=20260810-content4' public/app/index.html
@@ -203,6 +214,8 @@ jobs:
           grep -q '/app/admin-publishing-flow.js?v=20260811-pflow1' public/app/index.html
           grep -q '/app/publication-template-ui.css?v=20260810-pubtemplate1' public/app/index.html
           grep -q '/app/publication-template-ui.js?v=20260811-pubtemplate3' public/app/index.html
+          grep -q '/app/publication-release-range.css?v=20260811-release1' public/app/index.html
+          grep -q '/app/publication-release-range.js?v=20260811-release1' public/app/index.html
           grep -q '/app/publication-stability-ui.css?v=20260810-pubstable1' public/app/index.html
           grep -q '/app/publication-stability-ui.js?v=20260810-pubstable1' public/app/index.html
           grep -q '/app/admin-console.js?v=20260811-admin2&routes=20260811f' public/app/index.html
@@ -239,6 +252,7 @@ jobs:
           test -f migrations/0019_admin_events.sql
           test -f migrations/0020_user_control_center.sql
           test -f migrations/0021_request_operations.sql
+          test -f migrations/0024_publication_release_ranges.sql
       - name: Audit Mini App localization coverage
         run: |
           node scripts/audit-miniapp-i18n.mjs

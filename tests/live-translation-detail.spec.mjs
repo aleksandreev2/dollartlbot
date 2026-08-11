@@ -11,12 +11,14 @@ const css=[
   'public/app/desktop-v2.css',
   'public/app/telegram-desktop.css',
   'public/app/novel-detail.css',
+  'public/app/title-release-history.css',
 ].map(read).join('\n');
 const sources={
   core:read('public/app/app-core.js'),
   i18n:read('public/app/view-i18n.js'),
   home:read('public/app/view-home.js'),
   queue:read('public/app/view-queue.js'),
+  history:read('public/app/title-release-history.js'),
 };
 const LOCALES=['en','es','fil','hi','pt','id','vi','fr','de','ru'];
 const TITLE='The Grand Duke of the Northern Territory Who Became the Academy’s Unreasonably Overqualified Translation Manager';
@@ -37,16 +39,20 @@ async function boot(page,{width,height,compact=false}){
     };
     window.DTL_RUNTIME={detectLanguage:detect,locale(){return window.DTL_APP?.state?.locale||'en';},schedule(){}};
   },{compact});
-  for(const key of ['core','i18n','home','queue'])await page.addScriptTag({content:sources[key]});
+  for(const key of ['core','i18n','home','queue','history'])await page.addScriptTag({content:sources[key]});
   await page.evaluate(async title=>{
     await window.DTL_APP.init();
     const app=window.DTL_APP;
     app.state.detailNovel={
       id:1,title,original_language:'Korean',chapter_count:360,publication_status:'ongoing',source_url:'https://example.com/original',
-      queue_status:'in_progress',queue_position:null,current_chapter:151,progress_percent:42,
+      queue_status:'in_progress',queue_position:null,current_chapter:151,progress_percent:42,requester_username:'reader_requester',
       genres_tags:'Fantasy, Academy, Regression, Action, Kingdom Building, Adventure',
       started_at:'2026-08-05T12:00:00Z',progress_updated_at:'2026-08-11T15:00:00Z',updated_at:'2026-08-11T15:00:00Z',
     };
+    window.DTL_TITLE_RELEASE_HISTORY.cache.set(1,{status:'ready',releases:[
+      {id:20,submission_id:1,title:'Chapters 78–85 · Grand Duke',chapter_start:78,chapter_end:85,published_at:'2026-08-10T10:00:00Z',telegram_url:'https://t.me/dollartl/20'},
+      {id:19,submission_id:1,title:'Chapters 70–77 · Grand Duke',chapter_start:70,chapter_end:77,published_at:'2026-08-08T10:00:00Z',telegram_url:'https://t.me/dollartl/19'},
+    ]});
   },TITLE);
 }
 
@@ -61,10 +67,21 @@ async function render(page,locale){
   await expect(page.locator('.live-tag')).toHaveCount(6);
   await expect(page.locator('.live-activity-item')).toHaveCount(2);
   await expect(page.locator('.live-detail-title')).toContainText('Grand Duke');
-  const layout=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,hero:document.querySelector('.detail-hero')?.getBoundingClientRect(),width:document.documentElement.clientWidth}));
+  await expect(page.locator('.live-detail-requester a')).toHaveText('@reader_requester');
+  await expect(page.locator('.live-detail-requester a')).toHaveAttribute('href','https://t.me/reader_requester');
+  await expect(page.locator('.title-release-history')).toBeVisible();
+  await expect(page.locator('.title-release-row.current strong')).toContainText('86');
+  await expect(page.locator('.title-release-row.current strong')).toContainText('151');
+  await expect(page.locator('.title-release-row.published')).toHaveCount(2);
+  await expect(page.locator('.title-release-row.published').first().locator('strong')).toContainText('78');
+  await expect(page.locator('.title-release-row.published').first().locator('strong')).toContainText('85');
+  await expect(page.locator('.title-release-open').first()).toHaveAttribute('href','https://t.me/dollartl/20');
+  const layout=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,hero:document.querySelector('.detail-hero')?.getBoundingClientRect(),history:document.querySelector('.title-release-history')?.getBoundingClientRect(),width:document.documentElement.clientWidth}));
   expect(layout.overflow,`${locale}: horizontal overflow`).toBeLessThanOrEqual(1);
   expect(layout.hero.left,`${locale}: hero left edge`).toBeGreaterThanOrEqual(-1);
   expect(layout.hero.right,`${locale}: hero right edge`).toBeLessThanOrEqual(layout.width+1);
+  expect(layout.history.left,`${locale}: history left edge`).toBeGreaterThanOrEqual(-1);
+  expect(layout.history.right,`${locale}: history right edge`).toBeLessThanOrEqual(layout.width+1);
 }
 
 for(const viewport of [

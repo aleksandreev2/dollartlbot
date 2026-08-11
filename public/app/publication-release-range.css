@@ -1,0 +1,67 @@
+.publication-release-range{
+  margin:12px 0 4px;
+  padding:14px;
+  border:1px solid #e7e1d7;
+  border-radius:14px;
+  background:#fbfaf7;
+}
+.publication-release-range-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:12px;
+}
+.publication-release-range-head>div{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  min-width:0;
+}
+.publication-release-range-head svg{width:18px;height:18px;margin-top:1px;color:#756d60;flex:0 0 auto}
+.publication-release-range-head span span{display:block;min-width:0}
+.publication-release-range-head strong{display:block;font-size:14px;color:#24211d}
+.publication-release-range-head small{display:block;margin-top:2px;color:#8a8378;font-size:11px;line-height:1.35}
+.publication-release-range-status{
+  flex:0 0 auto;
+  max-width:190px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#f0ece5;
+  color:#6d665d;
+  font-size:11px;
+  font-weight:700;
+  text-align:center;
+}
+.publication-release-range-status.ready{background:#edf7ef;color:#2f6b3a}
+.publication-release-range-status.error{background:#fff0ee;color:#a13f35}
+.publication-release-range-status.muted{background:#f2efea;color:#7d766c}
+.publication-release-range-fields{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:end;
+  gap:10px;
+}
+.publication-release-range-fields label{display:grid;gap:6px;min-width:0}
+.publication-release-range-fields label>span{font-size:11px;font-weight:700;color:#6f685f}
+.publication-release-range-fields input{
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  border:1px solid #ddd6cb;
+  border-radius:10px;
+  background:#fff;
+  padding:10px 11px;
+  color:#25211c;
+  font:inherit;
+}
+.publication-release-range-fields input:focus{outline:2px solid rgba(177,139,65,.18);border-color:#b99a60}
+.publication-release-range-fields input[aria-invalid="true"]{border-color:#d78c84;background:#fffafa}
+.publication-release-range-separator{padding-bottom:10px;color:#aaa197;font-weight:700}
+.publication-release-range-help{display:block;margin-top:9px;color:#918a80;font-size:11px;line-height:1.45}
+@media(max-width:520px){
+  .publication-release-range{padding:12px}
+  .publication-release-range-head{display:grid;gap:8px}
+  .publication-release-range-status{justify-self:start;max-width:100%}
+  .publication-release-range-fields{gap:7px}
+}

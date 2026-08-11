@@ -22,6 +22,7 @@ import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-
 import { handleNotificationApiRequest, runNotificationMaintenance } from './notifications';
 import { handleOnboardingRequest } from './onboarding';
 import { handlePublicationLinksRequest } from './publication-links';
+import { handlePublicationReleaseRangeRequest } from './publication-release-range';
 import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
 import { handlePublishingCommentsV3Request } from './publishing-comments-v3';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
@@ -67,6 +68,8 @@ export default {
     if (adminRequestOpsResponse) return adminRequestOpsResponse;
     const adminAnalyticsResponse = await handleAdminAnalyticsRequest(request, env);
     if (adminAnalyticsResponse) return adminAnalyticsResponse;
+    const publicationReleaseRangeResponse = await handlePublicationReleaseRangeRequest(request, env);
+    if (publicationReleaseRangeResponse) return publicationReleaseRangeResponse;
     const adminPublicationsResponse = await handleAdminPublicationsRequest(request, env, apiTelegram);
     if (adminPublicationsResponse) return adminPublicationsResponse;
     const publicationLinksResponse = await handlePublicationLinksRequest(request, env, apiTelegram);

@@ -1,0 +1,141 @@
+.title-release-history{
+  margin-top:20px;
+  border:1px solid #e8e2d8;
+  border-radius:18px;
+  background:#fff;
+  overflow:hidden;
+}
+.title-release-history-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  padding:18px 20px 15px;
+  border-bottom:1px solid #eee9e1;
+}
+.title-release-history-head>div{min-width:0}
+.title-release-history-head h2{margin:0;font-size:18px;line-height:1.2;color:#211e1a}
+.title-release-history-head p{margin:5px 0 0;color:#888177;font-size:12px;line-height:1.45}
+.title-release-history-head>span{
+  flex:0 0 auto;
+  min-width:30px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#f4f1eb;
+  color:#71695f;
+  font-size:11px;
+  font-weight:800;
+  text-align:center;
+}
+.title-release-timeline{position:relative;padding:8px 20px 12px}
+.title-release-timeline::before{
+  content:"";
+  position:absolute;
+  left:37px;
+  top:24px;
+  bottom:24px;
+  width:1px;
+  background:#e7e2da;
+}
+.title-release-row{
+  position:relative;
+  z-index:1;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+  padding:12px 0;
+}
+.title-release-row+.title-release-row{border-top:1px solid #f1ede7}
+.title-release-dot{
+  width:34px;
+  height:34px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:#f6f3ee;
+  border:1px solid #e6e0d7;
+  color:#786f63;
+}
+.title-release-dot svg{width:16px;height:16px}
+.title-release-row.current .title-release-dot{
+  background:#edf7ef;
+  border-color:#d1e8d5;
+  color:#3b7947;
+  box-shadow:0 0 0 4px #fff;
+}
+.title-release-row.published .title-release-dot{
+  background:#fbf7ed;
+  border-color:#eadfc5;
+  color:#9a7939;
+  box-shadow:0 0 0 4px #fff;
+}
+.title-release-copy{min-width:0}
+.title-release-copy>div{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.title-release-copy strong{min-width:0;color:#29251f;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.title-release-copy small{display:block;margin-top:4px;color:#8d867c;font-size:11px;line-height:1.4}
+.title-release-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:3px 7px;
+  border-radius:999px;
+  background:#f6f0e3;
+  color:#8b6a31;
+  font-size:9px;
+  line-height:1.2;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.035em;
+}
+.title-release-badge.current{background:#eaf6ed;color:#337040}
+.title-release-open{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:34px;
+  padding:7px 10px;
+  border:1px solid #e0d8cb;
+  border-radius:10px;
+  background:#fff;
+  color:#3c3730;
+  font-size:11px;
+  font-weight:750;
+  text-decoration:none;
+  white-space:nowrap;
+}
+.title-release-open:hover{background:#f8f6f1}
+.title-release-open svg{width:14px;height:14px}
+.title-release-state{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-height:42px;
+  padding:11px 0;
+  color:#898176;
+  font-size:12px;
+}
+.title-release-state svg{width:17px;height:17px;margin-left:8px}
+.title-release-state.error{color:#a34d43}
+.title-release-state.loading svg{animation:title-release-spin 1.1s linear infinite}
+@keyframes title-release-spin{to{transform:rotate(360deg)}}
+@media(min-width:900px){
+  .title-release-history{margin-top:24px}
+  .title-release-history-head{padding:20px 22px 16px}
+  .title-release-timeline{padding:9px 22px 14px}
+  .title-release-timeline::before{left:39px}
+}
+@media(max-width:560px){
+  .title-release-history{border-radius:15px}
+  .title-release-history-head{padding:15px 14px 13px}
+  .title-release-history-head h2{font-size:16px}
+  .title-release-timeline{padding:6px 14px 10px}
+  .title-release-timeline::before{left:31px}
+  .title-release-row{grid-template-columns:32px minmax(0,1fr);gap:10px;padding:11px 0}
+  .title-release-dot{width:32px;height:32px}
+  .title-release-open{grid-column:2;width:max-content;max-width:100%;margin-top:-2px;white-space:normal}
+  .title-release-open span{overflow-wrap:anywhere}
+}
+@media(prefers-reduced-motion:reduce){.title-release-state.loading svg{animation:none}}
