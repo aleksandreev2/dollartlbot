@@ -19,9 +19,12 @@ const css = [
 const sources = {
   core: read('public/app/app-core.js'),
   i18n: read('public/app/view-i18n.js'),
+  interaction: read('public/app/interaction-upgrade.js'),
   home: read('public/app/view-home.js'),
   queue: read('public/app/view-queue.js'),
   suggest: read('public/app/view-suggest.js'),
+  contentPicker: read('public/app/suggest-content-picker.js'),
+  contentApi: read('public/app/suggest-content-api.js'),
   account: read('public/app/view-requests-account.js'),
 };
 
@@ -67,9 +70,10 @@ async function boot(page, viewport) {
     const labels = {
       en:'English',es:'Español',fil:'Filipino',hi:'हिन्दी',pt:'Português',id:'Bahasa Indonesia',vi:'Tiếng Việt',fr:'Français',de:'Deutsch',ru:'Русский',ko:'한국어',ja:'日本語',zh:'中文'
     };
+    const patchers=[];
     window.DTL_I18N = {
       copy(key,...args){
-        const map={reader:'Reader',thanks:'Thank you for supporting novel translations',noRequests:'No requests yet',progress:'Translation progress',edit:'Edit',guideSub:'How requests and translations work',rulesSub:'Submission rules and content restrictions',chatSub:'Continue in Telegram',boostySub:'Manage your subscription',notifications:'Notifications',justNow:'just now'};
+        const map={reader:'Reader',thanks:'Thank you for supporting novel translations',noRequests:'No requests yet',progress:'Translation progress',edit:'Edit',guideSub:'How requests and translations work',rulesSub:'Submission rules and content restrictions',chatSub:'Continue in Telegram',boostySub:'Manage your subscription',notifications:'Notifications',justNow:'just now',addTag:'Add at least one tag',describeSex:'Describe the sexual content'};
         if(key==='regular')return`Regular plan · up to ${args[0]||250} chapters`;
         if(key==='minAgo')return`${args[0]} min ago`;
         if(key==='hourAgo')return`${args[0]} h ago`;
@@ -88,10 +92,11 @@ async function boot(page, viewport) {
     };
     window.DTL_RUNTIME = {
       detectLanguage:languageCode,
-      schedule(){},
+      registerPatcher(fn){patchers.push(fn);return()=>{};},
+      schedule(){for(const fn of [...patchers]){try{fn();}catch{}}},
     };
   }, { compact:Boolean(viewport.compact) });
-  for (const key of ['core','i18n','home','queue','suggest','account']) await page.addScriptTag({ content:sources[key] });
+  for (const key of ['core','i18n','interaction','home','queue','suggest','contentPicker','contentApi','account']) await page.addScriptTag({ content:sources[key] });
   await page.evaluate(async title => {
     await window.DTL_APP.init();
     const app=window.DTL_APP;
@@ -104,10 +109,15 @@ async function boot(page, viewport) {
     app.state.draft.original_language='Indonesian';
     app.state.draft.chapter_count='1234';
     app.state.draft.genres_tags='Fantasy, Adventure, Academy, Reincarnation, Kingdom Building';
-    app.state.draft.sexual_content='None';
-    app.state.draft.sensitive_content='None';
+    app.state.draft.sexual_level='suggestive';
+    app.state.draft.sexual_tags=['Stockings','Body Worship'];
+    app.state.draft.sexual_notes='Mature themes are disclosed for moderation context.';
+    app.state.draft.sexual_content='Suggestive · Stockings, Body Worship';
+    app.state.draft.sensitive_content='Violence and psychologically intense scenes.';
+    app.state.draft.notes='A deliberately long internal note used to verify textarea layout near the bottom of the request form.';
     app.state.draft.rules_accepted=true;
     app.renderNav();
+    window.DTL_RUNTIME.schedule();
   }, LONG_TITLE);
 }
 
@@ -115,7 +125,7 @@ async function assertViewportSafe(page, label) {
   const result = await page.evaluate(() => {
     const width=document.documentElement.clientWidth;
     const pageOverflow=document.documentElement.scrollWidth-width;
-    const selectors=['.app-shell','.topbar','.page','.premium-card','.novel-card','.request-card','.settings-list','.setting-row','.section-header','.segmented','.stepper','.review-card','.review-row','.detected-list','.detected-row','.detail-hero','.button-row','.bottom-nav'];
+    const selectors=['.app-shell','.topbar','.page','.premium-card','.novel-card','.request-card','.settings-list','.setting-row','.section-header','.segmented','.stepper','.review-card','.review-row','.detected-list','.detected-row','.detail-hero','.button-row','.bottom-nav','.content-card','.content-section-head','.content-choice-grid'];
     const escaped=[];
     for(const selector of selectors){
       for(const el of document.querySelectorAll(selector)){
@@ -127,7 +137,7 @@ async function assertViewportSafe(page, label) {
       }
     }
     const clipped=[];
-    const textSelectors=['.nav-item>span:last-child','.section-header h2','.setting-title','.setting-sub','.step-node>span:last-child','.segmented button','.primary-button','.secondary-button','.edit-link'];
+    const textSelectors=['.nav-item>span:last-child','.section-header h2','.setting-title','.setting-sub','.step-node>span:last-child','.segmented button','.primary-button','.secondary-button','.edit-link','.content-choice>span:not(.content-choice-icon):not(.content-choice-check):not(.content-18)'];
     for(const selector of textSelectors){
       for(const el of document.querySelectorAll(selector)){
         const style=getComputedStyle(el);
@@ -153,6 +163,7 @@ async function renderScenario(page, locale, scenario) {
     if(scenario==='account'){app.navigate('account',false);return;}
     if(scenario==='suggest-upload'){app.state.wizardStep=1;app.navigate('suggest',false);return;}
     if(scenario==='suggest-details'){app.state.wizardStep=2;app.navigate('suggest',false);return;}
+    if(scenario==='suggest-content'){app.state.wizardStep=3;app.navigate('suggest',false);return;}
     if(scenario==='suggest-review'){app.state.wizardStep=4;app.navigate('suggest',false);return;}
     if(scenario==='detail'){app.state.detailNovel=app.state.bootstrap.queue.active[0];app.navigate('detail',false);}
   },{locale,scenario});
@@ -164,9 +175,34 @@ for (const viewport of VIEWPORTS) {
     test.setTimeout(60_000);
     await boot(page,viewport);
     for (const locale of LOCALES) {
-      for (const scenario of ['home','queue-active','queue-upcoming','requests','account','suggest-upload','suggest-details','suggest-review','detail']) {
+      for (const scenario of ['home','queue-active','queue-upcoming','requests','account','suggest-upload','suggest-details','suggest-content','suggest-review','detail']) {
         await renderScenario(page,locale,scenario);
       }
     }
   });
 }
+
+test('Suggest inputs and textareas stay usable when the visual viewport collapses', async ({page}) => {
+  test.setTimeout(30_000);
+  await boot(page,{name:'keyboard-mobile',width:390,height:780});
+
+  async function collapseOn(selector, scenario) {
+    await renderScenario(page,'id',scenario);
+    const field=page.locator(selector);
+    await field.focus();
+    await page.setViewportSize({width:390,height:430});
+    await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dtl-keyboard-open'))).toBe(true);
+    await expect(page.locator('#bottomNav')).toHaveCSS('opacity','0');
+    const box=await field.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.y).toBeGreaterThanOrEqual(-1);
+    expect(box.y+box.height).toBeLessThanOrEqual(431);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
+    await field.evaluate(el=>el.blur());
+    await page.setViewportSize({width:390,height:780});
+    await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dtl-keyboard-open'))).toBe(false);
+  }
+
+  await collapseOn('#sourceUrl','suggest-upload');
+  await collapseOn('#notes','suggest-content');
+});
