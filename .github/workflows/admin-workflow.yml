@@ -1,0 +1,23 @@
+name: Admin Workflow UX
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  admin-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check workflow JavaScript syntax
+        run: |
+          node --check public/app/admin-workflow.js
+          node --check public/app/admin-navigation.js
+      - name: Audit admin workflow invariants
+        run: node scripts/audit-admin-workflow.mjs
+      - name: Audit admin navigation invariants
+        run: node scripts/audit-admin-navigation.mjs
