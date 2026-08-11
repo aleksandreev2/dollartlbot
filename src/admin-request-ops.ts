@@ -16,13 +16,19 @@ type AdminMeta = {
   submission_id:number; notes:string; duplicate_of_submission_id:number|null; archived_at:string|null; archived_by:number|null; updated_at:string;
 };
 
+type UnifiedSaveBody = Record<string,unknown> & {
+  notes?:string;
+  duplicate_of_submission_id?:number|null;
+  archived?:boolean;
+};
+
 export async function handleAdminRequestOps(
   request:Request,
   env:Env,
   telegram:TelegramClient,
 ):Promise<Response|null>{
   const url=new URL(request.url);
-  const match=/^\/api\/app\/admin\/requests\/(\d+)(?:\/(edit|queue-position|meta|restore-pending|raw))?$/.exec(url.pathname);
+  const match=/^\/api\/app\/admin\/requests\/(\d+)(?:\/(edit|save|queue-position|meta|restore-pending|raw))?$/.exec(url.pathname);
   if(!match)return null;
 
   const auth=await authenticateMiniAppRequest(request,env);
@@ -38,6 +44,7 @@ export async function handleAdminRequestOps(
     if(request.method!=='POST')return miniAppJsonError('method_not_allowed','Method not allowed.',405);
 
     if(action==='edit')return editRequest(request,id,auth.telegramUser.id,env);
+    if(action==='save')return saveAll(request,id,auth.telegramUser.id,env);
     if(action==='queue-position')return moveToPosition(request,id,auth.telegramUser.id,env);
     if(action==='meta')return saveMeta(request,id,auth.telegramUser.id,env);
     if(action==='restore-pending')return restorePending(id,auth.telegramUser.id,env);
@@ -55,7 +62,7 @@ async function requestDetail(id:number,env:Env):Promise<Response>{
   const request=await requestRow(id,env);
   if(!request)return miniAppJsonError('not_found','Заявка не найдена.',404);
 
-  const [meta,publications,audit]=await Promise.all([
+  const [meta,publications,auditRows]=await Promise.all([
     env.DB.prepare(`SELECT submission_id,notes,duplicate_of_submission_id,archived_at,archived_by,updated_at FROM submission_admin_meta WHERE submission_id=?`)
       .bind(id).first<AdminMeta>(),
     env.DB.prepare(`SELECT id,status,internal_title,channel_message_id,discussion_message_id,telegram_deleted_at,published_at,created_at FROM publications WHERE submission_id=? ORDER BY id DESC LIMIT 30`)
@@ -68,7 +75,7 @@ async function requestDetail(id:number,env:Env):Promise<Response>{
     request,
     admin_meta:meta||{submission_id:id,notes:'',duplicate_of_submission_id:null,archived_at:null,archived_by:null,updated_at:null},
     publications:publications.results,
-    audit:audit.results,
+    audit:auditRows.results,
   });
 }
 
@@ -76,25 +83,55 @@ async function editRequest(request:Request,id:number,adminId:number,env:Env):Pro
   const before=await requestRow(id,env);
   if(!before)return miniAppJsonError('not_found','Заявка не найдена.',404);
   const body=await readJson<Record<string,unknown>>(request);
-
-  const next={
-    title:cleanRequired(body.title??before.title,MAX_TITLE,'Название'),
-    original_language:cleanRequired(body.original_language??before.original_language,MAX_SHORT,'Язык оригинала'),
-    chapter_count:integer(body.chapter_count??before.chapter_count,1,MAX_REASONABLE_CHAPTERS,'Количество глав'),
-    publication_status:String(body.publication_status??before.publication_status),
-    source_url:cleanOptional(body.source_url??before.source_url,MAX_SOURCE),
-    genres_tags:cleanRequired(body.genres_tags??before.genres_tags,MAX_LONG,'Жанры и теги'),
-    sexual_content:cleanRequired(body.sexual_content??before.sexual_content,MAX_LONG,'Sexual content'),
-    sensitive_content:cleanRequired(body.sensitive_content??before.sensitive_content,MAX_LONG,'Sensitive content'),
-  };
-  if(!['ongoing','completed'].includes(next.publication_status))return miniAppJsonError('invalid_publication_status','Статус оригинала должен быть ongoing или completed.',400);
-  if(before.queue_status==='in_progress'&&before.current_chapter!==null&&next.chapter_count<before.current_chapter){
-    return miniAppJsonError('chapter_count_below_progress',`Нельзя уменьшить число глав ниже текущего прогресса ${before.current_chapter}.`,409);
-  }
+  const next=editableValues(body,before);
+  const validation=validateEditableState(next,before);
+  if(validation)return validation;
 
   const now=new Date().toISOString();
   const completed=before.status==='accepted'&&before.queue_status==='completed';
-  const changed=await env.DB.prepare(`
+  const changed=await requestUpdateStatement(env,id,next,completed,now).run();
+  if(Number(changed.meta.changes??0)!==1)return miniAppJsonError('stale_state','Заявка изменилась. Обновите карточку.',409);
+  const after=await requestRow(id,env);
+  await audit(env,adminId,'submission_edit',id,{before:editableSnapshot(before),after:editableSnapshot(after!)});
+  return requestDetail(id,env);
+}
+
+async function saveAll(request:Request,id:number,adminId:number,env:Env):Promise<Response>{
+  const before=await requestRow(id,env);
+  if(!before)return miniAppJsonError('not_found','Заявка не найдена.',404);
+  const currentMeta=await env.DB.prepare(`SELECT submission_id,notes,duplicate_of_submission_id,archived_at,archived_by,updated_at FROM submission_admin_meta WHERE submission_id=?`)
+    .bind(id).first<AdminMeta>();
+  const body=await readJson<UnifiedSaveBody>(request);
+  const next=editableValues(body,before);
+  const validation=validateEditableState(next,before);
+  if(validation)return validation;
+  const meta=await normalizedMeta(body,currentMeta,id,adminId,env);
+  if(meta instanceof Response)return meta;
+
+  const now=new Date().toISOString();
+  const completed=before.status==='accepted'&&before.queue_status==='completed';
+  const results=await env.DB.batch([
+    requestUpdateStatement(env,id,next,completed,now),
+    env.DB.prepare(`
+      INSERT INTO submission_admin_meta (submission_id,notes,duplicate_of_submission_id,archived_at,archived_by,updated_at)
+      VALUES (?,?,?,?,?,?)
+      ON CONFLICT(submission_id) DO UPDATE SET
+        notes=excluded.notes,duplicate_of_submission_id=excluded.duplicate_of_submission_id,
+        archived_at=excluded.archived_at,archived_by=excluded.archived_by,updated_at=excluded.updated_at
+    `).bind(id,meta.notes,meta.duplicate,meta.archivedAt,meta.archivedBy,now),
+  ]);
+  if(Number(results[0]?.meta?.changes??0)!==1)return miniAppJsonError('stale_state','Заявка изменилась. Обновите редактор.',409);
+
+  const after=await requestRow(id,env);
+  await audit(env,adminId,'submission_admin_save',id,{
+    before:{request:editableSnapshot(before),meta:currentMeta||null},
+    after:{request:editableSnapshot(after!),meta:{notes:meta.notes,duplicate_of_submission_id:meta.duplicate,archived_at:meta.archivedAt,archived_by:meta.archivedBy}},
+  });
+  return requestDetail(id,env);
+}
+
+function requestUpdateStatement(env:Env,id:number,next:ReturnType<typeof editableValues>,completed:boolean,now:string){
+  return env.DB.prepare(`
     UPDATE submissions SET
       title=?,original_language=?,chapter_count=?,publication_status=?,source_url=?,genres_tags=?,sexual_content=?,sensitive_content=?,
       current_chapter=CASE WHEN ? THEN ? ELSE current_chapter END,
@@ -104,11 +141,50 @@ async function editRequest(request:Request,id:number,adminId:number,env:Env):Pro
   `).bind(
     next.title,next.original_language,next.chapter_count,next.publication_status,next.source_url,next.genres_tags,next.sexual_content,next.sensitive_content,
     completed?1:0,next.chapter_count,completed?1:0,now,now,id,
-  ).run();
-  if(Number(changed.meta.changes??0)!==1)return miniAppJsonError('stale_state','Заявка изменилась. Обновите карточку.',409);
-  const after=await requestRow(id,env);
-  await audit(env,adminId,'submission_edit',id,{before:editableSnapshot(before),after:editableSnapshot(after!)});
-  return requestDetail(id,env);
+  );
+}
+
+function editableValues(body:Record<string,unknown>,before:RequestRow){
+  return {
+    title:cleanRequired(body.title??before.title,MAX_TITLE,'Название'),
+    original_language:cleanRequired(body.original_language??before.original_language,MAX_SHORT,'Язык оригинала'),
+    chapter_count:integer(body.chapter_count??before.chapter_count,1,MAX_REASONABLE_CHAPTERS,'Количество глав'),
+    publication_status:String(body.publication_status??before.publication_status),
+    source_url:cleanOptional(body.source_url??before.source_url,MAX_SOURCE),
+    genres_tags:cleanRequired(body.genres_tags??before.genres_tags,MAX_LONG,'Жанры и теги'),
+    sexual_content:cleanRequired(body.sexual_content??before.sexual_content,MAX_LONG,'Sexual content'),
+    sensitive_content:cleanRequired(body.sensitive_content??before.sensitive_content,MAX_LONG,'Sensitive content'),
+  };
+}
+
+function validateEditableState(next:ReturnType<typeof editableValues>,before:RequestRow):Response|null{
+  if(!['ongoing','completed'].includes(next.publication_status))return miniAppJsonError('invalid_publication_status','Статус оригинала должен быть ongoing или completed.',400);
+  if(before.queue_status==='in_progress'&&before.current_chapter!==null&&next.chapter_count<before.current_chapter){
+    return miniAppJsonError('chapter_count_below_progress',`Нельзя уменьшить число глав ниже текущего прогресса ${before.current_chapter}.`,409);
+  }
+  return null;
+}
+
+async function normalizedMeta(body:UnifiedSaveBody,current:AdminMeta|null,id:number,adminId:number,env:Env){
+  const notes=String(body.notes??current?.notes??'').trim().slice(0,4000);
+  let duplicate=current?.duplicate_of_submission_id??null;
+  if(Object.prototype.hasOwnProperty.call(body,'duplicate_of_submission_id')){
+    if(body.duplicate_of_submission_id===null||body.duplicate_of_submission_id===undefined||Number(body.duplicate_of_submission_id)===0)duplicate=null;
+    else{
+      duplicate=Number(body.duplicate_of_submission_id);
+      if(!Number.isSafeInteger(duplicate)||duplicate<=0||duplicate===id)return miniAppJsonError('invalid_duplicate','Укажите другую существующую заявку.',400);
+      const found=await env.DB.prepare('SELECT id FROM submissions WHERE id=?').bind(duplicate).first<{id:number}>();
+      if(!found)return miniAppJsonError('duplicate_not_found','Указанная дублирующая заявка не найдена.',404);
+    }
+  }
+  const archived=typeof body.archived==='boolean'?body.archived:Boolean(current?.archived_at);
+  const now=new Date().toISOString();
+  return {
+    notes,
+    duplicate,
+    archivedAt:archived?(current?.archived_at||now):null,
+    archivedBy:archived?(current?.archived_by||adminId):null,
+  };
 }
 
 async function moveToPosition(request:Request,id:number,adminId:number,env:Env):Promise<Response>{
@@ -163,29 +239,17 @@ async function saveMeta(request:Request,id:number,adminId:number,env:Env):Promis
   const current=await env.DB.prepare(`SELECT submission_id,notes,duplicate_of_submission_id,archived_at,archived_by,updated_at FROM submission_admin_meta WHERE submission_id=?`)
     .bind(id).first<AdminMeta>();
   const body=await readJson<{notes?:string;duplicate_of_submission_id?:number|null;archived?:boolean}>(request);
-  const notes=String(body.notes??current?.notes??'').trim().slice(0,4000);
-  let duplicate=current?.duplicate_of_submission_id??null;
-  if(Object.prototype.hasOwnProperty.call(body,'duplicate_of_submission_id')){
-    if(body.duplicate_of_submission_id===null||body.duplicate_of_submission_id===undefined||Number(body.duplicate_of_submission_id)===0)duplicate=null;
-    else{
-      duplicate=Number(body.duplicate_of_submission_id);
-      if(!Number.isSafeInteger(duplicate)||duplicate<=0||duplicate===id)return miniAppJsonError('invalid_duplicate','Укажите другую существующую заявку.',400);
-      const found=await env.DB.prepare('SELECT id FROM submissions WHERE id=?').bind(duplicate).first<{id:number}>();
-      if(!found)return miniAppJsonError('duplicate_not_found','Указанная дублирующая заявка не найдена.',404);
-    }
-  }
-  const archived=typeof body.archived==='boolean'?body.archived:Boolean(current?.archived_at);
+  const meta=await normalizedMeta(body,current,id,adminId,env);
+  if(meta instanceof Response)return meta;
   const now=new Date().toISOString();
-  const archivedAt=archived?(current?.archived_at||now):null;
-  const archivedBy=archived?(current?.archived_by||adminId):null;
   await env.DB.prepare(`
     INSERT INTO submission_admin_meta (submission_id,notes,duplicate_of_submission_id,archived_at,archived_by,updated_at)
     VALUES (?,?,?,?,?,?)
     ON CONFLICT(submission_id) DO UPDATE SET
       notes=excluded.notes,duplicate_of_submission_id=excluded.duplicate_of_submission_id,
       archived_at=excluded.archived_at,archived_by=excluded.archived_by,updated_at=excluded.updated_at
-  `).bind(id,notes,duplicate,archivedAt,archivedBy,now).run();
-  await audit(env,adminId,'submission_admin_meta',id,{before:current||null,after:{notes,duplicate_of_submission_id:duplicate,archived_at:archivedAt,archived_by:archivedBy}});
+  `).bind(id,meta.notes,meta.duplicate,meta.archivedAt,meta.archivedBy,now).run();
+  await audit(env,adminId,'submission_admin_meta',id,{before:current||null,after:{notes:meta.notes,duplicate_of_submission_id:meta.duplicate,archived_at:meta.archivedAt,archived_by:meta.archivedBy}});
   return requestDetail(id,env);
 }
 
