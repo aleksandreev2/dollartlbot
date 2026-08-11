@@ -1,11 +1,14 @@
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
 import { handlePublishingCenterRequest } from './publishing-center';
+import { handlePublishingPipelineRequest } from './publishing-pipeline';
 import { escapeHtml, TelegramApiError, type TelegramClient } from './telegram';
 
 const FILES_LINE='📎 Files are in the comments.';
 type Publication={id:number;status:string;body_html:string;add_footer:number;add_donate:number;image_key:string|null;channel_message_id:number|null;telegram_deleted_at:string|null;submission_id:number|null;requester_username_snapshot:string|null};
 
 export async function handleAdminPublicationsRequest(request:Request,env:Env,telegram:TelegramClient):Promise<Response|null>{
+  const pipeline=await handlePublishingPipelineRequest(request,env);
+  if(pipeline)return pipeline;
   const center=await handlePublishingCenterRequest(request,env,telegram);
   if(center)return center;
   const url=new URL(request.url);
