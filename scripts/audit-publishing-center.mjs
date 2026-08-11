@@ -92,7 +92,7 @@ forbid(pipelineFrontend,'registerRoute(','pipeline route ownership');
 new Function(pipelineFrontend);
 
 for(const token of ['publishing-center-tabs','publishing-center-preflight','publishing-center-clone','data-publishing-center-hidden','publication-pipeline-step'])need(css,token,'publishing center CSS');
-need(html,'/app/admin-publishing-center.css?v=20260811-pcenter1','publishing center CSS asset');
+need(html,'/app/admin-publishing-center.css?v=20260811-pcenter2','publishing center CSS asset');
 need(html,'/app/admin-publishing-center.js?v=20260811-pcenter1','publishing center JS asset');
 need(html,'/app/admin-publication-pipeline.js?v=20260811-pcenter1','publishing pipeline JS asset');
 const publishingIndex=html.indexOf('/app/admin-publishing.js?v=20260810-admin1');
