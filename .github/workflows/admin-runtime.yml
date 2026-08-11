@@ -22,9 +22,13 @@ jobs:
         run: node --check public/app/admin-console.js
       - name: Syntax check admin tools routes
         run: node --check public/app/admin-tools.js
+      - name: Syntax check admin publishing lifecycle
+        run: node --check public/app/admin-publishing.js
       - name: Audit admin runtime architecture
         run: node scripts/audit-admin-runtime.mjs
       - name: Audit admin console routes
         run: node scripts/audit-admin-console-routes.mjs
       - name: Audit admin tools routes
         run: node scripts/audit-admin-tools-routes.mjs
+      - name: Audit admin publishing lifecycle
+        run: node scripts/audit-admin-publishing-lifecycle.mjs
