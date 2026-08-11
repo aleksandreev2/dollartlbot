@@ -22,6 +22,7 @@ const adminPublishing=read('public/app/admin-publishing.js');
 const publishingCss=read('public/app/admin-publishing.css');
 const queueView=read('public/app/view-queue.js');
 const accountView=read('public/app/view-requests-account.js');
+const languageCss=read('public/app/language-switch.css');
 const index=read('public/app/index.html');
 const packageJson=read('package.json');
 const wrangler=read('wrangler.jsonc');
@@ -86,6 +87,9 @@ need(queueView,'state.queueLanguage=btn.dataset.qLang;app.render()','Queue filte
 need(queueView,'state.queueSegment=btn.dataset.qSegment;app.render()','Queue segment semantic rerender');
 need(accountView,'state.requestFilter=btn.dataset.rFilter;app.render()','Requests filter semantic rerender');
 need(accountView,'app.renderNav();app.render()','Account locale semantic rerender');
+for(const token of ['language-picker-option','data-language-picker-stamp','aria-current','language-picker-check-spacer'])need(accountView,token,'source-rendered language picker');
+for(const token of ['grid-template-columns:minmax(0,1fr) 24px','white-space:normal','@media(max-width:700px)'])need(languageCss,token,'responsive language picker');
+forbid(languageCss,'text-overflow:ellipsis','language picker truncation');
 
 need(quota,"document.addEventListener('dtl:bootstrap'",'quota bootstrap reuse');
 forbid(quota,"fetch('/api/app/bootstrap'",'quota duplicate bootstrap request');
@@ -101,7 +105,8 @@ for(const legacy of ['admin-v2.js','admin-v3.js','admin-performance-v3.js','publ
   if(fs.existsSync(new URL(`../public/app/${legacy}`,import.meta.url)))throw new Error(`Superseded admin runtime must be removed: ${legacy}`);
 }
 for(const asset of ['admin-cache.js?v=20260810-admin1','admin-console.js?v=20260811-admin2','admin-tools.js?v=20260810-users1','admin-publishing.js?v=20260810-admin1'])need(index,asset,'canonical admin runtime');
-for(const asset of ['novel-presenter.js?v=20260810-runtime4','cover-ui.js?v=20260810-runtime4','referrals-ui.js?v=20260810-runtime4','onboarding-ui.js?v=20260810-runtime5','home-v2.js?v=20260810-runtime4','view-queue.js?v=20260810-app3','view-requests-account.js?v=20260810-app3'])need(index,asset,'event-driven frontend runtime');
+for(const asset of ['novel-presenter.js?v=20260810-runtime4','cover-ui.js?v=20260810-runtime4','referrals-ui.js?v=20260810-runtime4','onboarding-ui.js?v=20260810-runtime5','home-v2.js?v=20260810-runtime4','view-queue.js?v=20260810-app3','view-requests-account.js?v=20260811-lang1'])need(index,asset,'event-driven frontend runtime');
+need(index,'language-switch.css?v=20260811-lang1','fresh language picker CSS');
 for(const css of ['admin-console.css?v=20260810-app1','admin-tools.css?v=20260810-app1','admin-users-control.css?v=20260810-users1','admin-publishing.css?v=20260810-app1'])need(index,css,'canonical admin CSS');
 for(const legacyCss of ['admin-v2.css','admin-v3.css','admin-performance-v3.css','publishing-fixes.css','publication-management.css'])forbid(index,legacyCss,'legacy admin CSS');
 
@@ -119,4 +124,4 @@ const notices=read('THIRD_PARTY_NOTICES.md');
 need(notices,'## Circle Flags','Circle Flags license notice');
 need(notices,'## Lucide','Lucide license notice');
 
-console.log('Frontend stability audit passed: semantic view/sheet enhancement events, access-aware onboarding, lifecycle-safe internal rerenders, one fallback observer, canonical admin modules, self-hosted Lucide, and no duplicate Home/onboarding patch layers.');
+console.log('Frontend stability audit passed: semantic view/sheet enhancement events, source-rendered non-truncating language picker, access-aware onboarding, lifecycle-safe internal rerenders, one fallback observer, canonical admin modules, self-hosted Lucide, and no duplicate Home/onboarding patch layers.');
