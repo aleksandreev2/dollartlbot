@@ -46,7 +46,7 @@ for(const token of [
 ])need(index,token,'health route');
 
 for(const token of [
-  "data.adminHealth='1'",
+  "dataset.adminHealth='1'",
   'Operations & Health',
   "api('/api/app/admin/health')",
   "api('/api/app/admin/health/action'",
