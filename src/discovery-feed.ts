@@ -69,6 +69,7 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
 
   try {
     if (isOpportunitiesPath) {
+      if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
       const [localCandidates, freshCandidates, ingestState, rawIngestState] = await Promise.all([
         loadFeedRows(env, auth, 'demand', 60),
         loadFreshNovelpiaCatalog(env, auth.telegramUser.id, 50),
@@ -76,7 +77,6 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
         getRawIngestState(env),
       ]);
       const freshWithRaw = await attachVerifiedRawSources(env, freshCandidates);
-      if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
       const localItems = localCandidates.map((row) => ({
         ...row,
         opportunity_score: opportunityScore(row),
