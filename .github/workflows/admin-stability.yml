@@ -1,0 +1,21 @@
+name: Admin Stability
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  admin-stability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check admin stability JavaScript syntax
+        run: |
+          node --check public/app/admin-stability.js
+          node --check public/app/admin-cache.js
+      - name: Audit admin stability invariants
+        run: node scripts/audit-admin-stability.mjs
