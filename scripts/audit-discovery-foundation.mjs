@@ -11,6 +11,7 @@ const index=read('src/index.ts');
 const html=read('public/app/index.html');
 const ui=read('public/app/discovery-ui.js');
 const discoverView=read('public/app/view-discover.js');
+const discoverRuntime=read('public/app/discover-page-runtime.js');
 const discoverCss=read('public/app/discover-page.css');
 const suggest=read('public/app/view-suggest.js');
 const bot=read('scripts/configure-bot.mjs');
@@ -75,11 +76,15 @@ for(const token of [
   "'/api/app/discovery/catalog/interest'",
   "'/api/app/discovery/catalog/link'",
   "'/api/app/discovery/catalog/health'",
+  "'/api/app/discovery/catalog/refresh'",
   'authenticateMiniAppRequest(request, env)',
+  "if (!auth.admin) return miniAppJsonError('forbidden'",
+  'ctx.waitUntil(',
+  'runNovelpiaDiscoveryIngestion(env, requestedAt)',
 ])requireText(catalogApi,token,'authenticated discovery catalog API');
 
 requireText(index,"import { handleDiscoveryCatalogRequest } from './discovery-catalog-api';",'catalog API route import');
-requireText(index,'await handleDiscoveryCatalogRequest(request, env)','catalog API route invocation');
+requireText(index,'await handleDiscoveryCatalogRequest(request, env, ctx)','catalog API route invocation with background context');
 requireText(index,"import { runNovelpiaDiscoveryIngestion } from './novelpia-discovery';",'ingestion import');
 requireText(index,"scheduledAt.getUTCMinutes() % 20 === 0",'bounded 20-minute ingestion cadence');
 requireText(index,"runScheduledTask('novelpia_discovery_ingest'",'isolated scheduled ingestion task');
@@ -96,9 +101,16 @@ for(const token of [
   "mode='fresh_novelpia'",
   'Fresh from NovelPia',
 ])requireText(discoverView,token,'Fresh NovelPia Discover UI');
+for(const token of [
+  'discover-manual-refresh',
+  "'/api/app/discovery/catalog/refresh'",
+  'Refresh NovelPia',
+])requireText(discoverRuntime,token,'admin NovelPia refresh control');
 requireText(discoverCss,'.discover-catalog-row','Fresh catalog responsive row styling');
 requireText(html,'/app/discover-page.css?v=20260811-discover2','Fresh Discover CSS cache bust');
 requireText(html,'/app/view-discover.js?v=20260811-discover2','Fresh Discover JS cache bust');
+requireText(html,'/app/discover-page-runtime.js?v=20260811-discover2','Fresh runtime cache bust');
 
 new Function(discoverView);
+new Function(discoverRuntime);
 console.log('Discovery foundation + automatic NovelPia ingestion audit passed.');
