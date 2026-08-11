@@ -6,6 +6,7 @@ const service=read('src/request-self-service.ts');
 const finalizer=read('src/request-self-service-finalize.ts');
 const readLayer=read('src/request-self-service-read.ts');
 const actions=read('src/admin-actions-v2.ts');
+const adminState=read('src/admin-state.ts');
 const index=read('src/index.ts');
 const ui=read('public/app/request-self-service-ui-v2.js');
 const requests=read('public/app/view-requests-account.js');
@@ -51,15 +52,20 @@ const formParses=(service.match(/request\.formData\(\)/g)||[]).length;
 if(formParses!==1)throw new Error(`RAW replacement must parse multipart exactly once; found ${formParses}`);
 
 for(const token of [
+  'prepareRequestSelfServiceMutation',
   'finalizeRequestSelfServiceMutation',
   "(edit|raw|message)",
+  'authenticateMiniAppRequest',
   "review_state='user_replied'",
   'review_resolved_at=NULL',
   "status='pending'",
   'withdrawn_at IS NULL',
-  "if (!response.ok) return response",
-])need(finalizer,token,'mutation finalizer');
-if(finalizer.includes('request.formData'))throw new Error('mutation finalizer must never reparse a RAW multipart body');
+  'previousReviewState',
+  'previousReviewResolvedAt',
+  'previousUpdatedAt',
+  "AND updated_at=? AND review_state='user_replied'",
+])need(finalizer,token,'mutation review lock');
+if(finalizer.includes('request.formData'))throw new Error('mutation review lock must never parse or clone a RAW multipart body');
 
 for(const token of [
   '/api/app/bootstrap',
@@ -74,18 +80,25 @@ for(const token of [
   'review_unresolved',
   'request_withdrawn',
   "review.review_state !== 'ready'",
-])need(actions,token,'accept guard');
+])need(actions,token,'accept route guard');
+for(const token of [
+  "(before.review_state ?? 'ready') === 'ready'",
+  "COALESCE(review_state,'ready')='ready'",
+  'withdrawn_at IS NULL',
+])need(adminState,token,'atomic accept state transition');
 
 for(const token of [
+  'prepareRequestSelfServiceMutation',
   'handleRequestSelfService',
   'finalizeRequestSelfServiceMutation',
   'enhanceRequestSelfServiceRead',
   'handleMiniAppCoreRequest',
 ])need(index,token,'index wiring');
+const prepareAt=index.indexOf('prepareRequestSelfServiceMutation(request, env)');
 const serviceAt=index.indexOf('handleRequestSelfService(request, env, apiTelegram, ctx)');
-const finalizeAt=index.indexOf('finalizeRequestSelfServiceMutation(request, requestSelfServiceResponse, env)');
+const finalizeAt=index.indexOf('finalizeRequestSelfServiceMutation(request, requestSelfServiceResponse, env, requestMutationGuard)');
 const coreAt=index.indexOf('handleMiniAppCoreRequest(request, env)');
-if(serviceAt<0||finalizeAt<0||coreAt<0||!(serviceAt<finalizeAt&&finalizeAt<coreAt))throw new Error('self-service mutation finalizer must run immediately after self-service routes and before legacy Mini App core routes');
+if([prepareAt,serviceAt,finalizeAt,coreAt].some(value=>value<0)||!(prepareAt<serviceAt&&serviceAt<finalizeAt&&finalizeAt<coreAt))throw new Error('self-service flow must be authenticated review lock -> handler -> failure restoration -> legacy Mini App core');
 
 for(const token of [
   'dataset.selfServiceStamp',
