@@ -55,7 +55,7 @@ for (const [route, source] of expectedOwners) {
 }
 
 const consoleTag = '/app/admin-console.js?v=20260811-admin2&routes=20260811f';
-const publishingTag = '/app/admin-publishing-view.js?v=20260811-view1';
+const publishingTag = '/app/admin-publishing-view.js?v=20260811-view2';
 need(index, consoleTag, 'consolidated admin console asset');
 need(index, publishingTag, 'dedicated publishing view asset');
 if (index.indexOf(publishingTag) < index.indexOf(consoleTag)) throw new Error('Dedicated Publishing route must load after the shell owner.');

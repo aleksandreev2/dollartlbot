@@ -77,6 +77,8 @@ for (const token of [
   'requester_username_snapshot',
   "telegram.call<{ username?: string }>('getChat'",
   "UPDATE users SET username=?",
+  'has_cover',
+  's.cover_updated_at',
 ]) need(links, token, 'publication request-link API');
 
 for (const token of [
@@ -105,6 +107,9 @@ for (const token of [
   'updatePreview()',
   "const PENDING_LINK_KEY = 'dtl:publicationSubmissionId'",
   'applyPendingRequestSelection(select, field)',
+  'applyRequestDefaults',
+  'attachRequestCover',
+  "form.set('image'",
 ]) need(ui, token, 'publication template UI');
 forbid(ui, '📎 Файлы — в комментариях.', 'publication preview language');
 forbid(ui, 'Запрошено:', 'publication preview language');
@@ -126,11 +131,11 @@ for (const token of ['publication-request-link','publication-template-preview'])
 new Function(ui);
 
 need(html, '/app/publication-template-ui.css?v=20260810-pubtemplate1', 'publication template CSS asset');
-need(html, '/app/publication-template-ui.js?v=20260810-pubtemplate2', 'publication template JS asset');
-const templateIndex = html.indexOf('/app/publication-template-ui.js?v=20260810-pubtemplate2');
+need(html, '/app/publication-template-ui.js?v=20260811-pubtemplate3', 'publication template JS asset');
+const templateIndex = html.indexOf('/app/publication-template-ui.js?v=20260811-pubtemplate3');
 const publishingIndex = html.indexOf('/app/admin-publishing.js?v=20260810-admin1');
 if (templateIndex < 0 || publishingIndex < 0 || templateIndex > publishingIndex) {
   throw new Error('Publication template middleware must load before admin-publishing.js.');
 }
 
-console.log('Canonical Mini App auth + publication template audit passed: one initData verifier, English backend-managed publication lines, live requester username refresh, request-to-publication preselection, atomic publish claim, release-job dedupe, canonical serialized broadcast maintenance, rollback on link failure, and preview UX are wired.');
+console.log('Canonical Mini App auth + publication template audit passed: one initData verifier, English backend-managed publication lines, live requester username refresh, request-to-publication preselection, request title/cover reuse, atomic publish claim, release-job dedupe, canonical serialized broadcast maintenance, rollback on link failure, and preview UX are wired.');

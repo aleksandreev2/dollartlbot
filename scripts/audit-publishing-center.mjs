@@ -12,6 +12,10 @@ const preflight=read('src/publishing-preflight.ts');
 const adminPublications=read('src/admin-publications.ts');
 const frontend=read('public/app/admin-publishing-center.js');
 const pipelineFrontend=read('public/app/admin-publication-pipeline.js');
+const flowFrontend=read('public/app/admin-publishing-flow.js');
+const flowCss=read('public/app/admin-publishing-flow.css');
+const publicationTemplate=read('public/app/publication-template-ui.js');
+const publicationLinks=read('src/publication-links.ts');
 const css=read('public/app/admin-publishing-center.css');
 const html=read('public/app/index.html');
 const pkg=read('package.json');
@@ -91,17 +95,42 @@ for(const token of [
 forbid(pipelineFrontend,'registerRoute(','pipeline route ownership');
 new Function(pipelineFrontend);
 
+for(const token of [
+  'dtl:publishing:last-publish-intent',
+  'publishing-flow-result',
+  'Следующая публикация',
+  "data-publishing-result-route=\"tools:publications\"",
+  'matchMedia',
+])need(flowFrontend,token,'publishing 4.4 flow frontend');
+forbid(flowFrontend,'registerRoute(','publishing flow route ownership');
+new Function(flowFrontend);
+
+for(const token of [
+  'applyRequestDefaults',
+  'publication-request-summary',
+  'Обложка заявки',
+  'attachRequestCover',
+  '/media/covers/',
+  "form.set('image'",
+])need(publicationTemplate,token,'request-aware publishing defaults');
+for(const token of ['s.original_language','s.publication_status','has_cover','s.cover_updated_at'])need(publicationLinks,token,'publication link metadata');
+
 for(const token of ['publishing-center-tabs','publishing-center-preflight','publishing-center-clone','data-publishing-center-hidden','publication-pipeline-step'])need(css,token,'publishing center CSS');
+for(const token of ['publisher-flow-map','publisher-flow-step','publisher-preview-summary','publication-request-cover-badge','publishing-flow-result','publisher-actions'])need(flowCss,token,'publishing 4.4 CSS');
 need(html,'/app/admin-publishing-center.css?v=20260811-pcenter2','publishing center CSS asset');
+need(html,'/app/admin-publishing-flow.css?v=20260811-pflow1','publishing flow CSS asset');
 need(html,'/app/admin-ui-utils.js?v=20260811-ui2','publishing time utility asset');
 need(html,'/app/admin-publishing-center.js?v=20260811-pcenter2','publishing center JS asset');
+need(html,'/app/admin-publishing-flow.js?v=20260811-pflow1','publishing flow JS asset');
+need(html,'/app/publication-template-ui.js?v=20260811-pubtemplate3','request-aware template JS asset');
 need(html,'/app/admin-publication-pipeline.js?v=20260811-pcenter1','publishing pipeline JS asset');
+const flowIndex=html.indexOf('/app/admin-publishing-flow.js?v=20260811-pflow1');
 const publishingIndex=html.indexOf('/app/admin-publishing.js?v=20260810-admin1');
 const utilsIndex=html.indexOf('/app/admin-ui-utils.js?v=20260811-ui2');
 const centerIndex=html.indexOf('/app/admin-publishing-center.js?v=20260811-pcenter2');
 const pipelineIndex=html.indexOf('/app/admin-publication-pipeline.js?v=20260811-pcenter1');
-if(publishingIndex<0||utilsIndex<0||centerIndex<0||pipelineIndex<0||utilsIndex<publishingIndex||centerIndex<utilsIndex||pipelineIndex<centerIndex)throw new Error('Publishing Center utilities and enhancers must load after canonical publishing in deterministic order.');
+if(flowIndex<0||publishingIndex<0||utilsIndex<0||centerIndex<0||pipelineIndex<0||flowIndex>publishingIndex||utilsIndex<publishingIndex||centerIndex<utilsIndex||pipelineIndex<centerIndex)throw new Error('Publishing flow must capture publish intent before canonical publishing and center enhancers must keep deterministic order.');
 need(pkg,'tests/admin-publishing-center.spec.mjs','publishing center browser coverage');
 need(pkg,'tests/admin-publication-pipeline.spec.mjs','publishing pipeline browser coverage');
 
-console.log('Unified Publishing Center audit passed: one navigation surface, server autosave, reusable templates, shared preflight, duplicate-to-draft flow, attachment-loss warning, delivery pipeline, and browser coverage are wired.');
+console.log('Unified Publishing Center audit passed: linear editor flow, request autofill + request cover reuse, compact preflight/autosave, success handoff, server draft/templates and delivery pipeline are wired.');

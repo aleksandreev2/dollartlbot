@@ -24,7 +24,7 @@ need(consoleJs, "document.dispatchEvent(new CustomEvent('dtl:adminrender'", 'sem
 need(publishingView, "admin.registerRoute('section:publishing'", 'dedicated Publishing route owner');
 need(broadcasts, "admin.registerRoute('section:broadcasts'", 'dedicated Broadcasts route owner');
 need(publishingCenter, "new Set(['section:publishing','tools:publications','section:broadcasts'])", 'Publishing Center tab routes');
-need(index, '/app/admin-publishing-view.js?v=20260811-view1', 'Publishing view asset');
+need(index, '/app/admin-publishing-view.js?v=20260811-view2', 'Publishing view asset');
 need(index, '/app/admin-runtime.js?v=20260811-runtime2&canonical=20260811h', 'final runtime asset');
 need(index, '/app/admin-stability.js?v=20260811-stability2', 'final stability asset');
 need(index, '/app/admin-console.js?v=20260811-admin2&routes=20260811f', 'final console asset');

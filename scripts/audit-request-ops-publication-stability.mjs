@@ -134,7 +134,7 @@ for(const token of [
   '/app/admin-request-ops.css?v=20260811-ops2',
   '/app/publication-stability-ui.css?v=20260810-pubstable1',
   '/app/admin-request-ops.js?v=20260811-ops2',
-  '/app/publication-template-ui.js?v=20260810-pubtemplate2',
+  '/app/publication-template-ui.js?v=20260811-pubtemplate3',
   '/app/publication-stability-ui.js?v=20260810-pubstable1',
 ])need(html,token,'Mini App request/publication assets');
 need(wrangler,'?build=20260810-ops1','fresh Mini App build');

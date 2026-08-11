@@ -55,6 +55,55 @@
     return lines;
   }
 
+  function applyRequestDefaults(row) {
+    const title = document.getElementById('pubTitle');
+    if (title && row) {
+      const previous = title.dataset.requestAutofillValue || '';
+      if (!title.value.trim() || title.value === previous) {
+        title.value = String(row.title || '');
+        title.dataset.requestAutofillValue = title.value;
+        title.dispatchEvent(new Event('input', { bubbles:true }));
+      }
+    }
+    renderRequestCover(row);
+    updateRequestSummary(row);
+  }
+
+  function renderRequestCover(row) {
+    const input = document.getElementById('pubImage');
+    const box = document.getElementById('tgPreviewImage');
+    if (!box || input?.files?.length) return;
+    if (row && Number(row.has_cover || 0) === 1) {
+      const id = Number(row.id);
+      box.className = 'tg-preview-image request-cover';
+      box.dataset.requestCover = String(id);
+      const version = encodeURIComponent(String(row.cover_updated_at || '1'));
+      box.innerHTML = `<img src="/media/covers/${id}?v=${version}" alt=""><span class="publication-request-cover-badge">${icon('image')} Обложка заявки</span>`;
+    } else if (box.dataset.requestCover) {
+      delete box.dataset.requestCover;
+      box.className = 'tg-preview-image empty';
+      box.innerHTML = icon('image');
+    }
+    try { window.lucide?.createIcons?.({ attrs:{ 'stroke-width':1.8, 'aria-hidden':'true' } }); } catch {}
+  }
+
+  function updateRequestSummary(row) {
+    let summary = document.querySelector('.publication-request-summary');
+    const field = document.querySelector('.publication-request-link');
+    if (!field) return;
+    if (!row) {
+      summary?.remove();
+      return;
+    }
+    if (!summary) {
+      summary = document.createElement('div');
+      summary.className = 'publication-request-summary';
+      field.append(summary);
+    }
+    const state = row.queue_status === 'completed' ? 'Перевод завершён' : row.queue_status === 'in_progress' ? 'Сейчас переводится' : 'В очереди';
+    summary.innerHTML = `<span>${icon('book-open')} #${Number(row.id)}</span><span>${esc(row.original_language || '—')}</span><span>${Number(row.chapter_count || 0)} глав</span><span>${esc(state)}</span>${Number(row.has_cover || 0) === 1 ? `<span>${icon('image')} Есть обложка</span>` : ''}`;
+  }
+
   function updatePreview() {
     const preview = document.querySelector('.publisher-preview .tg-preview');
     if (!preview) return;
@@ -62,15 +111,16 @@
     const lines = templateLines();
     if (!lines.length) {
       box?.remove();
-      return;
+    } else {
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'publication-template-preview';
+        const footer = preview.querySelector('.tg-preview-footer');
+        if (footer) footer.before(box); else preview.append(box);
+      }
+      box.innerHTML = lines.map((line) => `<div>${esc(line)}</div>`).join('');
     }
-    if (!box) {
-      box = document.createElement('div');
-      box.className = 'publication-template-preview';
-      const footer = preview.querySelector('.tg-preview-footer');
-      if (footer) footer.before(box); else preview.append(box);
-    }
-    box.innerHTML = lines.map((line) => `<div>${esc(line)}</div>`).join('');
+    applyRequestDefaults(selectedRequest());
   }
 
   function updateRequestHelp(field) {
@@ -79,9 +129,9 @@
     if (!help) return;
     help.textContent = request
       ? (request.requester_username
-        ? `Сейчас: «Requested by: @${String(request.requester_username).replace(/^@/, '')}». Username будет перепроверен перед отправкой.`
-        : `У заявки нет @username. Будет добавлено: «Requested by: request #${request.id}».`)
-      : 'В пост автоматически добавится «Requested by: @username». Перед публикацией username перепроверяется через Telegram.';
+        ? `В пост добавится «Requested by: @${String(request.requester_username).replace(/^@/, '')}». Название и обложка заявки подставлены автоматически.`
+        : `У заявки нет @username. Будет добавлено «Requested by: request #${request.id}». Название и обложка подставлены автоматически.`)
+      : 'Выберите заявку — её название, параметры и обложка подставятся автоматически.';
   }
 
   function applyPendingRequestSelection(select, field) {
@@ -92,6 +142,7 @@
     if (!option) return;
     select.value = String(pending);
     updateRequestHelp(field);
+    applyRequestDefaults(selectedRequest());
     updatePreview();
     try {
       sessionStorage.removeItem(PENDING_LINK_KEY);
@@ -111,12 +162,12 @@
 
     const field = document.createElement('label');
     field.className = 'admin-field publication-request-link';
-    field.innerHTML = `<span>Связать с заявкой <small>необязательно</small></span>
+    field.innerHTML = `<span>Заявка <small>необязательно</small></span>
       <div class="publication-request-select-wrap">${icon('link-2')}
         <select id="pubSubmissionId"><option value="">Без связи с заявкой</option></select>
       </div>
-      <small class="publication-request-help">В пост автоматически добавится «Requested by: @username». Перед публикацией username перепроверяется через Telegram.</small>`;
-    host.after(field);
+      <small class="publication-request-help">Выберите заявку — её название, параметры и обложка подставятся автоматически.</small>`;
+    host.before(field);
 
     try {
       const requests = await loadRequests();
@@ -131,9 +182,11 @@
       }
       select.addEventListener('change', () => {
         updateRequestHelp(field);
+        applyRequestDefaults(selectedRequest());
         updatePreview();
       });
       applyPendingRequestSelection(select, field);
+      applyRequestDefaults(selectedRequest());
     } catch (error) {
       const select = field.querySelector('#pubSubmissionId');
       if (select) {
@@ -154,6 +207,26 @@
       files.dataset.publicationTemplateBound = '1';
       files.addEventListener('change', updatePreview);
     }
+    const image = document.getElementById('pubImage');
+    if (image && image.dataset.publicationRequestCoverBound !== '1') {
+      image.dataset.publicationRequestCoverBound = '1';
+      image.addEventListener('change', () => {
+        if (!image.files?.length) renderRequestCover(selectedRequest());
+      });
+    }
+  }
+
+  async function attachRequestCover(form, request) {
+    if (!request || Number(request.has_cover || 0) !== 1) return;
+    const current = form.get('image');
+    if (current instanceof File && current.size > 0) return;
+    const response = await fetch(`/media/covers/${Number(request.id)}`, { cache:'no-store' });
+    if (!response.ok) return;
+    const blob = await response.blob();
+    if (!blob.size || blob.size > 8 * 1024 * 1024) return;
+    const type = blob.type || 'image/jpeg';
+    const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : type === 'image/avif' ? 'avif' : 'jpg';
+    form.set('image', new File([blob], `request-${Number(request.id)}-cover.${ext}`, { type }));
   }
 
   runtime.registerFetchMiddleware(async (input, init, next, context) => {
@@ -163,6 +236,7 @@
     if (!(init?.body instanceof FormData)) return next(input, init);
 
     const request = selectedRequest();
+    if (request) await attachRequestCover(init.body, request);
     const response = await next(input, init);
     if (!response.ok || !request) return response;
 

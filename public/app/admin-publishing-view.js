@@ -51,45 +51,71 @@
     </div>`;
   }
 
+  function stepHead(number, title, hint) {
+    return `<div class="publisher-flow-step-head"><span>${number}</span><div><h3>${title}</h3><p>${hint}</p></div></div>`;
+  }
+
   async function render() {
     markActive();
-    admin.setHead?.('Публикация', 'Создание поста, файлов в комментариях и связанной рассылки');
+    admin.setHead?.('Publishing', 'Подготовь публикацию по шагам и отправь без лишних экранов');
     admin.content?.(`<div class="admin-loading">${icon('loader-circle')} Загружаем редактор…</div>`);
     try {
       const data = await api('/api/app/admin/publishing');
       if (!isActive()) return false;
       const publications = data.publications || [];
-      admin.content?.(`<div class="publisher-layout">
+      admin.content?.(`<div class="publisher-flow-map" aria-label="Этапы публикации">
+          <span>${icon('link-2')} Заявка</span><i>${icon('chevron-right')}</i>
+          <span>${icon('file-text')} Текст</span><i>${icon('chevron-right')}</i>
+          <span>${icon('paperclip')} Вложения</span><i>${icon('chevron-right')}</i>
+          <span>${icon('sliders-horizontal')} Настройки</span><i>${icon('chevron-right')}</i>
+          <span>${icon('circle-check')} Готовность</span>
+        </div>
+        <div class="publisher-layout publisher-flow-layout">
         <section class="publisher-editor admin-panel">
-          <div class="admin-panel-head"><div><h2>Новая публикация</h2><p>Пост в канале + файлы в комментариях</p></div><span class="admin-badge draft">Черновик</span></div>
-          <label class="admin-field"><span>Название для админки</span><input id="pubTitle" maxlength="180" placeholder="Например: Chapters 78–85 · Pure Love"></label>
-          <label class="admin-field"><span>Текст поста <small id="pubCounter">0 / 700</small></span><textarea id="pubBody" maxlength="700" rows="9" placeholder="Напишите основной текст публикации…"></textarea></label>
-          <div class="publisher-upload-grid">
-            <label class="publisher-drop" id="pubImageDrop">${icon('image-plus')}<strong>Изображение поста</strong><span>JPEG, PNG, WebP или AVIF · до 8 МБ</span><input id="pubImage" type="file" accept="image/jpeg,image/png,image/webp,image/avif" hidden></label>
-            <label class="publisher-drop" id="pubFilesDrop">${icon('paperclip')}<strong>Файлы в комментарий</strong><span>До 8 файлов · каждый до 45 МБ</span><input id="pubFiles" type="file" multiple hidden></label>
-          </div>
-          <div id="pubAssetSummary" class="publisher-assets"></div>
-          <div class="publisher-options">
-            <label><input id="pubFooter" type="checkbox" checked><span><b>Шаблонный footer</b><small>Need a translation? → Dollar TL Bot</small></span></label>
-            <label><input id="pubDonate" type="checkbox" checked><span><b>Кнопка Donate</b><small>Boosty donation</small></span></label>
-            <label><input id="pubBotComment" type="checkbox" checked><span><b>Реклама бота под файлами</b><small>Отдельным комментарием</small></span></label>
-            <label><input id="pubNotify" type="checkbox"><span><b>Разослать релиз пользователям</b><small>Только тем, кто не отключил релизы</small></span></label>
+          <div class="admin-panel-head publisher-editor-head"><div><h2>Новая публикация</h2><p>Один рабочий поток от заявки до Telegram</p></div><span class="admin-badge draft">Черновик</span></div>
+          <div class="publisher-flow">
+            <section class="publisher-flow-step publisher-flow-main">
+              ${stepHead('1', 'Заявка и текст', 'Свяжи пост с заявкой — название и обложка подставятся автоматически.')}
+              <label class="admin-field"><span>Название для админки</span><input id="pubTitle" maxlength="180" placeholder="Например: Chapters 78–85 · Pure Love"></label>
+              <label class="admin-field"><span>Текст поста <small id="pubCounter">0 / 700</small></span><textarea id="pubBody" maxlength="700" rows="8" placeholder="Напишите основной текст публикации…"></textarea></label>
+            </section>
+
+            <section class="publisher-flow-step">
+              ${stepHead('2', 'Вложения', 'Обложка поста и файлы, которые уйдут в комментарии.')}
+              <div class="publisher-upload-grid">
+                <label class="publisher-drop" id="pubImageDrop">${icon('image-plus')}<strong>Изображение поста</strong><span>JPEG, PNG, WebP или AVIF · до 8 МБ</span><input id="pubImage" type="file" accept="image/jpeg,image/png,image/webp,image/avif" hidden></label>
+                <label class="publisher-drop" id="pubFilesDrop">${icon('paperclip')}<strong>Файлы в комментарий</strong><span>До 8 файлов · каждый до 45 МБ</span><input id="pubFiles" type="file" multiple hidden></label>
+              </div>
+              <div id="pubAssetSummary" class="publisher-assets"></div>
+            </section>
+
+            <section class="publisher-flow-step">
+              ${stepHead('3', 'Настройки', 'Редкие параметры не мешают основному тексту.')}
+              <div class="publisher-options">
+                <label><input id="pubFooter" type="checkbox" checked><span><b>Шаблонный footer</b><small>Need a translation? → Dollar TL Bot</small></span></label>
+                <label><input id="pubDonate" type="checkbox" checked><span><b>Кнопка Donate</b><small>Boosty donation</small></span></label>
+                <label><input id="pubBotComment" type="checkbox" checked><span><b>Реклама бота под файлами</b><small>Отдельным комментарием</small></span></label>
+                <label><input id="pubNotify" type="checkbox"><span><b>Разослать релиз пользователям</b><small>Только тем, кто не отключил релизы</small></span></label>
+              </div>
+            </section>
           </div>
           <div class="publisher-actions">
             <button id="pubSave">${icon('save')} Сохранить черновик</button>
-            <button id="pubTest">${icon('flask-conical')} Отправить тест мне</button>
+            <button id="pubTest">${icon('flask-conical')} Тест мне</button>
             <button id="pubPublish" class="primary">${icon('send')} Опубликовать</button>
           </div>
         </section>
-        <aside class="publisher-preview admin-panel">
-          <div class="admin-panel-head"><div><h2>Предпросмотр</h2><p>Как пост будет выглядеть в Telegram</p></div></div>
-          <div class="tg-preview">
-            <div id="tgPreviewImage" class="tg-preview-image empty">${icon('image')}</div>
-            <div class="tg-preview-body" id="tgPreviewBody">Текст публикации появится здесь.</div>
-            <div class="tg-preview-footer"><b>Need a translation?</b><br>Open <span>Dollar TL Bot</span> and suggest a novel for translation.</div>
-            <div class="tg-preview-buttons"><span>Suggest a Novel</span><span>Donate</span></div>
+        <details class="publisher-preview admin-panel" open>
+          <summary class="publisher-preview-summary"><span>${icon('eye')} Предпросмотр</span><small>Telegram</small>${icon('chevron-down')}</summary>
+          <div class="publisher-preview-body">
+            <div class="tg-preview">
+              <div id="tgPreviewImage" class="tg-preview-image empty">${icon('image')}</div>
+              <div class="tg-preview-body" id="tgPreviewBody">Текст публикации появится здесь.</div>
+              <div class="tg-preview-footer"><b>Need a translation?</b><br>Open <span>Dollar TL Bot</span> and suggest a novel for translation.</div>
+              <div class="tg-preview-buttons"><span>Suggest a Novel</span><span>Donate</span></div>
+            </div>
           </div>
-        </aside>
+        </details>
       </div>
       <section class="admin-panel admin-publication-history">
         <div class="admin-panel-head"><div><h2>История публикаций</h2><p>Черновики и опубликованные посты</p></div></div>
