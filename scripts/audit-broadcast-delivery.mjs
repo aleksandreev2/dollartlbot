@@ -11,7 +11,8 @@ function forbid(source, needle, label) {
 }
 
 const migration = read('migrations/0014_broadcast_recipients.sql');
-const notifications = read('src/notifications.ts');
+const center = read('src/broadcast-center.ts');
+const runner = read('src/broadcast-runner.ts');
 
 for (const needle of [
   'broadcast_recipients',
@@ -30,11 +31,13 @@ for (const needle of [
   'broadcastRetryAt',
   'TelegramApiError',
   'error.retryAfter',
-  'INSERT OR IGNORE INTO user_notifications',
+  'createInAppNotification',
   "status = 'skipped'",
-]) need(notifications, needle, 'broadcast delivery worker');
+]) need(center, needle, 'broadcast delivery worker');
 
-forbid(notifications, 'cursor=users.results.at(-1)', 'legacy cursor skips failed recipients');
-forbid(notifications, 'Promise.all(users.results.map', 'unbounded broadcast burst');
+need(runner, "from './broadcast-center'", 'canonical broadcast runner import');
+forbid(runner, "from './notifications'", 'legacy broadcast runner import');
+forbid(center, 'cursor=users.results.at(-1)', 'legacy cursor skips failed recipients');
+forbid(center, 'Promise.all(users.results.map', 'unbounded broadcast burst');
 
-console.log('Broadcast delivery reliability audit passed.');
+console.log('Broadcast delivery reliability audit passed: canonical generic runner uses recipient snapshots, bounded retries and in-app delivery dedupe.');
