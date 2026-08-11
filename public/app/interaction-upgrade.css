@@ -113,6 +113,32 @@ html.dtl-sheet-open body {
   }
 }
 
+/* Telegram/iOS/Android keyboards can shrink only the visual viewport while leaving
+   the layout viewport and fixed bottom navigation in place. Give the focused field
+   the visual viewport, hide the nav while typing, and leave enough scroll room for
+   fields near the end of Suggest forms. */
+@media (max-width: 899px) {
+  html.dtl-keyboard-open:not(.admin-console-active),
+  html.dtl-keyboard-open:not(.admin-console-active) body {
+    scroll-padding-bottom: calc(var(--dtl-keyboard-overlap, 0px) + 28px);
+  }
+  html.dtl-keyboard-open:not(.admin-console-active) .app-shell {
+    min-height: var(--dtl-visual-height, 100dvh);
+    padding-bottom: calc(18px + var(--safe-bottom));
+  }
+  html.dtl-keyboard-open:not(.admin-console-active) .view-root {
+    min-height: calc(var(--dtl-visual-height, 100dvh) - 72px);
+  }
+  html.dtl-keyboard-open:not(.admin-console-active) .page {
+    padding-bottom: calc(28px + var(--dtl-keyboard-overlap, 0px));
+  }
+  html.dtl-keyboard-open:not(.admin-console-active) .bottom-nav {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, calc(100% + var(--safe-bottom) + 14px));
+  }
+}
+
 /* Timeline: replace generic dots with meaningful Lucide stage icons. */
 .timeline {
   margin-top: 15px;
