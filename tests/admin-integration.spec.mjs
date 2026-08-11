@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const sources = Object.fromEntries([
-  'runtime','console','publishingView','workflow','tools','health','broadcasts','activity','navigation','publishingCenter',
+  'runtime','console','publishingView','workflow','tools','health','broadcasts','activity','navigation','uiUtils','publishingCenter',
 ].map(name => [name, fs.readFileSync(new URL(`../public/app/${({
-  runtime:'admin-runtime.js', console:'admin-console.js', publishingView:'admin-publishing-view.js', workflow:'admin-workflow.js', tools:'admin-tools.js', health:'admin-health.js', broadcasts:'admin-broadcasts.js', activity:'admin-activity.js', navigation:'admin-navigation.js', publishingCenter:'admin-publishing-center.js',
+  runtime:'admin-runtime.js', console:'admin-console.js', publishingView:'admin-publishing-view.js', workflow:'admin-workflow.js', tools:'admin-tools.js', health:'admin-health.js', broadcasts:'admin-broadcasts.js', activity:'admin-activity.js', navigation:'admin-navigation.js', uiUtils:'admin-ui-utils.js', publishingCenter:'admin-publishing-center.js',
 })[name]}`, import.meta.url), 'utf8')]));
 
 async function boot(page) {
@@ -37,7 +37,7 @@ async function boot(page) {
       return new Response(JSON.stringify(data), { status:200, headers:{'content-type':'application/json'} });
     };
   });
-  for (const key of ['runtime','console','publishingView','workflow','tools','health','broadcasts','activity','navigation','publishingCenter']) await page.addScriptTag({ content: sources[key] });
+  for (const key of ['runtime','console','publishingView','workflow','tools','health','broadcasts','activity','navigation','uiUtils','publishingCenter']) await page.addScriptTag({ content: sources[key] });
   await page.evaluate(() => window.DTL_ADMIN.open('section:overview'));
 }
 
@@ -68,6 +68,10 @@ test('More stays open and sidebar marks the page actually being shown', async ({
   await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:queue');
   await expect(page.locator('.admin-side-nav [data-admin-section="queue"]')).toHaveClass(/active/);
   await expect(page.locator('.admin-side-nav [data-admin-activity]')).not.toHaveClass(/active/);
+
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('dtl:adminrender')));
+  await expect(page.locator('.admin-side-nav [data-admin-section="queue"]')).toHaveClass(/active/);
+  await expect(page.locator('.admin-side-nav [data-admin-activity]')).not.toHaveClass(/active/);
 });
 
 test('admin integration mutation survives navigation', async ({ page }) => {
@@ -90,6 +94,8 @@ test('autosave survives real module navigation and mobile admin shell does not o
   await expect(page.locator('#pubTitle')).toHaveCount(1);
   await page.locator('#pubTitle').fill('Draft title');
   await page.waitForTimeout(750);
+  await expect(page.locator('#pcSaveStatus')).not.toContainText('formatTime is not defined');
+  await expect(page.locator('#pcSaveStatus')).toContainText('Автосохранено');
   await page.evaluate(() => window.DTL_ADMIN.open('section:requests'));
   await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:requests');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
