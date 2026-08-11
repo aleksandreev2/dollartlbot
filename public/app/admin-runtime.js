@@ -203,7 +203,7 @@
       const built = contextFor(routeId, options.sourceElement || null);
       current = { id: routeId, route, context: built.context, cleanups: built.cleanups };
       markRoute(routeId);
-      persist(routeId);
+      if (!adoptBootstrapOverview) persist(routeId);
 
       let mounted = adoptBootstrapOverview;
       if (!mounted && typeof route.mount === 'function') {
