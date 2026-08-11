@@ -1,0 +1,42 @@
+name: Admin Browser Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'public/app/admin-*.js'
+      - 'tests/admin-runtime.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/admin-browser-smoke.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/app/admin-*.js'
+      - 'tests/admin-runtime.spec.mjs'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - '.github/workflows/admin-browser-smoke.yml'
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install project dependencies
+        run: npm install
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Admin runtime browser smoke tests
+        run: npm run test:admin-browser
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-browser-smoke-diagnostics
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 3
