@@ -45,7 +45,7 @@ async function boot(page,{width,height,compact=false}){
     const app=window.DTL_APP;
     app.state.detailNovel={
       id:1,title,original_language:'Korean',chapter_count:360,publication_status:'ongoing',source_url:'https://example.com/original',
-      queue_status:'in_progress',queue_position:null,current_chapter:151,progress_percent:42,
+      queue_status:'in_progress',queue_position:null,current_chapter:151,progress_percent:42,requester_username:'reader_requester',
       genres_tags:'Fantasy, Academy, Regression, Action, Kingdom Building, Adventure',
       started_at:'2026-08-05T12:00:00Z',progress_updated_at:'2026-08-11T15:00:00Z',updated_at:'2026-08-11T15:00:00Z',
     };
@@ -67,6 +67,8 @@ async function render(page,locale){
   await expect(page.locator('.live-tag')).toHaveCount(6);
   await expect(page.locator('.live-activity-item')).toHaveCount(2);
   await expect(page.locator('.live-detail-title')).toContainText('Grand Duke');
+  await expect(page.locator('.live-detail-requester a')).toHaveText('@reader_requester');
+  await expect(page.locator('.live-detail-requester a')).toHaveAttribute('href','https://t.me/reader_requester');
   await expect(page.locator('.title-release-history')).toBeVisible();
   await expect(page.locator('.title-release-row.current strong')).toContainText('86');
   await expect(page.locator('.title-release-row.current strong')).toContainText('151');
