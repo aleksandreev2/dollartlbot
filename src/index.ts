@@ -15,6 +15,7 @@ import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
 import { handleDiscoveryCatalogRequest } from './discovery-catalog-api';
 import { handleDiscoveryFeedRequest } from './discovery-feed';
+import { handleDiscoveryRawV2Request } from './discovery-raw-v2';
 import { handleDiscoveryRequest } from './discovery';
 import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
@@ -36,6 +37,7 @@ import { handlePublishingV2Request } from './publishing-v2';
 import { guardPublishingRequest } from './publishing-guard';
 import { handlePublicTitleRequest } from './public-titles';
 import { normalizeQueuePositions } from './queue';
+import { runRawCatalogEnrichment } from './raw-fucknovelpia';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
@@ -63,6 +65,8 @@ export default {
     if (discoveryFeedResponse) return discoveryFeedResponse;
     const discoveryCatalogResponse = await handleDiscoveryCatalogRequest(request, env, ctx);
     if (discoveryCatalogResponse) return discoveryCatalogResponse;
+    const discoveryRawV2Response = await handleDiscoveryRawV2Request(request, env);
+    if (discoveryRawV2Response) return discoveryRawV2Response;
     const discoveryResponse = await handleDiscoveryRequest(request, env);
     if (discoveryResponse) return discoveryResponse;
 
@@ -179,6 +183,7 @@ export default {
 
     if (scheduledAt.getUTCMinutes() % 20 === 0) {
       await runScheduledTask('novelpia_discovery_ingest', () => runNovelpiaDiscoveryIngestion(env, scheduledAt));
+      await runScheduledTask('raw_fucknovelpia_enrichment', () => runRawCatalogEnrichment(env, scheduledAt));
     }
 
     if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
