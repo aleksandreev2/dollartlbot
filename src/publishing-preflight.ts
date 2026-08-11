@@ -5,6 +5,71 @@ type Publication={id:number;add_bot_comment:number;status:string};
 type Chat={id:number;type:string;title?:string;username?:string;linked_chat_id?:number};
 type BotMember=TelegramChatMember&{can_post_messages?:boolean};
 
+export type PublishingEnvironmentCheck={
+  id:string;
+  label:string;
+  status:'ok'|'error'|'info';
+  message:string;
+};
+
+export type PublishingEnvironmentInspection={
+  ok:boolean;
+  checks:PublishingEnvironmentCheck[];
+  channel_id:number|string|null;
+  discussion_id:number|null;
+};
+
+export async function inspectPublishingEnvironment(
+  env:Env,
+  telegram:TelegramClient,
+  needsDiscussion:boolean,
+):Promise<PublishingEnvironmentInspection>{
+  const checks:PublishingEnvironmentCheck[]=[];
+  const channelSetting=await setting(env,'publish_channel_id');
+  if(!channelSetting){
+    checks.push({id:'channel_missing',label:'Канал',status:'error',message:'Укажите канал публикации в Админ → Настройки.'});
+    return {ok:false,checks,channel_id:null,discussion_id:null};
+  }
+
+  let channel:Chat;
+  try{channel=await telegram.call<Chat>('getChat',{chat_id:normalizeChatId(channelSetting)});}
+  catch(error){checks.push({id:'channel_unavailable',label:'Канал',status:'error',message:`Не удалось открыть канал публикации: ${friendly(error)}`});return{ok:false,checks,channel_id:channelSetting,discussion_id:null};}
+  if(channel.type!=='channel'){
+    checks.push({id:'channel_invalid',label:'Канал',status:'error',message:'В настройках публикации указан не Telegram-канал.'});
+    return {ok:false,checks,channel_id:channel.id,discussion_id:null};
+  }
+  checks.push({id:'channel',label:'Канал',status:'ok',message:channel.title||channel.username||String(channel.id)});
+
+  let me:{id:number};
+  try{me=await telegram.call<{id:number}>('getMe',{});}
+  catch(error){checks.push({id:'bot_identity_failed',label:'Бот',status:'error',message:`Telegram не подтвердил аккаунт бота: ${friendly(error)}`});return{ok:false,checks,channel_id:channel.id,discussion_id:null};}
+
+  let channelMember:BotMember;
+  try{channelMember=await telegram.call<BotMember>('getChatMember',{chat_id:channel.id,user_id:me.id});}
+  catch(error){checks.push({id:'channel_permission_check_failed',label:'Права бота',status:'error',message:`Не удалось проверить права бота в канале: ${friendly(error)}`});return{ok:false,checks,channel_id:channel.id,discussion_id:null};}
+  const canPost=(channelMember.status==='creator')||(channelMember.status==='administrator'&&channelMember.can_post_messages!==false);
+  if(!canPost){checks.push({id:'channel_permission_missing',label:'Права бота',status:'error',message:'Бот должен быть администратором канала с правом публиковать сообщения.'});return{ok:false,checks,channel_id:channel.id,discussion_id:null};}
+  checks.push({id:'channel_permission',label:'Права бота',status:'ok',message:'Публикация сообщений разрешена.'});
+
+  if(!needsDiscussion){
+    checks.push({id:'discussion_optional',label:'Комментарии',status:'info',message:'Discussion group не требуется для этой публикации.'});
+    return {ok:true,checks,channel_id:channel.id,discussion_id:channel.linked_chat_id??null};
+  }
+  if(!channel.linked_chat_id){checks.push({id:'discussion_unlinked',label:'Комментарии',status:'error',message:'У канала нет связанной discussion group. Файлы и комментарий бота отправить нельзя.'});return{ok:false,checks,channel_id:channel.id,discussion_id:null};}
+
+  let discussion:Chat;
+  try{discussion=await telegram.call<Chat>('getChat',{chat_id:channel.linked_chat_id});}
+  catch(error){checks.push({id:'discussion_unavailable',label:'Комментарии',status:'error',message:`Связанная группа комментариев недоступна: ${friendly(error)}`});return{ok:false,checks,channel_id:channel.id,discussion_id:channel.linked_chat_id};}
+  if(!['group','supergroup'].includes(discussion.type)){checks.push({id:'discussion_invalid',label:'Комментарии',status:'error',message:'Telegram linked_chat_id указывает не на группу комментариев.'});return{ok:false,checks,channel_id:channel.id,discussion_id:discussion.id};}
+
+  let discussionMember:TelegramChatMember;
+  try{discussionMember=await telegram.call<TelegramChatMember>('getChatMember',{chat_id:discussion.id,user_id:me.id});}
+  catch(error){checks.push({id:'discussion_permission_check_failed',label:'Комментарии',status:'error',message:`Не удалось проверить доступ бота к discussion group: ${friendly(error)}`});return{ok:false,checks,channel_id:channel.id,discussion_id:discussion.id};}
+  if(!isActiveChatMember(discussionMember)){checks.push({id:'discussion_permission_missing',label:'Комментарии',status:'error',message:'Бот не состоит в связанной discussion group и не сможет отправить файлы.'});return{ok:false,checks,channel_id:channel.id,discussion_id:discussion.id};}
+  checks.push({id:'discussion',label:'Комментарии',status:'ok',message:discussion.title||String(discussion.id)});
+  return {ok:true,checks,channel_id:channel.id,discussion_id:discussion.id};
+}
+
 export async function handlePublishingPreflight(
   request:Request,
   env:Env,
@@ -23,38 +88,20 @@ export async function handlePublishingPreflight(
   if(!publication)return miniAppJsonError('not_found','Публикация не найдена.',404);
   if(publication.status==='published')return null;
 
-  const channelSetting=await setting(env,'publish_channel_id');
-  if(!channelSetting)return miniAppJsonError('channel_missing','Укажите канал публикации в Админ → Настройки.',409);
-
-  let channel:Chat;
-  try{channel=await telegram.call<Chat>('getChat',{chat_id:normalizeChatId(channelSetting)});}catch(error){return fail(env,id,'channel_unavailable',`Не удалось открыть канал публикации: ${friendly(error)}`);}
-  if(channel.type!=='channel')return fail(env,id,'channel_invalid','В настройках публикации указан не Telegram-канал.');
-
-  let me:{id:number};
-  try{me=await telegram.call<{id:number}>('getMe',{});}catch(error){return fail(env,id,'bot_identity_failed',`Telegram не подтвердил аккаунт бота: ${friendly(error)}`);}
-  let channelMember:BotMember;
-  try{channelMember=await telegram.call<BotMember>('getChatMember',{chat_id:channel.id,user_id:me.id});}catch(error){return fail(env,id,'channel_permission_check_failed',`Не удалось проверить права бота в канале: ${friendly(error)}`);}
-  const canPost=(channelMember.status==='creator')||(channelMember.status==='administrator'&&channelMember.can_post_messages!==false);
-  if(!canPost)return fail(env,id,'channel_permission_missing','Бот должен быть администратором канала с правом публиковать сообщения.');
-
   const assets=await env.DB.prepare('SELECT COUNT(*) AS n FROM publication_assets WHERE publication_id=?').bind(id).first<{n:number}>();
   const needsDiscussion=Number(assets?.n||0)>0||publication.add_bot_comment===1;
-  if(!needsDiscussion)return null;
-  if(!channel.linked_chat_id)return fail(env,id,'discussion_unlinked','У канала нет связанной discussion group. Файлы в комментариях и комментарий бота публиковать нельзя, пока группа не привязана к каналу.');
+  const inspection=await inspectPublishingEnvironment(env,telegram,needsDiscussion);
+  const blocking=inspection.checks.find(item=>item.status==='error');
+  if(blocking)return fail(env,id,blocking.id,blocking.message);
 
-  let discussion:Chat;
-  try{discussion=await telegram.call<Chat>('getChat',{chat_id:channel.linked_chat_id});}catch(error){return fail(env,id,'discussion_unavailable',`Связанная группа комментариев недоступна: ${friendly(error)}`);}
-  if(!['group','supergroup'].includes(discussion.type))return fail(env,id,'discussion_invalid','Telegram linked_chat_id указывает не на группу комментариев.');
-  let discussionMember:TelegramChatMember;
-  try{discussionMember=await telegram.call<TelegramChatMember>('getChatMember',{chat_id:discussion.id,user_id:me.id});}catch(error){return fail(env,id,'discussion_permission_check_failed',`Не удалось проверить доступ бота к discussion group: ${friendly(error)}`);}
-  if(!isActiveChatMember(discussionMember))return fail(env,id,'discussion_permission_missing','Бот не состоит в связанной discussion group и не сможет отправить файлы в комментарии.');
-
-  const now=new Date().toISOString();
-  await env.DB.prepare(`
-    INSERT INTO app_settings (key,value,updated_at) VALUES ('discussion_chat_id',?,?)
-    ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at
-  `).bind(String(channel.linked_chat_id),now).run();
-  await log(env,id,'info','publish_preflight_ok',`Проверка пройдена: канал ${channel.id}, discussion group ${channel.linked_chat_id}, права бота подтверждены.`);
+  if(inspection.discussion_id){
+    const now=new Date().toISOString();
+    await env.DB.prepare(`
+      INSERT INTO app_settings (key,value,updated_at) VALUES ('discussion_chat_id',?,?)
+      ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at
+    `).bind(String(inspection.discussion_id),now).run();
+  }
+  await log(env,id,'info','publish_preflight_ok',`Проверка пройдена: канал ${inspection.channel_id??'—'}, discussion group ${inspection.discussion_id??'не требуется'}, права бота подтверждены.`);
   return null;
 }
 
