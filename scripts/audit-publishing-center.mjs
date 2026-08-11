@@ -93,12 +93,14 @@ new Function(pipelineFrontend);
 
 for(const token of ['publishing-center-tabs','publishing-center-preflight','publishing-center-clone','data-publishing-center-hidden','publication-pipeline-step'])need(css,token,'publishing center CSS');
 need(html,'/app/admin-publishing-center.css?v=20260811-pcenter2','publishing center CSS asset');
-need(html,'/app/admin-publishing-center.js?v=20260811-pcenter1','publishing center JS asset');
+need(html,'/app/admin-ui-utils.js?v=20260811-ui2','publishing time utility asset');
+need(html,'/app/admin-publishing-center.js?v=20260811-pcenter2','publishing center JS asset');
 need(html,'/app/admin-publication-pipeline.js?v=20260811-pcenter1','publishing pipeline JS asset');
 const publishingIndex=html.indexOf('/app/admin-publishing.js?v=20260810-admin1');
-const centerIndex=html.indexOf('/app/admin-publishing-center.js?v=20260811-pcenter1');
+const utilsIndex=html.indexOf('/app/admin-ui-utils.js?v=20260811-ui2');
+const centerIndex=html.indexOf('/app/admin-publishing-center.js?v=20260811-pcenter2');
 const pipelineIndex=html.indexOf('/app/admin-publication-pipeline.js?v=20260811-pcenter1');
-if(publishingIndex<0||centerIndex<0||pipelineIndex<0||centerIndex<publishingIndex||pipelineIndex<centerIndex)throw new Error('Publishing Center enhancers must load after canonical publishing in deterministic order.');
+if(publishingIndex<0||utilsIndex<0||centerIndex<0||pipelineIndex<0||utilsIndex<publishingIndex||centerIndex<utilsIndex||pipelineIndex<centerIndex)throw new Error('Publishing Center utilities and enhancers must load after canonical publishing in deterministic order.');
 need(pkg,'tests/admin-publishing-center.spec.mjs','publishing center browser coverage');
 need(pkg,'tests/admin-publication-pipeline.spec.mjs','publishing pipeline browser coverage');
 
