@@ -2,6 +2,7 @@ import { handleAccessAdminRequest } from './access-admin';
 import { handleAccessChatMemberUpdate, runAccessGateMaintenance } from './access-gate';
 import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
+import { handleAdminBroadcastRequest } from './admin-broadcasts';
 import { handleAdminEventsRequest } from './admin-events-api';
 import { handleAdminHealthRequest } from './admin-health';
 import { runAdminEventMaintenance } from './admin-events';
@@ -54,6 +55,8 @@ export default {
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
     if (accessAdminResponse) return accessAdminResponse;
+    const adminBroadcastResponse = await handleAdminBroadcastRequest(request, env, apiTelegram, ctx);
+    if (adminBroadcastResponse) return adminBroadcastResponse;
     const adminEventsResponse = await handleAdminEventsRequest(request, env, apiTelegram);
     if (adminEventsResponse) return adminEventsResponse;
     const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
