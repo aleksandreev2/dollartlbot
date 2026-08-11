@@ -91,7 +91,9 @@ jobs:
           node --check public/app/admin-tools.js
           node --check public/app/admin-request-ops.js
           node --check public/app/admin-activity.js
+          node --check public/app/admin-publishing-view.js
           node --check public/app/publication-template-ui.js
+          node --check public/app/admin-publishing-flow.js
           node --check public/app/admin-publishing.js
           node --check public/app/publication-stability-ui.js
           node --check public/app/quota-unlimited-ui.js
@@ -108,6 +110,9 @@ jobs:
           test -f public/app/admin-activity.css
           test -f public/app/admin-activity.js
           test -f public/app/admin-publishing.css
+          test -f public/app/admin-publishing-view.js
+          test -f public/app/admin-publishing-flow.css
+          test -f public/app/admin-publishing-flow.js
           test -f public/app/publication-template-ui.css
           test -f public/app/publication-template-ui.js
           test -f public/app/publication-stability-ui.css
@@ -188,8 +193,11 @@ jobs:
           grep -q '/app/admin-activity.css?v=20260810-adminactivity1' public/app/index.html
           grep -q '/app/admin-activity.js?v=20260810-adminactivity1' public/app/index.html
           grep -q '/app/admin-publishing.css?v=20260810-app1' public/app/index.html
+          grep -q '/app/admin-publishing-view.js?v=20260811-view2' public/app/index.html
+          grep -q '/app/admin-publishing-flow.css?v=20260811-pflow1' public/app/index.html
+          grep -q '/app/admin-publishing-flow.js?v=20260811-pflow1' public/app/index.html
           grep -q '/app/publication-template-ui.css?v=20260810-pubtemplate1' public/app/index.html
-          grep -q '/app/publication-template-ui.js?v=20260810-pubtemplate2' public/app/index.html
+          grep -q '/app/publication-template-ui.js?v=20260811-pubtemplate3' public/app/index.html
           grep -q '/app/publication-stability-ui.css?v=20260810-pubstable1' public/app/index.html
           grep -q '/app/publication-stability-ui.js?v=20260810-pubstable1' public/app/index.html
           grep -q '/app/admin-console.js?v=20260811-admin2&routes=20260811f' public/app/index.html
