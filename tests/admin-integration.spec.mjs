@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const sources = Object.fromEntries([
-  'runtime','console','publishingView','workflow','tools','health','broadcasts','navigation','publishingCenter',
+  'runtime','console','publishingView','workflow','tools','health','broadcasts','activity','navigation','publishingCenter',
 ].map(name => [name, fs.readFileSync(new URL(`../public/app/${({
-  runtime:'admin-runtime.js', console:'admin-console.js', publishingView:'admin-publishing-view.js', workflow:'admin-workflow.js', tools:'admin-tools.js', health:'admin-health.js', broadcasts:'admin-broadcasts.js', navigation:'admin-navigation.js', publishingCenter:'admin-publishing-center.js',
+  runtime:'admin-runtime.js', console:'admin-console.js', publishingView:'admin-publishing-view.js', workflow:'admin-workflow.js', tools:'admin-tools.js', health:'admin-health.js', broadcasts:'admin-broadcasts.js', activity:'admin-activity.js', navigation:'admin-navigation.js', publishingCenter:'admin-publishing-center.js',
 })[name]}`, import.meta.url), 'utf8')]));
 
 async function boot(page) {
@@ -33,10 +33,11 @@ async function boot(page) {
       else if (path === '/api/app/admin/users') data = { users:[], total:0, limit:40, has_more:false };
       else if (path === '/api/app/admin/health') data = { status:'healthy', generated_at:new Date().toISOString(), queue:{}, publications:{}, notifications:{}, telegram:{bot:{ok:true},channel:{ok:true},discussion:{ok:true}}, issues:{} };
       else if (path === '/api/app/admin/publications') data = { publications:[] };
+      else if (path === '/api/app/admin/events') data = url.searchParams.get('summary') === '1' ? { summary:{total:0,unread:0,unread_problems:0,failed_alerts:0} } : { events:[], summary:{total:0,unread:0,unread_problems:0,failed_alerts:0}, next_before:null };
       return new Response(JSON.stringify(data), { status:200, headers:{'content-type':'application/json'} });
     };
   });
-  for (const key of ['runtime','console','publishingView','workflow','tools','health','broadcasts','navigation','publishingCenter']) await page.addScriptTag({ content: sources[key] });
+  for (const key of ['runtime','console','publishingView','workflow','tools','health','broadcasts','activity','navigation','publishingCenter']) await page.addScriptTag({ content: sources[key] });
   await page.evaluate(() => window.DTL_ADMIN.open('section:overview'));
 }
 
@@ -47,6 +48,26 @@ test('Overview → Requests → Queue → Publishing → Publications → Broadc
     await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe(route);
     await expect(page.locator('.admin-v2')).toHaveCount(1);
   }
+});
+
+test('More stays open and sidebar marks the page actually being shown', async ({ page }) => {
+  await boot(page);
+
+  const more = page.locator('.admin-side-nav .admin-nav-more');
+  await expect(more).toHaveCount(1);
+  await more.locator('summary').click();
+  await expect(more).toHaveAttribute('open', '');
+  await page.evaluate(() => window.DTL_RUNTIME.schedule());
+  await expect(more).toHaveAttribute('open', '');
+
+  await page.locator('.admin-side-nav [data-admin-activity]').click();
+  await expect(page.locator('.admin-work-head h1')).toHaveText('Активность');
+  await expect(page.locator('.admin-side-nav [data-admin-activity]')).toHaveClass(/active/);
+
+  await page.evaluate(() => window.DTL_ADMIN.open('section:queue'));
+  await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:queue');
+  await expect(page.locator('.admin-side-nav [data-admin-section="queue"]')).toHaveClass(/active/);
+  await expect(page.locator('.admin-side-nav [data-admin-activity]')).not.toHaveClass(/active/);
 });
 
 test('admin integration mutation survives navigation', async ({ page }) => {
