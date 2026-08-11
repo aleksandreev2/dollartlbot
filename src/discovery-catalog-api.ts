@@ -8,6 +8,7 @@ import {
   getCatalogNovel,
   getNovelpiaIngestState,
   linkCatalogToSubmission,
+  runNovelpiaDiscoveryIngestion,
   searchNovelpiaCatalog,
   toggleCatalogInterest,
 } from './novelpia-discovery';
@@ -16,10 +17,16 @@ const SEARCH_PATH = '/api/app/discovery/catalog/search';
 const INTEREST_PATH = '/api/app/discovery/catalog/interest';
 const LINK_PATH = '/api/app/discovery/catalog/link';
 const HEALTH_PATH = '/api/app/discovery/catalog/health';
+const REFRESH_PATH = '/api/app/discovery/catalog/refresh';
+const REFRESH_BUSY_MS = 2 * 60 * 1000;
 
-export async function handleDiscoveryCatalogRequest(request: Request, env: Env): Promise<Response | null> {
+export async function handleDiscoveryCatalogRequest(
+  request: Request,
+  env: Env,
+  ctx?: ExecutionContext,
+): Promise<Response | null> {
   const url = new URL(request.url);
-  const isKnown = [SEARCH_PATH, INTEREST_PATH, LINK_PATH, HEALTH_PATH].includes(url.pathname);
+  const isKnown = [SEARCH_PATH, INTEREST_PATH, LINK_PATH, HEALTH_PATH, REFRESH_PATH].includes(url.pathname);
   if (!isKnown) return null;
 
   if (request.method === 'OPTIONS') {
@@ -118,6 +125,41 @@ export async function handleDiscoveryCatalogRequest(request: Request, env: Env):
       if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
       const state = await getNovelpiaIngestState(env);
       return miniAppJson({ provider: 'novelpia', state });
+    }
+
+    if (request.method === 'POST' && url.pathname === REFRESH_PATH) {
+      if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
+      if (!ctx) return miniAppJsonError('refresh_unavailable', 'Background refresh is unavailable.', 503);
+
+      const state = await getNovelpiaIngestState(env);
+      const lastAttempt = state?.last_attempt_at ? Date.parse(state.last_attempt_at) : 0;
+      const lastSuccess = state?.last_success_at ? Date.parse(state.last_success_at) : 0;
+      const inProgress = Number.isFinite(lastAttempt)
+        && lastAttempt > lastSuccess
+        && Date.now() - lastAttempt < REFRESH_BUSY_MS;
+      if (inProgress) {
+        return miniAppJson({
+          started: false,
+          busy: true,
+          last_attempt_at: state?.last_attempt_at ?? null,
+        });
+      }
+
+      const requestedAt = new Date();
+      ctx.waitUntil(
+        runNovelpiaDiscoveryIngestion(env, requestedAt).catch((error) => {
+          console.error(JSON.stringify({
+            event: 'novelpia_discovery_manual_refresh_failed',
+            requested_by: auth.telegramUser.id,
+            error: errorMessage(error),
+          }));
+        }),
+      );
+      return miniAppJson({
+        started: true,
+        busy: false,
+        requested_at: requestedAt.toISOString(),
+      });
     }
 
     return null;
