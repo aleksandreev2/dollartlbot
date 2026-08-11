@@ -92,6 +92,7 @@
   }
 
   document.addEventListener('click',e=>{if(e.target.closest?.('[data-admin-section]')){active=false;document.querySelectorAll('[data-admin-health]').forEach(b=>b.classList.remove('active'));}},true);
+  document.addEventListener('dtl:adminrender',()=>installNav());
   runtime.registerPatcher(()=>{if(document.querySelector('.admin-v2'))installNav();});
   window.DTL_ADMIN_HEALTH=Object.freeze({render,refresh:render,isActive:()=>active,last:()=>last});
 })();
