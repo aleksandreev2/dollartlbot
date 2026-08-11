@@ -15,6 +15,7 @@ const migration18 = read('migrations/0018_release_broadcast_dedupe.sql');
 const links = read('src/publication-links.ts');
 const publishing = read('src/publishing-comments-v3.ts');
 const runner = read('src/broadcast-runner.ts');
+const broadcastCenter = read('src/broadcast-center.ts');
 const ui = read('public/app/publication-template-ui.js');
 const css = read('public/app/publication-template-ui.css');
 const html = read('public/app/index.html');
@@ -113,9 +114,13 @@ for (const token of [
   'release:publication:${publicationId}',
   'INSERT OR IGNORE INTO broadcasts',
   'dedupe_key',
+  "from './broadcast-center'",
+]) need(runner, token, 'release broadcast enqueue bridge');
+for (const token of [
   'runtime_leases',
   "DELETE FROM runtime_leases WHERE name = ? AND owner_token = ?",
-]) need(runner, token, 'broadcast runner dedupe/lease');
+  'runBroadcastCenterMaintenanceWithLease',
+]) need(broadcastCenter, token, 'canonical broadcast lease owner');
 
 for (const token of ['publication-request-link','publication-template-preview']) need(css, token, 'publication template CSS');
 new Function(ui);
@@ -128,4 +133,4 @@ if (templateIndex < 0 || publishingIndex < 0 || templateIndex > publishingIndex)
   throw new Error('Publication template middleware must load before admin-publishing.js.');
 }
 
-console.log('Canonical Mini App auth + publication template audit passed: one initData verifier, English backend-managed publication lines, live requester username refresh, request-to-publication preselection, atomic publish claim, release-job dedupe, serialized broadcast maintenance, rollback on link failure, and preview UX are wired.');
+console.log('Canonical Mini App auth + publication template audit passed: one initData verifier, English backend-managed publication lines, live requester username refresh, request-to-publication preselection, atomic publish claim, release-job dedupe, canonical serialized broadcast maintenance, rollback on link failure, and preview UX are wired.');
