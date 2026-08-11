@@ -95,6 +95,13 @@ async function render(page,locale){
     history:document.querySelector('.title-release-history')?.getBoundingClientRect(),
     railHeight:document.querySelector('.live-progress-rail')?.getBoundingClientRect().height,
     flagSizes:[...document.querySelectorAll('.live-detail-language-flag')].map(node=>node.getBoundingClientRect().width),
+    ctaHeights:[...document.querySelectorAll('.live-detail-actions > *')].map(node=>node.getBoundingClientRect().height),
+    motion:{
+      hero:getComputedStyle(document.querySelector('.detail-hero')).animationName,
+      rail:getComputedStyle(document.querySelector('.live-progress-rail-fill')).animationName,
+      marker:getComputedStyle(document.querySelector('.live-progress-marker')).animationName,
+      history:getComputedStyle(document.querySelector('.title-release-history')).animationName,
+    },
     width:document.documentElement.clientWidth,
   }));
   expect(layout.overflow,`${locale}: horizontal overflow`).toBeLessThanOrEqual(1);
@@ -104,6 +111,11 @@ async function render(page,locale){
   expect(layout.history.right,`${locale}: history right edge`).toBeLessThanOrEqual(layout.width+1);
   expect(layout.railHeight,`${locale}: progress rail visual height`).toBeGreaterThanOrEqual(26);
   expect(Math.min(...layout.flagSizes),`${locale}: language flag visible size`).toBeGreaterThanOrEqual(16);
+  expect(layout.motion.hero,`${locale}: hero entrance motion`).not.toBe('none');
+  expect(layout.motion.rail,`${locale}: progress fill motion`).not.toBe('none');
+  expect(layout.motion.marker,`${locale}: marker settle motion`).not.toBe('none');
+  expect(layout.motion.history,`${locale}: release history motion`).not.toBe('none');
+  if(layout.ctaHeights.length===2)expect(Math.abs(layout.ctaHeights[0]-layout.ctaHeights[1]),`${locale}: CTA height alignment`).toBeLessThanOrEqual(1);
 }
 
 for(const viewport of [
@@ -117,3 +129,23 @@ for(const viewport of [
     for(const locale of LOCALES)await render(page,locale);
   });
 }
+
+test('empty release state stays compact',async({page})=>{
+  await boot(page,{width:360,height:780});
+  await page.evaluate(()=>window.DTL_TITLE_RELEASE_HISTORY.cache.set(1,{status:'ready',releases:[]}));
+  await page.evaluate(()=>{window.DTL_APP.applyLocale('en');window.DTL_APP.navigate('detail',false);});
+  await expect(page.locator('.title-release-state.empty')).toBeVisible();
+  const height=await page.locator('.title-release-history').evaluate(node=>node.getBoundingClientRect().height);
+  expect(height).toBeLessThan(190);
+});
+
+test('detail motion respects reduced-motion preference',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await boot(page,{width:760,height:720,compact:true});
+  await page.evaluate(()=>{window.DTL_APP.applyLocale('en');window.DTL_APP.navigate('detail',false);});
+  await expect(page.locator('[data-live-detail]')).toBeVisible();
+  const motion=await page.evaluate(()=>[
+    '.detail-hero','.live-detail-progress-fill','.live-progress-rail-fill','.live-progress-marker','.title-release-history','.title-release-row'
+  ].map(selector=>getComputedStyle(document.querySelector(selector)).animationName));
+  expect(motion.every(name=>name==='none')).toBe(true);
+});
