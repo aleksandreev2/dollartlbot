@@ -27,6 +27,7 @@ async function boot(page) {
       else if (path === '/api/app/admin/publishing') data = { settings:{}, publications:[] };
       else if (path === '/api/app/admin/publishing-center') data = { templates:[], draft:null };
       else if (path === '/api/app/admin/publishing-center/preflight') data = { ready:true, checks:[{id:'ok',label:'Ready',status:'ok',message:'Ready'}] };
+      else if (path === '/api/app/admin/publishing-center/draft') data = { draft:{ updated_at:new Date().toISOString() } };
       else if (path === '/api/app/admin/broadcasts') data = { templates:[], audiences:[], locales:[{code:'en',label:'English'}], broadcasts:[] };
       else if (path === '/api/app/admin/broadcasts/estimate') data = { total:0, locales:{}, month_key:'2026-08' };
       else if (path === '/api/app/admin/users') data = { users:[], total:0, limit:40, has_more:false };
@@ -67,7 +68,7 @@ test('autosave survives real module navigation and mobile admin shell does not o
   await page.evaluate(() => window.DTL_ADMIN.open('section:publishing'));
   await expect(page.locator('#pubTitle')).toHaveCount(1);
   await page.locator('#pubTitle').fill('Draft title');
-  await page.waitForTimeout(30);
+  await page.waitForTimeout(750);
   await page.evaluate(() => window.DTL_ADMIN.open('section:requests'));
   await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:requests');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
