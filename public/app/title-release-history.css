@@ -139,3 +139,52 @@
   .title-release-open span{overflow-wrap:anywhere}
 }
 @media(prefers-reduced-motion:reduce){.title-release-state.loading svg{animation:none}}
+
+/* Detail release history polish */
+.title-release-history{
+  box-shadow:0 10px 28px rgba(67,49,27,.045);
+  animation:title-release-enter .34s cubic-bezier(.2,.72,.28,1) .19s both;
+}
+.title-release-history-head{padding-bottom:13px;}
+.title-release-timeline{padding-top:5px;}
+.title-release-row{
+  animation:title-release-row-enter .32s cubic-bezier(.2,.72,.28,1) both;
+}
+.title-release-row:nth-child(1){animation-delay:.24s}
+.title-release-row:nth-child(2){animation-delay:.29s}
+.title-release-row:nth-child(3){animation-delay:.34s}
+.title-release-row:nth-child(4){animation-delay:.39s}
+.title-release-row:nth-child(5){animation-delay:.44s}
+.title-release-dot{transition:transform .16s ease,box-shadow .16s ease;}
+.title-release-open{
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease,background .16s ease;
+}
+.title-release-state.empty{
+  min-height:34px;
+  padding:4px 0 8px;
+  font-size:11px;
+  color:#958d82;
+}
+.title-release-state.empty svg{
+  width:15px;
+  height:15px;
+  margin-left:5px;
+}
+.title-release-row.current+.title-release-state.empty{
+  border-top:1px dashed #eee8de;
+  margin-top:0;
+}
+@media(hover:hover){
+  .title-release-row:hover .title-release-dot{transform:translateY(-1px);}
+  .title-release-open:hover{transform:translateY(-1px);border-color:#d7cab8;background:#fffaf2;box-shadow:0 7px 16px rgba(66,48,27,.07);}
+}
+@keyframes title-release-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes title-release-row-enter{from{opacity:0;transform:translateX(-7px)}to{opacity:1;transform:none}}
+@media(max-width:560px){
+  .title-release-history-head{padding-bottom:11px;}
+  .title-release-state.empty{padding-bottom:6px;}
+}
+@media(prefers-reduced-motion:reduce){
+  .title-release-history,.title-release-row{animation:none!important;}
+  .title-release-dot,.title-release-open{transition:none!important;}
+}
