@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
     "typecheck": "npm run cf-typegen && tsc --noEmit",
-    "test:admin-browser": "playwright test tests/admin-runtime.spec.mjs tests/admin-data-v2.spec.mjs tests/admin-broadcasts.spec.mjs",
+    "test:admin-browser": "playwright test tests/admin-runtime.spec.mjs tests/admin-data-v2.spec.mjs tests/admin-broadcasts.spec.mjs tests/admin-publishing-center.spec.mjs",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
     "prepare:vendor": "node scripts/prepare-vendor.mjs",
