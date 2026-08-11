@@ -3,12 +3,12 @@
   const tg = window.Telegram?.WebApp;
   if (!runtime?.registerPatcher) throw new Error('DTL runtime must load before admin-runtime.js');
 
-  const STORAGE_KEY = 'dtl:admin:last-section';
+  const STORAGE_KEY = 'dtl:admin:route:v2';
+  const LEGACY_STORAGE_KEY = 'dtl:admin:last-section';
   const routes = new Map();
   let current = null;
   let controller = null;
   let generation = 0;
-  let replayDepth = 0;
   let transitionDepth = 0;
   let bootstrapping = false;
   let navigationSequence = 0;
@@ -35,16 +35,24 @@
     return '';
   }
 
-  function navElementForRoute(id, preferred = null) {
-    if (preferred instanceof HTMLButtonElement && preferred.isConnected) return preferred;
-    const selector = selectorForRoute(id);
-    if (!selector) return null;
-    const candidates = [...document.querySelectorAll(selector)].filter(node => node instanceof HTMLButtonElement);
-    return candidates.find(node => node.offsetParent !== null) || candidates[0] || null;
+  function persist(id) {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, id);
+      sessionStorage.removeItem(LEGACY_STORAGE_KEY);
+    } catch {}
   }
 
-  function persist(id) {
-    try { sessionStorage.setItem(STORAGE_KEY, id); } catch {}
+  function restoredRouteId() {
+    let id = '';
+    try {
+      id = sessionStorage.getItem(STORAGE_KEY) || '';
+      const legacy = sessionStorage.getItem(LEGACY_STORAGE_KEY) || '';
+      if (!id && legacy) id = legacy;
+      sessionStorage.removeItem(LEGACY_STORAGE_KEY);
+      if (id) sessionStorage.setItem(STORAGE_KEY, id);
+    } catch {}
+    if (!id || !routes.has(id)) return routes.has('section:overview') ? 'section:overview' : '';
+    return id;
   }
 
   function icons() {
@@ -160,15 +168,6 @@
     delete document.body.dataset.dtlAdminRoute;
   }
 
-  function replayLegacyNavigation(id, sourceElement) {
-    const button = navElementForRoute(id, sourceElement);
-    if (!(button instanceof HTMLButtonElement)) return false;
-    replayDepth += 1;
-    try { button.click(); }
-    finally { replayDepth = Math.max(0, replayDepth - 1); }
-    return true;
-  }
-
   function ensureShell() {
     if (document.querySelector('.admin-v2')) return { ready: true, bootstrapped: false };
     if (!window.DTL_ADMIN_CONSOLE?.open || bootstrapping) return { ready: false, bootstrapped: false };
@@ -184,11 +183,19 @@
     return { ready: Boolean(document.querySelector('.admin-v2')), bootstrapped: true };
   }
 
+  function rejectUnknownRoute(routeId) {
+    console.error(`[DTL admin] Refusing unregistered route: ${routeId}`);
+    document.dispatchEvent(new CustomEvent('dtl:adminrouteerror', { detail: { id: routeId, reason: 'unregistered' } }));
+    return false;
+  }
+
   async function open(id, options = {}) {
     const routeId = String(id || 'section:overview');
+    const route = routes.get(routeId);
+    if (!route) return rejectUnknownRoute(routeId);
+
     const sequence = ++navigationSequence;
     const sameRoute = current?.id === routeId;
-    const route = routes.get(routeId) || Object.freeze({ id: routeId, legacy: true });
     const shell = ensureShell();
     if (!shell.ready || sequence !== navigationSequence) return false;
     const adoptBootstrapOverview = shell.bootstrapped && routeId === 'section:overview' && !options.sourceElement;
@@ -211,19 +218,17 @@
       const built = contextFor(routeId, options.sourceElement || null);
       current = { id: routeId, route, context: built.context, cleanups: built.cleanups };
       markRoute(routeId);
-      if (!adoptBootstrapOverview) persist(routeId);
 
       let mounted = adoptBootstrapOverview;
-      if (!mounted && typeof route.mount === 'function') {
-        await route.mount(built.context);
-        mounted = built.context.isCurrent();
-      } else if (!mounted) {
-        mounted = replayLegacyNavigation(routeId, options.sourceElement || null);
+      if (!mounted) {
+        const result = await route.mount?.(built.context);
+        mounted = result !== false && built.context.isCurrent();
       }
 
       if (generation === localGeneration && current?.id === routeId) {
+        persist(routeId);
         document.dispatchEvent(new CustomEvent('dtl:adminroutechange', {
-          detail: { id: routeId, generation: localGeneration, legacy: typeof route.mount !== 'function', mounted },
+          detail: { id: routeId, generation: localGeneration, mounted },
         }));
       }
       return mounted;
@@ -233,16 +238,17 @@
   }
 
   async function refresh() {
-    if (!current?.id) return open('section:overview', { force: true });
+    if (!current?.id) return restore();
     const route = routes.get(current.id);
+    if (!route) return false;
     abortReads();
-    if (route?.refresh) return route.refresh(current.context);
+    if (typeof route.refresh === 'function') return route.refresh(current.context);
     return open(current.id, { force: true });
   }
 
   async function restore() {
-    let id = 'section:overview';
-    try { id = sessionStorage.getItem(STORAGE_KEY) || id; } catch {}
+    const id = restoredRouteId();
+    if (!id) return false;
     return open(id);
   }
 
@@ -251,13 +257,11 @@
       route: current?.id || null,
       generation,
       transitioning: transitionDepth > 0,
-      replaying: replayDepth > 0,
       registeredRoutes: [...routes.keys()],
     });
   }
 
   document.addEventListener('click', event => {
-    if (replayDepth > 0) return;
     const target = event.target instanceof Element
       ? event.target.closest('[data-admin-section],[data-admin-tools],[data-admin-health],[data-jump]')
       : null;
@@ -271,7 +275,7 @@
   }, true);
 
   document.addEventListener('click', event => {
-    if (replayDepth > 0 || !current) return;
+    if (!current) return;
     const nav = event.target instanceof Element ? event.target.closest('[data-nav]') : null;
     if (!nav || nav.getAttribute('data-nav') === 'admin') return;
     navigationSequence += 1;
@@ -279,20 +283,6 @@
     void unmountCurrent('leave-admin');
     clearRouteMarker();
   }, true);
-
-  document.addEventListener('dtl:adminrender', event => {
-    if (transitionDepth || bootstrapping || current) return;
-    const section = event.detail?.section;
-    if (!section) return;
-    const id = `section:${section}`;
-    generation += 1;
-    controller = new AbortController();
-    const route = routes.get(id) || Object.freeze({ id, legacy: true });
-    const built = contextFor(id, null);
-    current = { id, route, context: built.context, cleanups: built.cleanups };
-    markRoute(id);
-    persist(id);
-  });
 
   document.addEventListener('dtl:viewchange', event => {
     if (event.detail?.view === 'admin') return;
