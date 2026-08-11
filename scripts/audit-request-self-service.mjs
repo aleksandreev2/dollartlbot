@@ -23,13 +23,13 @@ for(const token of [
 ])need(migration,token,'migration');
 
 for(const token of [
-  '/api/app/requests/',
+  'const userMatch =',
+  'const adminMatch =',
   "'manage'",
   "'edit'",
   "'raw'",
   "'message'",
   "'withdraw'",
-  '/api/app/admin/requests/',
   "'needs-info'",
   "'resolve-info'",
   "status !== 'pending'",
@@ -74,7 +74,7 @@ const coreAt=index.indexOf('handleMiniAppCoreRequest(request, env)');
 if(serviceAt<0||coreAt<0||serviceAt>coreAt)throw new Error('self-service routes must run before legacy Mini App core routes');
 
 for(const token of [
-  'data.selfServiceStamp',
+  'dataset.selfServiceStamp',
   '/api/app/requests/${id}/manage',
   '/api/app/requests/${id}/edit',
   '/api/app/requests/${id}/raw',
