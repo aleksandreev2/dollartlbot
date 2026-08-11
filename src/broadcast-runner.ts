@@ -1,8 +1,5 @@
-import { runBroadcastMaintenance } from './notifications';
+import { runBroadcastCenterMaintenanceWithLease } from './broadcast-center';
 import type { TelegramClient } from './telegram';
-
-const LEASE_NAME = 'release_broadcast_runner';
-const LEASE_MS = 5 * 60 * 1000;
 
 export async function queuePublicationReleaseBroadcast(
   env: Env,
@@ -25,34 +22,10 @@ export async function queuePublicationReleaseBroadcast(
   return Number(row.id);
 }
 
-export async function runBroadcastMaintenanceWithLease(
+export function runBroadcastMaintenanceWithLease(
   env: Env,
   telegram: TelegramClient,
   maxBatches = 1,
 ): Promise<boolean> {
-  const owner = crypto.randomUUID();
-  const now = new Date();
-  const nowIso = now.toISOString();
-  const expiresIso = new Date(now.getTime() + LEASE_MS).toISOString();
-
-  const claimed = await env.DB.prepare(`
-    INSERT INTO runtime_leases (name, owner_token, expires_at, updated_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(name) DO UPDATE SET
-      owner_token = excluded.owner_token,
-      expires_at = excluded.expires_at,
-      updated_at = excluded.updated_at
-    WHERE runtime_leases.expires_at <= excluded.updated_at
-  `).bind(LEASE_NAME, owner, expiresIso, nowIso).run();
-
-  if ((claimed.meta.changes ?? 0) === 0) return false;
-
-  try {
-    await runBroadcastMaintenance(env, telegram, maxBatches);
-    return true;
-  } finally {
-    await env.DB.prepare(
-      'DELETE FROM runtime_leases WHERE name = ? AND owner_token = ?',
-    ).bind(LEASE_NAME, owner).run().catch(() => undefined);
-  }
+  return runBroadcastCenterMaintenanceWithLease(env, telegram, maxBatches);
 }
