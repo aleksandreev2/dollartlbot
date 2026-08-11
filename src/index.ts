@@ -32,6 +32,7 @@ import { handlePublishingPreflight } from './publishing-preflight';
 import { handlePublishingRequest } from './publishing';
 import { handlePublishingV2Request } from './publishing-v2';
 import { guardPublishingRequest } from './publishing-guard';
+import { handlePublicTitleRequest } from './public-titles';
 import { normalizeQueuePositions } from './queue';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
 import { retryPendingAdminDeliveries } from './submissions';
@@ -44,6 +45,8 @@ const PROCESSED_UPDATE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const publicTitleResponse = await handlePublicTitleRequest(request, env);
+    if (publicTitleResponse) return publicTitleResponse;
     const onboardingResponse = await handleOnboardingRequest(request, env);
     if (onboardingResponse) return onboardingResponse;
     const enhancedMiniAppResponse = await handleEnhancedMiniAppRequest(request, env, ctx);
