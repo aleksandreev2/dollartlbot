@@ -7,7 +7,7 @@
   const extra={publications:['files','Публикации'],users:['users','Пользователи'],analytics:['chart-no-axes-combined','Аналитика']};
   let active='',selectedUser=null,userFilter='all',userSort='recent',userQuery='',userOffset=0,analyticsDays=30,busy=false,searchTimer=0;
   const api=(path,options={})=>adminRuntime.api(path,options);
-  const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const icon=n=>`<i data-lucide="${n}" aria-hidden="true"></i>`;
   function icons(){adminRuntime.icons?.();}
   function toast(text,error=false){adminRuntime.toast?.(text,error);}
