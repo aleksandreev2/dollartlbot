@@ -41,3 +41,18 @@ CREATE TABLE IF NOT EXISTS submission_raw_history (
 
 CREATE INDEX IF NOT EXISTS idx_submission_raw_history_request
   ON submission_raw_history(submission_id, id DESC);
+
+-- D1 batches execute all statements even when an UPDATE matched zero rows. If a
+-- pending request is rejected while its replacement RAW is still uploading,
+-- the history INSERT can therefore run after the guarded UPDATE did nothing.
+-- Keep history truthful at the database boundary: a replacement record only
+-- survives when its new Telegram file is actually the active RAW on the request.
+CREATE TRIGGER IF NOT EXISTS trg_submission_raw_history_active_replace
+AFTER INSERT ON submission_raw_history
+WHEN NOT EXISTS (
+  SELECT 1 FROM submissions
+  WHERE id = NEW.submission_id AND raw_file_id = NEW.new_file_id
+)
+BEGIN
+  DELETE FROM submission_raw_history WHERE id = NEW.id;
+END;
