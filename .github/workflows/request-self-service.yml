@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/request-self-service.ts'
+      - 'src/request-self-service-finalize.ts'
       - 'src/request-self-service-read.ts'
       - 'src/admin-actions-v2.ts'
       - 'src/domain.ts'
@@ -21,6 +22,7 @@ on:
     branches: [main]
     paths:
       - 'src/request-self-service.ts'
+      - 'src/request-self-service-finalize.ts'
       - 'src/request-self-service-read.ts'
       - 'src/admin-actions-v2.ts'
       - 'src/domain.ts'
@@ -58,6 +60,7 @@ jobs:
           node --check public/app/notification-deeplink.js
       - name: Verify assets are wired
         run: |
+          test -f src/request-self-service-finalize.ts
           test -f public/app/request-self-service-ui-v2.js
           test -f public/app/request-self-service-ui.css
           test -f migrations/0029_request_self_service.sql
