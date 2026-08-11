@@ -1,18 +1,20 @@
 (() => {
   let observer=null;
   let refreshBusy=false;
+  let apiWrapped=false;
+  const rawByCatalog=new Map();
 
   const REFRESH_COPY={
-    en:{refresh:'Refresh NovelPia',running:'Refresh started',busy:'NovelPia refresh is already running',failed:'Could not start NovelPia refresh'},
-    ru:{refresh:'Обновить NovelPia',running:'Обновление NovelPia запущено',busy:'Обновление NovelPia уже идёт',failed:'Не удалось запустить обновление NovelPia'},
-    es:{refresh:'Actualizar NovelPia',running:'Actualización de NovelPia iniciada',busy:'NovelPia ya se está actualizando',failed:'No se pudo iniciar la actualización de NovelPia'},
-    fil:{refresh:'I-refresh ang NovelPia',running:'Nagsimula ang NovelPia refresh',busy:'Tumatakbo na ang NovelPia refresh',failed:'Hindi masimulan ang NovelPia refresh'},
-    hi:{refresh:'NovelPia रीफ़्रेश करें',running:'NovelPia रीफ़्रेश शुरू हुआ',busy:'NovelPia रीफ़्रेश पहले से चल रहा है',failed:'NovelPia रीफ़्रेश शुरू नहीं हो सका'},
-    pt:{refresh:'Atualizar NovelPia',running:'Atualização do NovelPia iniciada',busy:'O NovelPia já está sendo atualizado',failed:'Não foi possível iniciar a atualização do NovelPia'},
-    id:{refresh:'Segarkan NovelPia',running:'Penyegaran NovelPia dimulai',busy:'Penyegaran NovelPia sedang berjalan',failed:'Tidak dapat memulai penyegaran NovelPia'},
-    vi:{refresh:'Làm mới NovelPia',running:'Đã bắt đầu làm mới NovelPia',busy:'NovelPia đang được làm mới',failed:'Không thể bắt đầu làm mới NovelPia'},
-    fr:{refresh:'Actualiser NovelPia',running:'Actualisation de NovelPia lancée',busy:'NovelPia est déjà en cours d’actualisation',failed:'Impossible de lancer l’actualisation de NovelPia'},
-    de:{refresh:'NovelPia aktualisieren',running:'NovelPia-Aktualisierung gestartet',busy:'NovelPia wird bereits aktualisiert',failed:'NovelPia-Aktualisierung konnte nicht gestartet werden'},
+    en:{refresh:'Refresh sources',running:'Discovery refresh started',busy:'Source refresh is already running',failed:'Could not start source refresh',verifiedRaw:'Verified RAW'},
+    ru:{refresh:'Обновить источники',running:'Обновление источников запущено',busy:'Обновление источников уже идёт',failed:'Не удалось запустить обновление источников',verifiedRaw:'Проверенный RAW'},
+    es:{refresh:'Actualizar fuentes',running:'Actualización de fuentes iniciada',busy:'Las fuentes ya se están actualizando',failed:'No se pudo iniciar la actualización',verifiedRaw:'RAW verificado'},
+    fil:{refresh:'I-refresh ang sources',running:'Nagsimula ang source refresh',busy:'Tumatakbo na ang source refresh',failed:'Hindi masimulan ang source refresh',verifiedRaw:'Verified RAW'},
+    hi:{refresh:'स्रोत रीफ़्रेश करें',running:'स्रोत रीफ़्रेश शुरू हुआ',busy:'स्रोत रीफ़्रेश पहले से चल रहा है',failed:'स्रोत रीफ़्रेश शुरू नहीं हो सका',verifiedRaw:'सत्यापित RAW'},
+    pt:{refresh:'Atualizar fontes',running:'Atualização das fontes iniciada',busy:'As fontes já estão sendo atualizadas',failed:'Não foi possível iniciar a atualização',verifiedRaw:'RAW verificado'},
+    id:{refresh:'Segarkan sumber',running:'Penyegaran sumber dimulai',busy:'Penyegaran sumber sedang berjalan',failed:'Tidak dapat memulai penyegaran sumber',verifiedRaw:'RAW terverifikasi'},
+    vi:{refresh:'Làm mới nguồn',running:'Đã bắt đầu làm mới nguồn',busy:'Nguồn đang được làm mới',failed:'Không thể bắt đầu làm mới nguồn',verifiedRaw:'RAW đã xác minh'},
+    fr:{refresh:'Actualiser les sources',running:'Actualisation des sources lancée',busy:'Les sources sont déjà en cours d’actualisation',failed:'Impossible de lancer l’actualisation',verifiedRaw:'RAW vérifié'},
+    de:{refresh:'Quellen aktualisieren',running:'Quellenaktualisierung gestartet',busy:'Quellen werden bereits aktualisiert',failed:'Quellenaktualisierung konnte nicht gestartet werden',verifiedRaw:'Verifiziertes RAW'},
   };
 
   function copy(key){
@@ -27,6 +29,65 @@
     holder.dataset.discoverIcon='compass';
     holder.innerHTML='<i data-lucide="compass" aria-hidden="true"></i>';
     try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}
+  }
+
+  function rememberRawRows(payload){
+    const groups=[payload?.fresh_novelpia,payload?.items];
+    for(const group of groups){
+      if(!Array.isArray(group))continue;
+      for(const row of group){
+        const id=Number(row?.catalog_id);
+        if(!Number.isSafeInteger(id)||id<=0||row?.kind!=='catalog')continue;
+        if(row.raw_verification_status==='verified'&&row.raw_available&&row.raw_page_url){
+          rawByCatalog.set(id,{url:String(row.raw_page_url),verifiedAt:row.raw_verified_at||null});
+        }else if(row.raw_verification_status&&row.raw_verification_status!=='verified'){
+          rawByCatalog.delete(id);
+        }
+      }
+    }
+  }
+
+  function patchVerifiedRawLinks(){
+    if(window.DTL_APP?.state?.view!=='discover')return;
+    document.querySelectorAll('[data-catalog]').forEach(card=>{
+      const id=Number(card.getAttribute('data-catalog'));
+      const raw=rawByCatalog.get(id);
+      const existing=card.querySelector('.discover-verified-raw');
+      if(!raw){existing?.remove();return;}
+      const host=card.querySelector('.discover-row-meta,.discover-feature-meta');
+      if(!host)return;
+      let link=existing;
+      if(!link){
+        link=document.createElement('a');
+        link.className='discover-badge raw discover-verified-raw';
+        link.target='_blank';
+        link.rel='noopener';
+        link.style.textDecoration='none';
+        host.appendChild(link);
+      }
+      link.href=raw.url;
+      link.setAttribute('aria-label',copy('verifiedRaw'));
+      link.innerHTML=`<i data-lucide="archive-check" aria-hidden="true"></i><span>${copy('verifiedRaw')}</span>`;
+    });
+    try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}
+  }
+
+  function wrapDiscoveryApi(){
+    const app=window.DTL_APP;
+    if(apiWrapped||!app?.api)return;
+    const original=app.api.bind(app);
+    try{
+      app.api=async(...args)=>{
+        const result=await original(...args);
+        const path=String(args[0]||'').split('?')[0];
+        if(path==='/api/app/discovery/feed'||path==='/api/app/discovery/opportunities'){
+          rememberRawRows(result);
+          queueMicrotask(patchVerifiedRawLinks);
+        }
+        return result;
+      };
+      apiWrapped=true;
+    }catch{}
   }
 
   function patchAdminRefresh(){
@@ -76,7 +137,7 @@
     observer=new MutationObserver(()=>{
       if(window.DTL_APP?.state?.view!=='discover')return;
       document.dispatchEvent(new CustomEvent('dtl:viewrender',{detail:{view:'discover',source:'discover-content'}}));
-      queueMicrotask(patchAdminRefresh);
+      queueMicrotask(()=>{patchAdminRefresh();patchVerifiedRawLinks();});
     });
     observer.observe(host,{childList:true});
   }
@@ -87,9 +148,10 @@
     navObserver.observe(nav,{childList:true});
   }
 
-  document.addEventListener('dtl:discover',()=>{attach();queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();});});
-  document.addEventListener('dtl:viewchange',()=>queueMicrotask(()=>{attach();patchNavIcon();patchAdminRefresh();}));
-  document.addEventListener('dtl:viewrender',()=>queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();}));
-  document.addEventListener('dtl:localechange',()=>queueMicrotask(patchAdminRefresh));
-  queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();});
+  wrapDiscoveryApi();
+  document.addEventListener('dtl:discover',()=>{attach();queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();});});
+  document.addEventListener('dtl:viewchange',()=>queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();}));
+  document.addEventListener('dtl:viewrender',()=>queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();}));
+  document.addEventListener('dtl:localechange',()=>queueMicrotask(()=>{patchAdminRefresh();patchVerifiedRawLinks();}));
+  queueMicrotask(()=>{wrapDiscoveryApi();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();});
 })();

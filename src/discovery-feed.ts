@@ -10,6 +10,11 @@ import {
   loadFreshNovelpiaCatalog,
   type DiscoveryCatalogPresented,
 } from './novelpia-discovery';
+import {
+  getRawIngestState,
+  loadRawCatalogSourceMap,
+  type RawCatalogSourcePresented,
+} from './raw-fucknovelpia';
 
 type DiscoveryFeedRow = {
   id: number;
@@ -34,6 +39,13 @@ type DiscoveryFeedRow = {
 };
 
 type FeedOrder = 'trending' | 'demand' | 'recent';
+type FreshWithRaw = DiscoveryCatalogPresented & {
+  raw_page_url: string | null;
+  raw_verified_at: string | null;
+  raw_verification_status: RawCatalogSourcePresented['verification_status'];
+  raw_format: string | null;
+  raw_password_required: boolean;
+};
 
 const MAX_SECTION = 12;
 const MAX_CATALOG = 72;
@@ -58,18 +70,20 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
   try {
     if (isOpportunitiesPath) {
       if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
-      const [localCandidates, freshCandidates, ingestState] = await Promise.all([
+      const [localCandidates, freshCandidates, ingestState, rawIngestState] = await Promise.all([
         loadFeedRows(env, auth, 'demand', 60),
         loadFreshNovelpiaCatalog(env, auth.telegramUser.id, 50),
         getNovelpiaIngestState(env),
+        getRawIngestState(env),
       ]);
+      const freshWithRaw = await attachVerifiedRawSources(env, freshCandidates);
       const localItems = localCandidates.map((row) => ({
         ...row,
         opportunity_score: opportunityScore(row),
         opportunity_signals: ['Dollar TL demand', '7d momentum', row.raw_available ? 'RAW available' : null]
           .filter(Boolean),
       }));
-      const freshItems = freshCandidates.map((row) => ({
+      const freshItems = freshWithRaw.map((row) => ({
         ...row,
         opportunity_score: catalogOpportunityScore(row),
         opportunity_signals: catalogOpportunitySignals(row),
@@ -82,17 +96,18 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
         score_signals: [
           'Dollar TL demand',
           '7d momentum',
-          'RAW availability',
+          'verified RAW availability',
           'chapter depth',
           'publication status',
           'NovelPia new-rank',
           'NovelPia views/favorites',
         ],
         novelpia_ingest: ingestPresentation(ingestState),
+        raw_ingest: ingestPresentation(rawIngestState),
       });
     }
 
-    const [trending, mostRequested, rawAvailable, recentlyFound, catalog, freshNovelpia, ingestState] = await Promise.all([
+    const [trending, mostRequested, rawAvailable, recentlyFound, catalog, freshNovelpia, ingestState, rawIngestState] = await Promise.all([
       loadFeedRows(env, auth, 'trending', MAX_SECTION),
       loadFeedRows(env, auth, 'demand', MAX_SECTION),
       loadFeedRows(env, auth, 'demand', MAX_SECTION, true),
@@ -100,7 +115,9 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
       loadFeedRows(env, auth, 'demand', MAX_CATALOG),
       loadFreshNovelpiaCatalog(env, auth.telegramUser.id, MAX_FRESH),
       getNovelpiaIngestState(env),
+      getRawIngestState(env),
     ]);
+    const freshWithRaw = await attachVerifiedRawSources(env, freshNovelpia);
 
     return miniAppJson({
       generated_at: new Date().toISOString(),
@@ -108,9 +125,10 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
       most_requested: mostRequested,
       raw_available: rawAvailable,
       recently_found: recentlyFound,
-      fresh_novelpia: freshNovelpia,
+      fresh_novelpia: freshWithRaw,
       catalog,
       novelpia_ingest: ingestPresentation(ingestState),
+      raw_ingest: ingestPresentation(rawIngestState),
     });
   } catch (error) {
     console.error(JSON.stringify({
@@ -226,6 +244,26 @@ function presentRow(row: DiscoveryFeedRow, viewerId: number) {
   };
 }
 
+async function attachVerifiedRawSources(
+  env: Env,
+  rows: DiscoveryCatalogPresented[],
+): Promise<FreshWithRaw[]> {
+  const sourceMap = await loadRawCatalogSourceMap(env, rows.map((row) => row.catalog_id));
+  return rows.map((row) => {
+    const raw = sourceMap.get(row.catalog_id);
+    const verified = raw?.verification_status === 'verified';
+    return {
+      ...row,
+      raw_available: verified ? Boolean(raw.available) : Boolean(row.raw_available && verified),
+      raw_page_url: verified ? raw.page_url : null,
+      raw_verified_at: verified ? raw.last_checked_at : null,
+      raw_verification_status: raw?.verification_status ?? 'unknown',
+      raw_format: verified ? raw.raw_format : null,
+      raw_password_required: verified ? raw.password_required : false,
+    };
+  });
+}
+
 function opportunityScore(row: ReturnType<typeof presentRow>): number {
   const demand = Math.min(40, Math.max(0, row.demand_count) * 4);
   const momentum = Math.min(20, Math.max(0, row.recent_interest_count) * 4 + Math.max(0, row.trend_delta) * 2);
@@ -235,34 +273,36 @@ function opportunityScore(row: ReturnType<typeof presentRow>): number {
   return Math.max(0, Math.min(100, Math.round(demand + momentum + raw + chapters + publication)));
 }
 
-function catalogOpportunityScore(row: DiscoveryCatalogPresented): number {
-  const demand = Math.min(32, Math.max(0, row.demand_count) * 8);
-  const rank = row.source_rank == null ? 0 : Math.max(0, 28 - Math.min(28, Math.floor((row.source_rank - 1) / 2)));
-  const popularity = Math.min(20,
-    Math.log10(Math.max(1, row.views_count)) * 2.5
-      + Math.log10(Math.max(1, row.favorites_count)) * 2,
+function catalogOpportunityScore(row: FreshWithRaw): number {
+  const demand = Math.min(30, Math.max(0, row.demand_count) * 8);
+  const rank = row.source_rank == null ? 0 : Math.max(0, 24 - Math.min(24, Math.floor((row.source_rank - 1) / 2)));
+  const popularity = Math.min(18,
+    Math.log10(Math.max(1, row.views_count)) * 2.2
+      + Math.log10(Math.max(1, row.favorites_count)) * 1.8,
   );
   const chapters = row.chapter_count == null
     ? 2
     : row.chapter_count >= 150
-      ? 10
+      ? 8
       : row.chapter_count >= 50
-        ? 7
+        ? 6
         : row.chapter_count >= 15
-          ? 5
+          ? 4
           : 2;
   const freshness = row.fresh_signals.includes('novelpia_plus_new')
-    ? 8
+    ? 7
     : row.fresh_signals.includes('novelpia_free_new')
-      ? 6
+      ? 5
       : 3;
-  const plus = row.source_tier === 'plus' ? 4 : 0;
-  return Math.max(0, Math.min(100, Math.round(demand + rank + popularity + chapters + freshness + plus)));
+  const plus = row.source_tier === 'plus' ? 3 : 0;
+  const raw = row.raw_available && row.raw_verification_status === 'verified' ? 10 : 0;
+  return Math.max(0, Math.min(100, Math.round(demand + rank + popularity + chapters + freshness + plus + raw)));
 }
 
-function catalogOpportunitySignals(row: DiscoveryCatalogPresented): string[] {
+function catalogOpportunitySignals(row: FreshWithRaw): string[] {
   const out: string[] = [];
   if (row.demand_count > 0) out.push(`${row.demand_count} Dollar TL demand`);
+  if (row.raw_available && row.raw_verification_status === 'verified') out.push('RAW verified');
   if (row.source_rank != null) out.push(`NovelPia new #${row.source_rank}`);
   if (row.views_count > 0) out.push(`${row.views_count} NovelPia views`);
   if (row.favorites_count > 0) out.push(`${row.favorites_count} favorites`);
@@ -271,7 +311,11 @@ function catalogOpportunitySignals(row: DiscoveryCatalogPresented): string[] {
   return out.slice(0, 4);
 }
 
-function ingestPresentation(state: Awaited<ReturnType<typeof getNovelpiaIngestState>>) {
+function ingestPresentation(state: {
+  last_success_at: string | null;
+  last_error: string | null;
+  last_item_count: number;
+} | null) {
   if (!state) return { available: false, last_success_at: null, item_count: 0, degraded: false };
   return {
     available: true,

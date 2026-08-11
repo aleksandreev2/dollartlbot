@@ -12,6 +12,11 @@ import {
   searchNovelpiaCatalog,
   toggleCatalogInterest,
 } from './novelpia-discovery';
+import {
+  getRawIngestState,
+  propagateCatalogRawSourceToSubmission,
+  runRawCatalogEnrichment,
+} from './raw-fucknovelpia';
 
 const SEARCH_PATH = '/api/app/discovery/catalog/search';
 const INTEREST_PATH = '/api/app/discovery/catalog/interest';
@@ -118,47 +123,70 @@ export async function handleDiscoveryCatalogRequest(
         throw error;
       }
       await linkCatalogToSubmission(env, catalogId, submissionId);
-      return miniAppJson({ ok: true, catalog_id: catalogId, submission_id: submissionId });
+      const rawLinked = await propagateCatalogRawSourceToSubmission(env, catalogId, submissionId, now).catch((error) => {
+        console.warn(JSON.stringify({
+          event: 'catalog_raw_source_link_failed',
+          catalog_id: catalogId,
+          submission_id: submissionId,
+          error: errorMessage(error),
+        }));
+        return false;
+      });
+      return miniAppJson({ ok: true, catalog_id: catalogId, submission_id: submissionId, raw_source_linked: rawLinked });
     }
 
     if (request.method === 'GET' && url.pathname === HEALTH_PATH) {
       if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
-      const state = await getNovelpiaIngestState(env);
-      return miniAppJson({ provider: 'novelpia', state });
+      const [state, rawState] = await Promise.all([
+        getNovelpiaIngestState(env),
+        getRawIngestState(env),
+      ]);
+      return miniAppJson({ provider: 'novelpia', state, raw_provider: 'raw_fucknovelpia', raw_state: rawState });
     }
 
     if (request.method === 'POST' && url.pathname === REFRESH_PATH) {
       if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
       if (!ctx) return miniAppJsonError('refresh_unavailable', 'Background refresh is unavailable.', 503);
 
-      const state = await getNovelpiaIngestState(env);
-      const lastAttempt = state?.last_attempt_at ? Date.parse(state.last_attempt_at) : 0;
-      const lastSuccess = state?.last_success_at ? Date.parse(state.last_success_at) : 0;
-      const inProgress = Number.isFinite(lastAttempt)
-        && lastAttempt > lastSuccess
-        && Date.now() - lastAttempt < REFRESH_BUSY_MS;
+      const [state, rawState] = await Promise.all([
+        getNovelpiaIngestState(env),
+        getRawIngestState(env),
+      ]);
+      const inProgress = isInProgress(state) || isInProgress(rawState);
       if (inProgress) {
         return miniAppJson({
           started: false,
           busy: true,
-          last_attempt_at: state?.last_attempt_at ?? null,
+          last_attempt_at: newestTimestamp(state?.last_attempt_at, rawState?.last_attempt_at),
         });
       }
 
       const requestedAt = new Date();
-      ctx.waitUntil(
-        runNovelpiaDiscoveryIngestion(env, requestedAt).catch((error) => {
+      ctx.waitUntil((async () => {
+        try {
+          await runNovelpiaDiscoveryIngestion(env, requestedAt);
+        } catch (error) {
           console.error(JSON.stringify({
             event: 'novelpia_discovery_manual_refresh_failed',
             requested_by: auth.telegramUser.id,
             error: errorMessage(error),
           }));
-        }),
-      );
+        }
+        try {
+          await runRawCatalogEnrichment(env, new Date());
+        } catch (error) {
+          console.error(JSON.stringify({
+            event: 'raw_fucknovelpia_manual_refresh_failed',
+            requested_by: auth.telegramUser.id,
+            error: errorMessage(error),
+          }));
+        }
+      })());
       return miniAppJson({
         started: true,
         busy: false,
         requested_at: requestedAt.toISOString(),
+        stages: ['novelpia', 'raw_fucknovelpia'],
       });
     }
 
@@ -171,6 +199,21 @@ export async function handleDiscoveryCatalogRequest(
     }));
     return miniAppJsonError('temporary_error', 'Fresh discovery is temporarily unavailable.', 500);
   }
+}
+
+function isInProgress(state: { last_attempt_at: string | null; last_success_at: string | null } | null): boolean {
+  if (!state?.last_attempt_at) return false;
+  const lastAttempt = Date.parse(state.last_attempt_at);
+  const lastSuccess = state.last_success_at ? Date.parse(state.last_success_at) : 0;
+  return Number.isFinite(lastAttempt)
+    && lastAttempt > lastSuccess
+    && Date.now() - lastAttempt < REFRESH_BUSY_MS;
+}
+
+function newestTimestamp(a: string | null | undefined, b: string | null | undefined): string | null {
+  const values = [a, b].filter((value): value is string => Boolean(value));
+  if (!values.length) return null;
+  return values.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null;
 }
 
 async function readJson<T>(request: Request): Promise<T> {

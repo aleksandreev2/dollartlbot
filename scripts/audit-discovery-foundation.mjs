@@ -3,7 +3,11 @@ import fs from 'node:fs';
 const read=path=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 const migration=read('migrations/0025_discovery_foundation.sql');
 const catalogMigration=read('migrations/0026_discovery_catalog.sql');
-const server=read('src/discovery.ts');
+const catalogSourcesMigration=read('migrations/0027_discovery_catalog_sources.sql');
+const legacyServer=read('src/discovery.ts');
+const rawApi=read('src/discovery-raw-v2.ts');
+const rawProvider=read('src/raw-fucknovelpia.ts');
+const rawCache=read('src/raw-fucknovelpia-cache.ts');
 const catalogApi=read('src/discovery-catalog-api.ts');
 const novelpia=read('src/novelpia-discovery.ts');
 const feed=read('src/discovery-feed.ts');
@@ -24,15 +28,10 @@ requireText(migration,'CREATE TABLE IF NOT EXISTS discovery_interests','interest
 requireText(migration,'PRIMARY KEY (submission_id, user_id)','interest dedupe');
 requireText(migration,'CREATE TABLE IF NOT EXISTS submission_external_sources','generic external source table');
 requireText(migration,'UNIQUE(submission_id, provider)','one provider link per submission');
-requireText(server,'authenticateMiniAppRequest(request, env)','authenticated discovery API');
-requireText(server,"body.provider !== 'raw_fucknovelpia'",'provider allowlist');
-requireText(server,"hostname === 'raw-fucknovelpia.com'",'RAW host allowlist');
-requireText(server,"/^\\/novel\\/raw-[a-z0-9-]+$/i",'RAW page allowlist');
-requireText(server,"'/api/app/discovery/search'",'search endpoint');
-requireText(server,"'/api/app/discovery/interest'",'interest endpoint');
-requireText(server,"'/api/app/discovery/source'",'source endpoint');
-requireText(index,"import { handleDiscoveryRequest } from './discovery';",'worker route import');
-requireText(index,'await handleDiscoveryRequest(request, env)','worker route invocation');
+requireText(legacyServer,'authenticateMiniAppRequest(request, env)','authenticated legacy discovery API');
+requireText(legacyServer,"'/api/app/discovery/interest'",'legacy interest endpoint retained');
+requireText(index,"import { handleDiscoveryRequest } from './discovery';",'legacy worker route import');
+requireText(index,'await handleDiscoveryRequest(request, env)','legacy worker route invocation');
 requireText(html,'/app/discovery-ui.css?v=20260811-discovery1','discovery CSS asset');
 requireText(html,'/app/discovery-ui.js?v=20260811-discovery1','discovery JS asset');
 if(html.indexOf('/app/discovery-ui.js?v=20260811-discovery1')>html.indexOf('/app/view-suggest.js?v=20260810-app4&discover=20260811a')){
@@ -58,6 +57,15 @@ for(const token of [
 ])requireText(catalogMigration,token,'external discovery catalog schema');
 
 for(const token of [
+  'CREATE TABLE IF NOT EXISTS discovery_catalog_sources',
+  "CHECK (verification_status IN ('unknown', 'verified', 'not_found', 'error'))",
+  'PRIMARY KEY (catalog_id, provider)',
+  'failure_count INTEGER NOT NULL DEFAULT 0',
+  'next_check_at TEXT',
+  'idx_discovery_catalog_sources_due',
+])requireText(catalogSourcesMigration,token,'verified catalog source schema');
+
+for(const token of [
   "url: `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`",
   "url: `${NOVELPIA_ORIGIN}/freestory/new/date/1?main_genre=`",
   "url: `${NOVELPIA_ORIGIN}/top100/plus/today/view/all/all?main_genre=`",
@@ -72,6 +80,40 @@ for(const token of [
 ])requireText(novelpia,token,'safe NovelPia ingestion pipeline');
 
 for(const token of [
+  "const FETCH_TIMEOUT_MS = 8_000",
+  'const MAX_HTML_BYTES = 2_000_000',
+  'const MAX_REDIRECTS = 3',
+  "redirect: 'manual'",
+  'signal: controller.signal',
+  "hostname === 'raw-fucknovelpia.com' || hostname === 'www.raw-fucknovelpia.com'",
+  "/^\\/novel\\/(?:raw-[a-z0-9-]+|\\d{2,9})\\/?$/i",
+  'readResponseTextLimited',
+  'provider_response_too_large',
+  'runRawCatalogEnrichment',
+  "verification_status = 'error'",
+  "verification_status = 'not_found'",
+  "verification_status = 'verified'",
+  'next_check_at',
+  'propagateCatalogRawSourceToSubmission',
+])requireText(rawProvider,token,'safe RAW FuckNovelPia provider v2');
+
+for(const token of [
+  "const SEARCH_PATH = '/api/app/discovery/search'",
+  "const SOURCE_PATH = '/api/app/discovery/source'",
+  'authenticateMiniAppRequest(request, env)',
+  'searchCachedRawCatalog(env, query, MAX_EXTERNAL_RESULTS)',
+  'searchRawFuckNovelpia(query)',
+  'provider_source: providerSource',
+  "verification_status: inspected ? 'verified' : 'unverified'",
+])requireText(rawApi,token,'cache-first RAW discovery API');
+
+for(const token of [
+  'cacheRawResultForCatalog',
+  "verification_status = 'verified'",
+  'propagateCatalogRawSourceToSubmission',
+])requireText(rawCache,token,'live RAW result cache helper');
+
+for(const token of [
   "'/api/app/discovery/catalog/search'",
   "'/api/app/discovery/catalog/interest'",
   "'/api/app/discovery/catalog/link'",
@@ -81,16 +123,25 @@ for(const token of [
   "if (!auth.admin) return miniAppJsonError('forbidden'",
   'ctx.waitUntil(',
   'runNovelpiaDiscoveryIngestion(env, requestedAt)',
+  'runRawCatalogEnrichment(env, new Date())',
+  'getRawIngestState(env)',
+  'propagateCatalogRawSourceToSubmission(env, catalogId, submissionId, now)',
 ])requireText(catalogApi,token,'authenticated discovery catalog API');
 
-requireText(index,"import { handleDiscoveryCatalogRequest } from './discovery-catalog-api';",'catalog API route import');
-requireText(index,'await handleDiscoveryCatalogRequest(request, env, ctx)','catalog API route invocation with background context');
-requireText(index,"import { runNovelpiaDiscoveryIngestion } from './novelpia-discovery';",'ingestion import');
+requireText(index,"import { handleDiscoveryRawV2Request } from './discovery-raw-v2';",'RAW v2 API route import');
+requireText(index,'await handleDiscoveryRawV2Request(request, env)','RAW v2 API route invocation');
+if(index.indexOf('await handleDiscoveryRawV2Request(request, env)')>index.indexOf('await handleDiscoveryRequest(request, env)')){
+  throw new Error('Discovery audit failed: RAW v2 search/source handler must shadow legacy discovery handler');
+}
+requireText(index,"import { runRawCatalogEnrichment } from './raw-fucknovelpia';",'RAW enrichment import');
 requireText(index,"scheduledAt.getUTCMinutes() % 20 === 0",'bounded 20-minute ingestion cadence');
-requireText(index,"runScheduledTask('novelpia_discovery_ingest'",'isolated scheduled ingestion task');
-requireText(feed,'fresh_novelpia: freshNovelpia','Fresh NovelPia feed section');
+requireText(index,"runScheduledTask('novelpia_discovery_ingest'",'isolated NovelPia ingestion task');
+requireText(index,"runScheduledTask('raw_fucknovelpia_enrichment'",'isolated RAW enrichment task');
+requireText(feed,'fresh_novelpia: freshWithRaw','Fresh NovelPia feed with verified RAW overlay');
 requireText(feed,'catalogOpportunityScore','NovelPia opportunity score');
-requireText(feed,'novelpia_ingest: ingestPresentation','ingestion health projection');
+requireText(feed,"out.push('RAW verified')",'verified RAW opportunity signal');
+requireText(feed,'raw_ingest: ingestPresentation','RAW ingestion health projection');
+requireText(feed,'loadRawCatalogSourceMap','verified RAW source overlay');
 
 for(const token of [
   "['fresh_novelpia','telescope',tx('fresh')]",
@@ -104,13 +155,16 @@ for(const token of [
 for(const token of [
   'discover-manual-refresh',
   "'/api/app/discovery/catalog/refresh'",
-  'Refresh NovelPia',
-])requireText(discoverRuntime,token,'admin NovelPia refresh control');
+  'Refresh sources',
+  'patchVerifiedRawLinks',
+  "row.raw_verification_status==='verified'&&row.raw_available&&row.raw_page_url",
+  'archive-check',
+])requireText(discoverRuntime,token,'verified RAW Discover runtime');
 requireText(discoverCss,'.discover-catalog-row','Fresh catalog responsive row styling');
 requireText(html,'/app/discover-page.css?v=20260811-discover2','Fresh Discover CSS cache bust');
 requireText(html,'/app/view-discover.js?v=20260811-discover2','Fresh Discover JS cache bust');
-requireText(html,'/app/discover-page-runtime.js?v=20260811-discover2','Fresh runtime cache bust');
+requireText(html,'/app/discover-page-runtime.js?v=20260811-discover3','RAW Discover runtime cache bust');
 
 new Function(discoverView);
 new Function(discoverRuntime);
-console.log('Discovery foundation + automatic NovelPia ingestion audit passed.');
+console.log('Discovery foundation + NovelPia Fresh + RAW provider v2 audit passed.');
