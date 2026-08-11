@@ -50,6 +50,6 @@ forbid(css,'grid-template-columns: 1fr 1fr','notification center two-column feed
 
 need(index,'/app/notifications-ui.css?v=20260811-notify4','notification CSS cache bust');
 need(index,'/app/notifications-ui.js?v=20260811-notify4','notification JS cache bust');
-need(index,'/app/notification-deeplink.js?v=20260810-notify2','notification deep-link runtime');
+need(index,'/app/notification-deeplink.js?v=20260812-self2','notification deep-link runtime');
 
 console.log('Notification center UX audit passed: return-aware navigation, all/unread filtering, durable unread presentation, autosave preferences, semantic body hierarchy, and actionable deep links.');
