@@ -45,6 +45,9 @@
     pendingRequestId=0;
     target.classList.add('notification-target');
     target.scrollIntoView({block:'center',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+    if(window.DTL_REQUEST_SELF_SERVICE?.open){
+      setTimeout(()=>{void window.DTL_REQUEST_SELF_SERVICE.open(id);},40);
+    }
     setTimeout(()=>{
       const current=document.querySelector(`[data-novel="${id}"]`);
       current?.classList.remove('notification-target');
