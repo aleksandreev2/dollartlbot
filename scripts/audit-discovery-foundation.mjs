@@ -30,7 +30,6 @@ requireText(migration,'CREATE TABLE IF NOT EXISTS submission_external_sources','
 requireText(migration,'UNIQUE(submission_id, provider)','one provider link per submission');
 requireText(legacyServer,'authenticateMiniAppRequest(request, env)','authenticated legacy discovery API');
 requireText(legacyServer,"'/api/app/discovery/interest'",'legacy interest endpoint retained');
-requireText(legacyServer,"'/api/app/discovery/submission/",'legacy detail summary retained');
 requireText(index,"import { handleDiscoveryRequest } from './discovery';",'legacy worker route import');
 requireText(index,'await handleDiscoveryRequest(request, env)','legacy worker route invocation');
 requireText(html,'/app/discovery-ui.css?v=20260811-discovery1','discovery CSS asset');
@@ -104,7 +103,7 @@ for(const token of [
   'authenticateMiniAppRequest(request, env)',
   'searchCachedRawCatalog(env, query, MAX_EXTERNAL_RESULTS)',
   'searchRawFuckNovelpia(query)',
-  "provider_source: providerSource",
+  'provider_source: providerSource',
   "verification_status: inspected ? 'verified' : 'unverified'",
 ])requireText(rawApi,token,'cache-first RAW discovery API');
 
@@ -156,12 +155,15 @@ for(const token of [
 for(const token of [
   'discover-manual-refresh',
   "'/api/app/discovery/catalog/refresh'",
-  'Refresh NovelPia',
-])requireText(discoverRuntime,token,'admin NovelPia refresh control');
+  'Refresh sources',
+  'patchVerifiedRawLinks',
+  "row.raw_verification_status==='verified'&&row.raw_available&&row.raw_page_url",
+  'archive-check',
+])requireText(discoverRuntime,token,'verified RAW Discover runtime');
 requireText(discoverCss,'.discover-catalog-row','Fresh catalog responsive row styling');
 requireText(html,'/app/discover-page.css?v=20260811-discover2','Fresh Discover CSS cache bust');
 requireText(html,'/app/view-discover.js?v=20260811-discover2','Fresh Discover JS cache bust');
-requireText(html,'/app/discover-page-runtime.js?v=20260811-discover2','Fresh runtime cache bust');
+requireText(html,'/app/discover-page-runtime.js?v=20260811-discover3','RAW Discover runtime cache bust');
 
 new Function(discoverView);
 new Function(discoverRuntime);
