@@ -169,11 +169,35 @@
     });
   }
 
+  function enhanceLiveDetailLanguages(root = document) {
+    const items = [...root.querySelectorAll('.live-detail-language > span:not(.live-detail-language-arrow)')];
+    items.forEach((item, index) => {
+      let code = item.dataset.languageCode || detectLanguage(item.textContent || '');
+      if (!code && index === 1) code = 'en';
+      if (!code || !countryByLanguage[code]) return;
+      item.dataset.languageCode = code;
+      item.classList.add('live-detail-language-item');
+
+      let label = item.querySelector(':scope > .live-detail-language-label');
+      let flag = item.querySelector(':scope > .live-detail-language-flag');
+      if (!label || !flag) {
+        item.textContent = '';
+        flag = flagImg(code, 'circle-language-flag live-detail-language-flag');
+        label = document.createElement('span');
+        label.className = 'live-detail-language-label';
+        if (flag) item.appendChild(flag);
+        item.appendChild(label);
+      }
+      label.textContent = runtime.languageLabel(code);
+    });
+  }
+
   function enhanceLanguageFlags(root = document) {
     root.querySelectorAll('.canonical-language[data-language-code]').forEach(el => {
       applyCircleFlag(el, el.dataset.languageCode);
     });
     enhanceLanguagePicker(root);
+    enhanceLiveDetailLanguages(root);
   }
 
   function hashTitle(value = '') {
