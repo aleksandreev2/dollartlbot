@@ -112,30 +112,48 @@ async function editRequest(request:Request,id:number,adminId:number,env:Env):Pro
 }
 
 async function moveToPosition(request:Request,id:number,adminId:number,env:Env):Promise<Response>{
-  await normalizeQueuePositions(env);
   const body=await readJson<{position?:number}>(request);
   const desired=Number(body.position);
-  const current=await env.DB.prepare(`SELECT queue_position FROM submissions WHERE id=? AND status='accepted' AND queue_status='queued'`)
-    .bind(id).first<{queue_position:number|null}>();
+  const [current,count]=await Promise.all([
+    env.DB.prepare(`SELECT queue_position FROM submissions WHERE id=? AND status='accepted' AND queue_status='queued'`)
+      .bind(id).first<{queue_position:number|null}>(),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM submissions WHERE status='accepted' AND queue_status='queued'`).first<{n:number}>(),
+  ]);
   if(!current?.queue_position)return miniAppJsonError('invalid_state','Позицию можно менять только у заявки в очереди.',409);
-  const count=await env.DB.prepare(`SELECT COUNT(*) AS n FROM submissions WHERE status='accepted' AND queue_status='queued'`).first<{n:number}>();
   const max=Math.max(1,Number(count?.n||0));
   if(!Number.isInteger(desired)||desired<1||desired>max)return miniAppJsonError('invalid_position',`Позиция должна быть от 1 до ${max}.`,400);
   if(desired===current.queue_position)return requestDetail(id,env);
 
   const now=new Date().toISOString();
-  if(desired<current.queue_position){
-    await env.DB.prepare(`UPDATE submissions SET queue_position=queue_position+1,updated_at=? WHERE status='accepted' AND queue_status='queued' AND id<>? AND queue_position>=? AND queue_position<?`)
-      .bind(now,id,desired,current.queue_position).run();
-  }else{
-    await env.DB.prepare(`UPDATE submissions SET queue_position=queue_position-1,updated_at=? WHERE status='accepted' AND queue_status='queued' AND id<>? AND queue_position>? AND queue_position<=?`)
-      .bind(now,id,current.queue_position,desired).run();
+  const moved=await env.DB.prepare(`
+    WITH ordered AS (
+      SELECT id,ROW_NUMBER() OVER (ORDER BY COALESCE(queue_position,2147483647),id) AS rn
+      FROM submissions
+      WHERE status='accepted' AND queue_status='queued' AND id<>?
+    ), desired_order AS (
+      SELECT id,CASE WHEN rn>=? THEN rn+1 ELSE rn END AS next_position FROM ordered
+      UNION ALL SELECT ?,?
+    )
+    UPDATE submissions
+    SET queue_position=(SELECT next_position FROM desired_order WHERE desired_order.id=submissions.id),
+        updated_at=?
+    WHERE status='accepted' AND queue_status='queued'
+      AND id IN (SELECT id FROM desired_order)
+      AND EXISTS (
+        SELECT 1 FROM submissions target
+        WHERE target.id=? AND target.status='accepted' AND target.queue_status='queued'
+      )
+      AND (SELECT COUNT(*) FROM submissions q WHERE q.status='accepted' AND q.queue_status='queued')>=?
+  `).bind(id,desired,id,desired,now,id,desired).run();
+  if(Number(moved.meta.changes??0)<1)return miniAppJsonError('stale_state','Очередь изменилась. Повторите действие.',409);
+
+  const after=await env.DB.prepare(`SELECT queue_position FROM submissions WHERE id=? AND status='accepted' AND queue_status='queued'`)
+    .bind(id).first<{queue_position:number|null}>();
+  if(Number(after?.queue_position)!==desired){
+    await normalizeQueuePositions(env);
+    return miniAppJsonError('stale_state','Очередь изменилась во время перестановки. Обновите экран.',409);
   }
-  const set=await env.DB.prepare(`UPDATE submissions SET queue_position=?,updated_at=? WHERE id=? AND status='accepted' AND queue_status='queued'`)
-    .bind(desired,now,id).run();
-  if(Number(set.meta.changes??0)!==1)return miniAppJsonError('stale_state','Очередь изменилась. Повторите действие.',409);
-  await normalizeQueuePositions(env);
-  await audit(env,adminId,'submission_queue_position',id,{before:current.queue_position,requested:desired});
+  await audit(env,adminId,'submission_queue_position',id,{before:current.queue_position,requested:desired,after:desired,atomic:true});
   return requestDetail(id,env);
 }
 
