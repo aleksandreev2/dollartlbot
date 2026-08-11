@@ -14,6 +14,10 @@ jobs:
         with:
           node-version: 22
       - name: Check workflow JavaScript syntax
-        run: node --check public/app/admin-workflow.js
+        run: |
+          node --check public/app/admin-workflow.js
+          node --check public/app/admin-navigation.js
       - name: Audit admin workflow invariants
         run: node scripts/audit-admin-workflow.mjs
+      - name: Audit admin navigation invariants
+        run: node scripts/audit-admin-navigation.mjs
