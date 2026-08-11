@@ -18,7 +18,10 @@ export async function handlePublicationLinksRequest(
 
   if (isList) {
     const rows = await env.DB.prepare(`
-      SELECT s.id, s.title, s.queue_status, s.current_chapter, s.chapter_count,
+      SELECT s.id, s.title, s.original_language, s.publication_status,
+             s.queue_status, s.current_chapter, s.chapter_count,
+             CASE WHEN s.cover_key IS NULL THEN 0 ELSE 1 END AS has_cover,
+             s.cover_updated_at,
              COALESCE(NULLIF(u.username,''), NULLIF(s.username_snapshot,'')) AS requester_username,
              u.first_name
       FROM submissions s
