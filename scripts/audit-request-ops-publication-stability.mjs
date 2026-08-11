@@ -11,6 +11,7 @@ const publicationAdmin=read('src/admin-publications.ts');
 const publishing=read('src/publishing-comments-v3.ts');
 const indexTs=read('src/index.ts');
 const opsUi=read('public/app/admin-request-ops.js');
+const workflowUi=read('public/app/admin-workflow.js');
 const opsCss=read('public/app/admin-request-ops.css');
 const stableUi=read('public/app/publication-stability-ui.js');
 const stableCss=read('public/app/publication-stability-ui.css');
@@ -75,15 +76,29 @@ for(const token of [
 ])need(publishing,token,'canonical atomic publisher');
 
 for(const token of [
-  'data-request-ops',
+  'const adminRuntime=window.DTL_ADMIN',
+  "adminRuntime.activeRoute?.()==='section:requests'",
   'requestOpsSave',
   'requestOpsMove',
   'requestOpsMetaSave',
   'requestOpsRestore',
   'requestOpsRaw',
-  "sessionStorage.setItem('dtl:publicationSubmissionId'",
+  "adminRuntime.open('section:publishing')",
   'request-ops-history',
+  'window.DTL_ADMIN_REQUEST_OPS',
 ])need(opsUi,token,'request operations UI');
+for(const token of [
+  '.admin-request-card',
+  'runtime.registerPatcher',
+  "document.addEventListener('dtl:adminrender'",
+  'async function api(path',
+  'fetch(path',
+])forbid(opsUi,token,'request operations canonical subview');
+for(const token of [
+  'data-workflow-advanced',
+  'window.DTL_ADMIN_REQUEST_OPS',
+  'void ops.open(id)',
+])need(workflowUi,token,'request operations workflow launcher');
 for(const token of ['.request-ops-grid','.request-position-control','.request-history-row','@media(max-width:560px)'])need(opsCss,token,'request operations CSS');
 
 for(const token of [
@@ -115,6 +130,7 @@ for(const token of [
 need(wrangler,'?build=20260810-ops1','fresh Mini App build');
 
 new Function(opsUi);
+new Function(workflowUi);
 new Function(stableUi);
 new Function(templateUi);
-console.log('Request operations + publication stability audit passed: editable/audited requests, exact queue placement, linked publication workflow, publication preflight, managed-line-safe edits, one visible publication management surface, and responsive admin controls are wired.');
+console.log('Request operations + publication stability audit passed: canonical Requests subview, editable/audited requests, exact queue placement, linked publication workflow, publication preflight, managed-line-safe edits, one visible publication management surface, and responsive admin controls are wired.');
