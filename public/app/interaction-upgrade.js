@@ -13,9 +13,14 @@
   let pointer = null;
   let sheetWasOpen = false;
   let sheetReturnFocus = null;
+  let viewportRaf = 0;
+  let focusTimer = 0;
+  let viewportWidth = window.innerWidth;
+  let stableVisualHeight = Math.max(window.innerHeight, window.visualViewport?.height || 0);
 
   const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const interactiveSelector = 'button,a,input,textarea,select,label,[role="button"],.filter-row,.segmented,.timeline,.tag-list,.quick-tags';
+  const editableSelector = 'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="file"]),textarea,select,[contenteditable="true"]';
 
   function haptic() {
     try { tg?.HapticFeedback?.selectionChanged(); } catch {}
@@ -69,6 +74,56 @@
         try { target.focus({ preventScroll:true }); } catch {}
       });
     }
+  }
+
+  function activeEditable() {
+    const active = document.activeElement;
+    return active instanceof HTMLElement && active.matches(editableSelector) ? active : null;
+  }
+
+  function ensureFocusedFieldVisible(field, visualTop, visualHeight) {
+    clearTimeout(focusTimer);
+    focusTimer = window.setTimeout(() => {
+      if (!field?.isConnected || document.activeElement !== field) return;
+      const rect = field.getBoundingClientRect();
+      const topLimit = visualTop + 14;
+      const bottomLimit = visualTop + visualHeight - 22;
+      if (rect.top >= topLimit && rect.bottom <= bottomLimit) return;
+      try {
+        field.scrollIntoView({ block:'center', inline:'nearest', behavior:prefersReducedMotion() ? 'auto' : 'smooth' });
+      } catch {
+        field.scrollIntoView?.({ block:'center', inline:'nearest' });
+      }
+    }, 70);
+  }
+
+  function syncVisualViewport() {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    const width = Math.round(viewport?.width || window.innerWidth);
+    const visualHeight = Math.max(280, Math.round(viewport?.height || window.innerHeight));
+    const visualTop = Math.max(0, Math.round(viewport?.offsetTop || 0));
+    const field = activeEditable();
+
+    if (!field && Math.abs(width - viewportWidth) > 72) stableVisualHeight = visualHeight;
+    viewportWidth = width;
+    if (!field && visualHeight >= stableVisualHeight - 48) stableVisualHeight = Math.max(stableVisualHeight, visualHeight);
+
+    const overlap = Math.max(0, Math.round(stableVisualHeight - visualHeight - visualTop));
+    const keyboardOpen = Boolean(field && window.innerWidth < 900 && overlap >= 96);
+    root.style.setProperty('--dtl-visual-height', `${visualHeight}px`);
+    root.style.setProperty('--dtl-visual-top', `${visualTop}px`);
+    root.style.setProperty('--dtl-keyboard-overlap', `${keyboardOpen ? overlap : 0}px`);
+    root.classList.toggle('dtl-keyboard-open', keyboardOpen);
+    if (keyboardOpen) ensureFocusedFieldVisible(field, visualTop, visualHeight);
+  }
+
+  function scheduleVisualViewportSync() {
+    if (viewportRaf) cancelAnimationFrame(viewportRaf);
+    viewportRaf = requestAnimationFrame(() => {
+      viewportRaf = 0;
+      syncVisualViewport();
+    });
   }
 
   function wizardBack() {
@@ -146,6 +201,7 @@
     upgradeTimelines(document);
     syncSheetState();
     syncNativeBack();
+    syncVisualViewport();
   }
 
   // Track the page that opened a novel detail view before app.js changes its internal state.
@@ -182,6 +238,18 @@
       syncNativeBack();
     });
   });
+
+  document.addEventListener('focusin', event => {
+    if (!event.target.closest?.(editableSelector)) return;
+    scheduleVisualViewportSync();
+  });
+  document.addEventListener('focusout', event => {
+    if (!event.target.closest?.(editableSelector)) return;
+    window.setTimeout(scheduleVisualViewportSync, 80);
+  });
+  window.visualViewport?.addEventListener('resize', scheduleVisualViewportSync, { passive:true });
+  window.visualViewport?.addEventListener('scroll', scheduleVisualViewportSync, { passive:true });
+  window.addEventListener('resize', scheduleVisualViewportSync, { passive:true });
 
   // Pointer gesture layer: native-feeling edge-back, tab swipes on non-interactive space,
   // and a downward swipe on the bottom-sheet handle/header.
