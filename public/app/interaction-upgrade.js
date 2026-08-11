@@ -14,7 +14,6 @@
   let sheetWasOpen = false;
   let sheetReturnFocus = null;
   let viewportRaf = 0;
-  let focusTimer = 0;
   let viewportWidth = window.innerWidth;
   let stableVisualHeight = Math.max(window.innerHeight, window.visualViewport?.height || 0);
 
@@ -82,19 +81,18 @@
   }
 
   function ensureFocusedFieldVisible(field, visualTop, visualHeight) {
-    clearTimeout(focusTimer);
-    focusTimer = window.setTimeout(() => {
-      if (!field?.isConnected || document.activeElement !== field) return;
-      const rect = field.getBoundingClientRect();
-      const topLimit = visualTop + 14;
-      const bottomLimit = visualTop + visualHeight - 22;
-      if (rect.top >= topLimit && rect.bottom <= bottomLimit) return;
-      try {
-        field.scrollIntoView({ block:'center', inline:'nearest', behavior:prefersReducedMotion() ? 'auto' : 'smooth' });
-      } catch {
-        field.scrollIntoView?.({ block:'center', inline:'nearest' });
-      }
-    }, 70);
+    if (!field?.isConnected || document.activeElement !== field) return;
+    const rect = field.getBoundingClientRect();
+    const topLimit = visualTop + 14;
+    const bottomLimit = visualTop + visualHeight - 22;
+    if (rect.top >= topLimit && rect.bottom <= bottomLimit) return;
+    try {
+      // Keyboard resize is already a disruptive viewport change. Do not add another
+      // animation that can leave the focused control behind the keyboard for a frame.
+      field.scrollIntoView({ block:'center', inline:'nearest', behavior:'auto' });
+    } catch {
+      field.scrollIntoView?.({ block:'center', inline:'nearest' });
+    }
   }
 
   function syncVisualViewport() {
