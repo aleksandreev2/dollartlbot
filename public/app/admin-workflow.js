@@ -1,7 +1,7 @@
 (() => {
   const runtime = window.DTL_RUNTIME;
-  const tg = window.Telegram?.WebApp;
-  if (!runtime?.registerPatcher) throw new Error('DTL runtime must load before admin-workflow.js');
+  const adminRuntime = window.DTL_ADMIN;
+  if (!runtime?.registerPatcher || !adminRuntime?.registerRoute) throw new Error('Canonical admin runtime must load before admin-workflow.js');
 
   const state = {
     active: '',
@@ -12,8 +12,9 @@
     queueRows: [],
     dragRequestId: null,
   };
+  let requestSearchTimer = 0;
 
-  const H = () => ({ 'x-telegram-init-data': tg?.initData || '' });
+  const api = (path, options = {}) => adminRuntime.api(path, options);
   const esc = (value = '') => String(value).replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[char]));
@@ -23,46 +24,27 @@
     try { return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)); }
     catch { return String(value); }
   };
+  const routeId = section => `section:${section}`;
+  const isActive = section => state.active === section && adminRuntime.activeRoute?.() === routeId(section);
+  const stale = (section, error) => error?.name === 'AbortError' || !isActive(section);
 
-  function icons() {
-    try { window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } }); } catch {}
-  }
-
-  function toast(text, error = false) {
-    const host = document.getElementById('toastRegion');
-    if (!host) return;
-    const node = document.createElement('div');
-    node.className = `toast ${error ? 'error' : 'success'}`;
-    node.textContent = text;
-    host.append(node);
-    setTimeout(() => node.remove(), 3400);
-  }
-
-  async function api(path, options = {}) {
-    const response = await fetch(path, {
-      ...options,
-      headers: { ...H(), ...(options.headers || {}) },
-      cache: 'no-store',
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data?.error?.message || data?.message || `HTTP ${response.status}`);
-    return data;
-  }
-
+  function icons() { adminRuntime.icons?.(); }
+  function toast(text, error = false) { adminRuntime.toast?.(text, error); }
   function area() { return document.querySelector('.admin-content'); }
-
-  function setHead(title, subtitle) {
-    const h = document.querySelector('.admin-work-head h1');
-    const p = document.querySelector('.admin-work-head p');
-    if (h) h.textContent = title;
-    if (p) p.textContent = subtitle;
-  }
+  function setHead(title, subtitle) { adminRuntime.setHead?.(title, subtitle); }
 
   function markActive(section) {
     document.querySelectorAll('[data-admin-section]').forEach(button => {
       button.classList.toggle('active', button.dataset.adminSection === section);
     });
     document.querySelectorAll('[data-admin-tools],[data-admin-health]').forEach(button => button.classList.remove('active'));
+  }
+
+  function deactivate(section) {
+    if (state.active !== section) return;
+    state.active = '';
+    state.dragRequestId = null;
+    clearTimeout(requestSearchTimer);
   }
 
   function loading(label) {
@@ -123,14 +105,8 @@
     </button>`;
   }
 
-  async function open(section) {
-    state.active = section;
-    markActive(section);
-    if (section === 'requests') return renderRequests();
-    return renderQueue();
-  }
-
   async function renderRequests(options = {}) {
+    if (adminRuntime.activeRoute?.() !== routeId('requests')) return false;
     state.active = 'requests';
     markActive('requests');
     setHead('Заявки', 'Быстрая проверка: список слева, полная заявка справа');
@@ -138,15 +114,16 @@
     try {
       const backendKind = state.requestFilter === 'pending' ? 'pending' : 'all';
       const data = await api(`/api/app/admin/list?kind=${backendKind}`);
+      if (!isActive('requests')) return false;
       state.requestRows = data.requests || [];
-      let rows = filterRequests(state.requestRows);
+      const rows = filterRequests(state.requestRows);
 
       if (options.selectFirst || !rows.some(r => Number(r.id) === Number(state.selectedRequestId))) {
         state.selectedRequestId = rows[0]?.id ?? null;
       }
 
       const root = area();
-      if (!root || state.active !== 'requests') return;
+      if (!root || !isActive('requests')) return false;
       root.innerHTML = `<section class="admin-workflow admin-inbox">
         <div class="admin-inbox-toolbar admin-panel">
           <div class="admin-workflow-search">${ico('search')}<input id="adminWorkflowSearch" value="${esc(state.requestQuery)}" placeholder="Название, @username, ID, язык"></div>
@@ -167,52 +144,58 @@
       bindRequestList();
       icons();
       if (state.selectedRequestId) void openRequest(state.selectedRequestId);
+      return true;
     } catch (error) {
-      if (state.active === 'requests') errorBox(error.message, () => renderRequests());
+      if (!stale('requests', error)) errorBox(error.message, () => void renderRequests());
+      return false;
     }
   }
 
   function bindRequestList() {
     const input = document.getElementById('adminWorkflowSearch');
-    let timer = 0;
     input?.addEventListener('input', event => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        state.requestQuery = event.currentTarget.value.trim();
-        renderRequests();
+      clearTimeout(requestSearchTimer);
+      const value = event.currentTarget.value.trim();
+      requestSearchTimer = setTimeout(() => {
+        if (!isActive('requests')) return;
+        state.requestQuery = value;
+        void renderRequests();
       }, 260);
     });
     input?.addEventListener('keydown', event => {
-      if (event.key !== 'Enter') return;
-      clearTimeout(timer);
+      if (event.key !== 'Enter' || !isActive('requests')) return;
+      clearTimeout(requestSearchTimer);
       state.requestQuery = event.currentTarget.value.trim();
-      renderRequests();
+      void renderRequests();
     });
     document.querySelectorAll('[data-workflow-filter]').forEach(button => button.addEventListener('click', () => {
+      if (!isActive('requests')) return;
       state.requestFilter = button.dataset.workflowFilter;
       state.selectedRequestId = null;
-      renderRequests({ selectFirst: true });
+      void renderRequests({ selectFirst: true });
     }));
     document.querySelectorAll('[data-workflow-request]').forEach(button => button.addEventListener('click', () => {
+      if (!isActive('requests')) return;
       state.selectedRequestId = Number(button.dataset.workflowRequest);
       document.querySelectorAll('[data-workflow-request]').forEach(row => row.classList.toggle('selected', Number(row.dataset.workflowRequest) === state.selectedRequestId));
       void openRequest(state.selectedRequestId);
     }));
-    document.querySelector('[data-workflow-refresh]')?.addEventListener('click', () => renderRequests());
+    document.querySelector('[data-workflow-refresh]')?.addEventListener('click', () => { if (isActive('requests')) void renderRequests(); });
   }
 
   async function openRequest(id) {
     const box = document.getElementById('adminInboxDetail');
-    if (!box || state.active !== 'requests') return;
+    if (!box || !isActive('requests')) return;
     box.innerHTML = `<div class="admin-loading">${ico('loader-circle')} Открываем #${id}…</div>`;
     icons();
     try {
       const data = await api(`/api/app/admin/requests/${id}`);
-      if (state.active !== 'requests' || Number(state.selectedRequestId) !== Number(id)) return;
+      if (!isActive('requests') || Number(state.selectedRequestId) !== Number(id) || !box.isConnected) return;
       paintRequestDetail(box, data);
     } catch (error) {
+      if (stale('requests', error) || Number(state.selectedRequestId) !== Number(id) || !box.isConnected) return;
       box.innerHTML = `<div class="admin-workflow-inline-error">${ico('triangle-alert')}<strong>Не удалось открыть заявку</strong><span>${esc(error.message)}</span><button type="button" data-request-retry>Повторить</button></div>`;
-      box.querySelector('[data-request-retry]')?.addEventListener('click', () => openRequest(id));
+      box.querySelector('[data-request-retry]')?.addEventListener('click', () => void openRequest(id));
       icons();
     }
   }
@@ -259,8 +242,8 @@
       const extra = action === 'progress' ? { current_chapter: Number(document.getElementById('workflowProgress')?.value) } : {};
       void runRequestAction(action, Number(button.dataset.id), extra);
     }));
-    box.querySelector('[data-workflow-save-notes]')?.addEventListener('click', event => saveNotes(Number(event.currentTarget.dataset.workflowSaveNotes)));
-    box.querySelector('[data-workflow-raw]')?.addEventListener('click', event => sendRaw(Number(event.currentTarget.dataset.workflowRaw)));
+    box.querySelector('[data-workflow-save-notes]')?.addEventListener('click', event => void saveNotes(Number(event.currentTarget.dataset.workflowSaveNotes)));
+    box.querySelector('[data-workflow-raw]')?.addEventListener('click', event => void sendRaw(Number(event.currentTarget.dataset.workflowRaw)));
     box.querySelector('[data-workflow-publication]')?.addEventListener('click', event => createPublication(Number(event.currentTarget.dataset.workflowPublication), event.currentTarget.dataset.title || ''));
     icons();
   }
@@ -287,7 +270,7 @@
       sessionStorage.setItem('dtl:publicationSubmissionId', String(id));
       sessionStorage.setItem('dtl:publicationSubmissionTitle', String(title || ''));
     } catch {}
-    document.querySelector('[data-admin-section="publishing"]')?.click();
+    void adminRuntime.open('section:publishing');
   }
 
   async function runRequestAction(action, id, extra = {}) {
@@ -296,6 +279,7 @@
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, action, ...extra }),
       });
       toast(action === 'progress' ? 'Прогресс сохранён.' : 'Готово.');
+      if (!isActive('requests')) return;
       const autoNext = state.requestFilter === 'pending' && ['accept','reject','return'].includes(action);
       if (autoNext) state.selectedRequestId = null;
       await renderRequests({ selectFirst: autoNext });
@@ -303,17 +287,19 @@
   }
 
   async function renderQueue() {
+    if (adminRuntime.activeRoute?.() !== routeId('queue')) return false;
     state.active = 'queue';
     markActive('queue');
     setHead('Очередь', 'Порядок переводов, активная работа и прогресс в одном экране');
     loading('Загружаем очередь…');
     try {
       const data = await api('/api/app/admin/list?kind=queue');
+      if (!isActive('queue')) return false;
       state.queueRows = data.requests || [];
       const working = state.queueRows.filter(r => r.queue_status === 'in_progress');
       const queued = state.queueRows.filter(r => r.queue_status === 'queued');
       const root = area();
-      if (!root || state.active !== 'queue') return;
+      if (!root || !isActive('queue')) return false;
       root.innerHTML = `<section class="admin-workflow admin-queue-workflow">
         <div class="admin-queue-summary">
           <div class="admin-panel"><span>В работе</span><strong>${working.length}</strong><small>Активные переводы</small></div>
@@ -325,8 +311,10 @@
       </section>`;
       bindQueue();
       icons();
+      return true;
     } catch (error) {
-      if (state.active === 'queue') errorBox(error.message, () => renderQueue());
+      if (!stale('queue', error)) errorBox(error.message, () => void renderQueue());
+      return false;
     }
   }
 
@@ -351,8 +339,9 @@
   }
 
   function bindQueue() {
-    document.querySelector('[data-queue-refresh]')?.addEventListener('click', () => renderQueue());
+    document.querySelector('[data-queue-refresh]')?.addEventListener('click', () => { if (isActive('queue')) void renderQueue(); });
     document.querySelectorAll('[data-queue-action]').forEach(button => button.addEventListener('click', () => {
+      if (!isActive('queue')) return;
       const action = button.dataset.queueAction;
       const id = Number(button.dataset.id);
       const extra = action === 'progress' ? { current_chapter: Number(document.getElementById(`queue-progress-${id}`)?.value) } : {};
@@ -361,12 +350,14 @@
 
     document.querySelectorAll('[data-queue-row]').forEach(row => {
       row.addEventListener('dragstart', event => {
+        if (!isActive('queue')) return;
         state.dragRequestId = Number(row.dataset.queueRow);
         row.classList.add('dragging');
         event.dataTransfer.effectAllowed = 'move';
         try { event.dataTransfer.setData('text/plain', String(state.dragRequestId)); } catch {}
       });
       row.addEventListener('dragover', event => {
+        if (!isActive('queue')) return;
         event.preventDefault();
         const dragging = document.querySelector('.admin-queue-row.dragging');
         if (!dragging || dragging === row) return;
@@ -374,7 +365,7 @@
         row.parentElement?.insertBefore(dragging, event.clientY < rect.top + rect.height / 2 ? row : row.nextSibling);
         renumberQueueDom();
       });
-      row.addEventListener('drop', event => { event.preventDefault(); });
+      row.addEventListener('drop', event => { if (isActive('queue')) event.preventDefault(); });
       row.addEventListener('dragend', () => void finishQueueDrag(row));
     });
   }
@@ -390,7 +381,7 @@
     row.classList.remove('dragging');
     const id = state.dragRequestId;
     state.dragRequestId = null;
-    if (!id) return;
+    if (!id || !isActive('queue')) return;
     const rows = [...document.querySelectorAll('.admin-queue-row')];
     const position = rows.findIndex(item => Number(item.dataset.queueRow) === Number(id)) + 1;
     const original = state.queueRows.find(item => Number(item.id) === Number(id));
@@ -400,10 +391,10 @@
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ position }),
       });
       toast(`Позиция #${position} сохранена.`);
-      await renderQueue();
+      if (isActive('queue')) await renderQueue();
     } catch (error) {
       toast(error.message, true);
-      await renderQueue();
+      if (isActive('queue')) await renderQueue();
     }
   }
 
@@ -413,7 +404,7 @@
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, action, ...extra }),
       });
       toast(action === 'progress' ? 'Прогресс сохранён.' : 'Очередь обновлена.');
-      await renderQueue();
+      if (isActive('queue')) await renderQueue();
     } catch (error) { toast(error.message, true); }
   }
 
@@ -430,27 +421,25 @@
     }
   }
 
-  document.addEventListener('click', event => {
-    const button = event.target.closest?.('[data-admin-section="requests"],[data-admin-section="queue"]');
-    if (!button) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    void open(button.dataset.adminSection);
-  }, true);
-
-  document.addEventListener('click', event => {
-    const other = event.target.closest?.('[data-admin-section]:not([data-admin-section="requests"]):not([data-admin-section="queue"]),[data-admin-tools],[data-admin-health]');
-    if (other) state.active = '';
-  }, true);
+  adminRuntime.registerRoute('section:requests', {
+    mount: () => renderRequests(),
+    refresh: () => renderRequests(),
+    unmount: () => deactivate('requests'),
+  });
+  adminRuntime.registerRoute('section:queue', {
+    mount: () => renderQueue(),
+    refresh: () => renderQueue(),
+    unmount: () => deactivate('queue'),
+  });
 
   document.addEventListener('dtl:adminrender', decorateNavigation);
   runtime.registerPatcher(decorateNavigation);
 
   window.DTL_ADMIN_WORKFLOW = Object.freeze({
-    openRequests: () => open('requests'),
-    openQueue: () => open('queue'),
-    refresh: () => state.active === 'queue' ? renderQueue() : renderRequests(),
+    openRequests: () => adminRuntime.open('section:requests'),
+    openQueue: () => adminRuntime.open('section:queue'),
+    refresh: () => adminRuntime.refresh(),
+    deactivate,
     state: () => ({ ...state, requestRows: undefined, queueRows: undefined }),
   });
 })();
