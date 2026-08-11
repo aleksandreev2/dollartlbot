@@ -57,15 +57,22 @@
       details.innerHTML = `<summary>${ico('ellipsis')}<span>Ещё</span>${ico('chevron-down')}</summary><div class="admin-nav-more-items"></div>`;
       nav.append(details);
     }
+
+    if (details.dataset.dtlToggleBound !== '1') {
+      details.dataset.dtlToggleBound = '1';
+      details.querySelector('summary')?.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        details.open = !details.open;
+      });
+    }
+
     const body = details.querySelector('.admin-nav-more-items');
     for (const selector of secondarySelectors) {
       const button = nav.querySelector(selector) || document.querySelector(`.admin-side-nav ${selector}`);
       if (button && button.parentElement !== body) body.append(button);
     }
 
-    // Never force a manually opened menu closed on a patch pass. The old
-    // `details.open = Boolean(active)` made the native <details> toggle appear
-    // broken because opening it immediately scheduled another pass that closed it.
     if (body?.querySelector('.active')) details.open = true;
   }
 
@@ -89,8 +96,6 @@
       if (button) button.classList.add('admin-mobile-secondary');
     }
 
-    // Same rule as desktop: an active secondary page may open More, but a
-    // patch pass must not undo a user's explicit toggle.
     if (nav.querySelector('.admin-mobile-secondary.active')) {
       nav.classList.add('admin-mobile-more-open');
       more.classList.add('active');
@@ -109,13 +114,20 @@
     icons();
   }
 
+  function settle() {
+    queueMicrotask(install);
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => install());
+    else setTimeout(install, 0);
+  }
+
   document.addEventListener('click', event => {
     const navigated = event.target.closest?.('[data-admin-section],[data-admin-tools],[data-admin-health],[data-admin-activity]');
     if (!navigated) return;
-    queueMicrotask(install);
+    settle();
   }, true);
 
-  document.addEventListener('dtl:adminroutechange', () => queueMicrotask(install));
+  document.addEventListener('dtl:adminroutechange', settle);
+  document.addEventListener('dtl:adminrender', settle);
 
   runtime.registerPatcher(install);
   window.DTL_ADMIN_NAVIGATION = Object.freeze({ refresh: install });
