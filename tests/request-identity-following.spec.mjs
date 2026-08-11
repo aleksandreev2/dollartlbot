@@ -20,10 +20,13 @@ async function boot(page,{view='discover',followingItems=[]}={}){
       async api(path,options={}){
         calls.push({path,options});
         if(path==='/api/app/submission/preflight'){
-          if(window.__duplicate){const e=new Error('This exact NovelPia title is already in Dollar TL. Your quota was not used.');e.code='duplicate_title';throw e;}
-          return{ok:true,identity:'novelpia:401201'};
+          if(window.__duplicate)return{ok:true,identity:'novelpia:401201',duplicate:{submission_id:88,title:'Existing Novel',request_status:'accepted',queue_status:'queued',queue_position:4,chapter_count:120,current_chapter:null,identity:'novelpia:401201',quota_used:false}};
+          return{ok:true,identity:'novelpia:401201',duplicate:null};
         }
         if(path==='/api/app/submit')return{submission_id:77,used:1,limit:1,remaining:0};
+        if(path==='/api/app/discovery/interest'){
+          const body=JSON.parse(options.body);return{submission_id:body.submission_id,demand_count:9,viewer_interested:true,own_request:false,sources:[]};
+        }
         if(path==='/api/app/following')return{count:followingItems.length,followed_keys:followingItems.map(x=>x.follow_key),items:followingItems};
         if(path==='/api/app/following/submission'){
           const body=JSON.parse(options.body);return{ok:true,following:body.following,follow_key:`submission:${body.submission_id}`,submission_id:body.submission_id};
@@ -49,9 +52,10 @@ test('submit preflight injects canonical NovelPia identity and stable request id
     const response=await app.api('/api/app/submit',{method:'POST',body:form});
     const calls=window.__calls;
     const submit=calls.find(entry=>entry.path==='/api/app/submit');
-    return{response,paths:calls.map(x=>x.path),requestId:submit.options.body.get('request_id'),provider:submit.options.body.get('identity_provider'),externalId:submit.options.body.get('identity_external_id')};
+    const submitPaths=calls.map(x=>x.path).filter(path=>path==='/api/app/submission/preflight'||path==='/api/app/submit');
+    return{response,submitPaths,requestId:submit.options.body.get('request_id'),provider:submit.options.body.get('identity_provider'),externalId:submit.options.body.get('identity_external_id')};
   });
-  expect(result.paths.slice(0,2)).toEqual(['/api/app/submission/preflight','/api/app/submit']);
+  expect(result.submitPaths).toEqual(['/api/app/submission/preflight','/api/app/submit']);
   expect(result.provider).toBe('novelpia');
   expect(result.externalId).toBe('401201');
   expect(result.requestId).toMatch(/^web_[A-Za-z0-9]+/);
@@ -59,7 +63,7 @@ test('submit preflight injects canonical NovelPia identity and stable request id
   expect(result.response.submission_id).toBe(77);
 });
 
-test('duplicate preflight stops the real submit before upload and preserves the quota-safe error',async({page})=>{
+test('duplicate preflight converts to demand, stops upload, and keeps Follow separate',async({page})=>{
   await boot(page);
   const result=await page.evaluate(async()=>{
     const app=window.DTL_APP;window.__duplicate=true;
@@ -67,12 +71,23 @@ test('duplicate preflight stops the real submit before upload and preserves the 
     app.state.draft.source_url='https://novelpia.com/novel/401201';
     const form=new FormData();form.set('file',new File(['raw'],'raw.txt'),'raw.txt');
     try{await app.api('/api/app/submit',{method:'POST',body:form});return{failed:false};}
-    catch(error){return{failed:true,code:error.code,message:error.message,paths:window.__calls.map(x=>x.path)};}
+    catch(error){
+      const calls=window.__calls;
+      const submitPaths=calls.map(x=>x.path).filter(path=>path==='/api/app/submission/preflight'||path==='/api/app/submit');
+      const interest=calls.find(entry=>entry.path==='/api/app/discovery/interest');
+      return{failed:true,code:error.code,message:error.message,submissionId:error.submission_id,quotaUsed:error.quota_used,submitPaths,interestBody:interest?JSON.parse(interest.options.body):null,followMutation:calls.some(entry=>entry.path==='/api/app/following/submission')};
+    }
   });
   expect(result.failed).toBe(true);
   expect(result.code).toBe('duplicate_title');
+  expect(result.message).toContain('interest');
   expect(result.message).toContain('quota was not used');
-  expect(result.paths).toEqual(['/api/app/submission/preflight']);
+  expect(result.submissionId).toBe(88);
+  expect(result.quotaUsed).toBe(false);
+  expect(result.submitPaths).toEqual(['/api/app/submission/preflight']);
+  expect(result.interestBody).toEqual({submission_id:88,interested:true});
+  expect(result.followMutation).toBe(false);
+  await expect.poll(()=>page.evaluate(()=>window.__opened||null)).toBe(88);
 });
 
 test('Discover gets a separate Follow updates action without changing demand state',async({page})=>{
