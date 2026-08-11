@@ -8,6 +8,9 @@ const css = [
   'public/app/card-upgrade.css',
   'public/app/interaction-upgrade.css',
   'public/app/feature-upgrades.css',
+  'public/app/account-page.css',
+  'public/app/notifications-ui.css',
+  'public/app/referral-page.css',
   'public/app/suggest-content-picker.css',
   'public/app/language-switch.css',
   'public/app/home-v2.css',
@@ -20,6 +23,8 @@ const sources = {
   core: read('public/app/app-core.js'),
   i18n: read('public/app/view-i18n.js'),
   interaction: read('public/app/interaction-upgrade.js'),
+  referrals: read('public/app/referrals-ui.js'),
+  notifications: read('public/app/notifications-ui.js'),
   home: read('public/app/view-home.js'),
   queue: read('public/app/view-queue.js'),
   suggest: read('public/app/view-suggest.js'),
@@ -40,18 +45,55 @@ const VIEWPORTS = [
   { name:'desktop-1440', width:1440, height:900 },
 ];
 
+const notificationPayload = {
+  unread:2,
+  preferences:{request_updates:true,releases:true,announcements:true,referrals:true},
+  notifications:[
+    {id:101,type:'request_update',title:'Your translation request moved to the active queue',body:'The Grand Duke of the Northern Territory Who Became the Academy’s Unreasonably Overqualified Translation Manager\nPosition #2 · translation will start automatically when the current title is completed.',created_at:'2026-08-11T12:10:00Z',read_at:null,action_url:'dtl://request/2'},
+    {id:102,type:'release',title:'A new translated chapter batch is available',body:'Chapters 78–84 are now available.\nOpen the title to review the latest publication status.',created_at:'2026-08-11T10:35:00Z',read_at:null,action_url:'dtl://novel/1'},
+    {id:103,type:'announcement',title:'Dollar TL service update',body:'We improved the Mini App reading and request workflow across mobile and Telegram Desktop.',created_at:'2026-08-09T08:00:00Z',read_at:'2026-08-09T08:10:00Z',action_url:null},
+  ],
+};
+
+const referralPayload = {
+  enabled:true,
+  max_bonus:3,
+  grants_this_month:1,
+  invite_link:'https://t.me/dollartlbot?start=ref_1234567890_abcdefghijklmnopqrstuvwxyz',
+  quota:{base_limit:5,bonus:1,effective_limit:6,available:4},
+  pending:[{progress:.57,remaining_seconds:259200}],
+  qualified:[{id:22}],
+};
+
 async function boot(page, viewport) {
   await page.setViewportSize({ width:viewport.width, height:viewport.height });
-  await page.route('https://dtl.test/**', route => route.fulfill({
-    status:200,
-    contentType:'text/html',
-    body:`<!doctype html><html><head><style>${css}\n*{animation:none!important;transition:none!important}</style></head><body><div id="app" class="app-shell" aria-busy="true"><header class="topbar"><button class="brand" data-nav="home"><span class="brand-copy"><strong>Dollar TL</strong></span></button><button class="icon-button" id="notificationButton"></button></header><div id="previewBanner" hidden></div><main id="viewRoot" class="view-root" tabindex="-1"></main><nav id="bottomNav" class="bottom-nav"></nav><div id="toastRegion"></div><div id="sheetRoot"></div></div><input id="novelFilePicker" type="file" hidden></body></html>`,
-  }));
+  await page.route('https://dtl.test/**', async route => {
+    const url=new URL(route.request().url());
+    if(url.pathname==='/api/app/notifications' && route.request().method()==='GET'){
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(notificationPayload)});return;
+    }
+    if(url.pathname==='/api/app/notifications/read'){
+      await route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});return;
+    }
+    if(url.pathname==='/api/app/notifications/preferences'){
+      const preferences=route.request().postDataJSON?.()||notificationPayload.preferences;
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({preferences})});return;
+    }
+    if(url.pathname==='/api/app/referrals'){
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(referralPayload)});return;
+    }
+    await route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:`<!doctype html><html><head><style>${css}\n*{animation:none!important;transition:none!important}</style></head><body><div id="app" class="app-shell" aria-busy="true"><header class="topbar"><button class="brand" data-nav="home"><span class="brand-copy"><strong>Dollar TL</strong></span></button><button class="icon-button notification-button" id="notificationButton"><span class="notification-dot"></span></button></header><div id="previewBanner" hidden></div><main id="viewRoot" class="view-root" tabindex="-1"></main><nav id="bottomNav" class="bottom-nav"></nav><div id="toastRegion"></div><div id="sheetRoot"></div></div><input id="novelFilePicker" type="file" hidden></body></html>`,
+    });
+  });
   await page.goto('https://dtl.test/');
   await page.evaluate(({ compact }) => {
     if (compact) document.documentElement.classList.add('dtl-telegram-desktop','dtl-compact-desktop');
-    window.Telegram = { WebApp:{ ready(){}, expand(){}, setHeaderColor(){}, setBackgroundColor(){}, HapticFeedback:{selectionChanged(){}} } };
+    window.Telegram = { WebApp:{ ready(){}, expand(){}, setHeaderColor(){}, setBackgroundColor(){}, HapticFeedback:{selectionChanged(){}}, openTelegramLink(){}, openLink(){} } };
     window.lucide = { createIcons(){} };
+    window.DTL_NOTIFICATION_LINK={open(){}};
     const languageCode = value => {
       const v=String(value||'').toLowerCase();
       if(v.includes('korean')||v.includes('한국'))return'ko';
@@ -92,11 +134,12 @@ async function boot(page, viewport) {
     };
     window.DTL_RUNTIME = {
       detectLanguage:languageCode,
+      locale(){return window.DTL_APP?.state?.locale||'en';},
       registerPatcher(fn){patchers.push(fn);return()=>{};},
       schedule(){for(const fn of [...patchers]){try{fn();}catch{}}},
     };
   }, { compact:Boolean(viewport.compact) });
-  for (const key of ['core','i18n','interaction','home','queue','suggest','contentPicker','contentApi','account']) await page.addScriptTag({ content:sources[key] });
+  for (const key of ['core','i18n','interaction','referrals','notifications','home','queue','suggest','contentPicker','contentApi','account']) await page.addScriptTag({ content:sources[key] });
   await page.evaluate(async title => {
     await window.DTL_APP.init();
     const app=window.DTL_APP;
@@ -125,7 +168,7 @@ async function assertViewportSafe(page, label) {
   const result = await page.evaluate(() => {
     const width=document.documentElement.clientWidth;
     const pageOverflow=document.documentElement.scrollWidth-width;
-    const selectors=['.app-shell','.topbar','.page','.premium-card','.novel-card','.request-card','.settings-list','.setting-row','.section-header','.segmented','.stepper','.review-card','.review-row','.detected-list','.detected-row','.detail-hero','.button-row','.bottom-nav','.content-card','.content-section-head','.content-choice-grid'];
+    const selectors=['.app-shell','.topbar','.page','.premium-card','.novel-card','.request-card','.settings-list','.setting-row','.section-header','.segmented','.stepper','.review-card','.review-row','.detected-list','.detected-row','.detail-hero','.button-row','.bottom-nav','.content-card','.content-section-head','.content-choice-grid','.account-settings-grid','.notification-page','.notification-head','.notification-toolbar','.notification-settings','.notification-item','.referral-page','.referral-page-head','.referral-page-hero','.referral-link-box','.referral-actions','.referral-page-stats','.referral-reward-track','.referral-progress-card'];
     const escaped=[];
     for(const selector of selectors){
       for(const el of document.querySelectorAll(selector)){
@@ -137,7 +180,7 @@ async function assertViewportSafe(page, label) {
       }
     }
     const clipped=[];
-    const textSelectors=['.nav-item>span:last-child','.section-header h2','.setting-title','.setting-sub','.step-node>span:last-child','.segmented button','.primary-button','.secondary-button','.edit-link','.content-choice>span:not(.content-choice-icon):not(.content-choice-check):not(.content-18)'];
+    const textSelectors=['.nav-item>span:last-child','.section-header h2','.setting-title','.setting-sub','.step-node>span:last-child','.segmented button','.primary-button','.secondary-button','.edit-link','.content-choice>span:not(.content-choice-icon):not(.content-choice-check):not(.content-18)','.notification-filter button','.notification-toggle>span:nth-child(2)','.notification-item strong','.referral-stat span','.referral-actions button'];
     for(const selector of textSelectors){
       for(const el of document.querySelectorAll(selector)){
         const style=getComputedStyle(el);
@@ -167,20 +210,58 @@ async function renderScenario(page, locale, scenario) {
     if(scenario==='suggest-review'){app.state.wizardStep=4;app.navigate('suggest',false);return;}
     if(scenario==='detail'){app.state.detailNovel=app.state.bootstrap.queue.active[0];app.navigate('detail',false);}
   },{locale,scenario});
+
+  if(scenario==='notifications'||scenario==='notifications-settings'){
+    await page.evaluate(locale=>{const app=window.DTL_APP;app.applyLocale(locale);app.navigate('account',false);},locale);
+    await page.evaluate(()=>window.DTL_NOTIFICATIONS.open());
+    await page.waitForSelector('[data-notification-page]');
+    if(scenario==='notifications-settings')await page.locator('#notifPrefsButton').click();
+  }
+  if(scenario==='referrals'){
+    await page.evaluate(locale=>{const app=window.DTL_APP;app.applyLocale(locale);app.navigate('account',false);},locale);
+    await page.waitForSelector('#referralSetting');
+    await page.locator('#referralSetting').click();
+    await page.waitForSelector('[data-referral-page]');
+  }
   await assertViewportSafe(page,`${locale}/${scenario}`);
 }
 
 for (const viewport of VIEWPORTS) {
   test(`responsive matrix: ${viewport.name}`, async ({page}) => {
-    test.setTimeout(60_000);
+    test.setTimeout(75_000);
     await boot(page,viewport);
     for (const locale of LOCALES) {
-      for (const scenario of ['home','queue-active','queue-upcoming','requests','account','suggest-upload','suggest-details','suggest-content','suggest-review','detail']) {
+      for (const scenario of ['home','queue-active','queue-upcoming','requests','account','notifications','notifications-settings','referrals','suggest-upload','suggest-details','suggest-content','suggest-review','detail']) {
         await renderScenario(page,locale,scenario);
       }
     }
   });
 }
+
+test('Notification center returns to Account and preserves the initial unread view', async ({page}) => {
+  await boot(page,{name:'notification-flow',width:390,height:844});
+  await renderScenario(page,'ru','account');
+  await page.locator('#notificationsSetting').click();
+  await page.waitForSelector('[data-notification-page]');
+  await expect(page.locator('.notification-item.unread')).toHaveCount(2);
+  await page.locator('[data-notification-filter="unread"]').click();
+  await expect(page.locator('.notification-item')).toHaveCount(2);
+  await page.locator('#notifBack').click();
+  await expect(page.locator('.account-page')).toBeVisible();
+});
+
+test('Referral page opens from Account and keeps share controls inside a narrow viewport', async ({page}) => {
+  await boot(page,{name:'referral-flow',width:360,height:780});
+  await renderScenario(page,'de','account');
+  await page.waitForSelector('#referralSetting');
+  await page.locator('#referralSetting').click();
+  await page.waitForSelector('[data-referral-page]');
+  await expect(page.locator('#copyReferral')).toBeVisible();
+  await expect(page.locator('#shareReferral')).toBeVisible();
+  await assertViewportSafe(page,'de/referral-flow');
+  await page.locator('#referralBack').click();
+  await expect(page.locator('.account-page')).toBeVisible();
+});
 
 test('Suggest inputs and textareas stay usable when the visual viewport collapses', async ({page}) => {
   test.setTimeout(30_000);

@@ -62,7 +62,7 @@ need(ui,'data-action-url','notification card target');
 need(ui,'DTL_NOTIFICATION_LINK?.open','notification card routing');
 need(css,'.request-card.notification-target','request highlight');
 need(html,'/app/notification-deeplink.js?v=20260810-notify2','notification deep-link asset');
-need(html,'/app/notifications-ui.js?v=20260810-notify3','notification UI cache bust');
-need(html,'/app/notifications-ui.css?v=20260810-notify3','notification CSS cache bust');
+need(html,'/app/notifications-ui.js?v=20260811-notify4','notification UI cache bust');
+need(html,'/app/notifications-ui.css?v=20260811-notify4','notification CSS cache bust');
 
 console.log('Notification delivery audit passed: durable retries, preserved preferences, idempotent/debounced progress, referral preference routing, and request/admin deep links.');
