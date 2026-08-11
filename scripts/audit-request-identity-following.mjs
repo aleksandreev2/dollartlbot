@@ -26,6 +26,8 @@ for(const token of [
   'bindSubmissionIdentity',
   'reconcileCommittedSubmissionIdentity',
   'releaseSubmissionIdentityGuard',
+  'duplicateDetails',
+  'duplicate:',
   'duplicate_title',
   'duplicate_in_progress',
   'claim_expires_at',
@@ -34,6 +36,12 @@ for(const token of [
 ])requireToken(identity,token,'identity guard');
 if(identity.includes('request.clone().formData'))throw new Error('identity guard must never clone/parse the multipart submit body');
 if(identity.includes('prepareSubmissionIdentityGuard'))throw new Error('legacy request-level multipart identity guard must be removed');
+const preflightDuplicateAt=identity.indexOf('if (duplicate) {');
+const preflightPayloadAt=identity.indexOf('duplicate: duplicateDetails(duplicate, identity)');
+const hardDuplicateAt=identity.indexOf('return duplicate ? duplicateResponse(duplicate, identity) : null;');
+if(preflightDuplicateAt<0||preflightPayloadAt<preflightDuplicateAt||hardDuplicateAt<preflightPayloadAt){
+  throw new Error('preflight must return a reusable duplicate payload while the canonical submit path keeps a hard duplicate error');
+}
 
 for(const token of [
   "const form = await request.formData()",
@@ -73,6 +81,11 @@ for(const token of [
   'identity_provider',
   'identity_external_id',
   'request_id',
+  'preflight?.duplicate?.submission_id',
+  '/api/app/discovery/interest',
+  'interested:true',
+  'duplicateConverted',
+  'quota_used=false',
   '/api/app/following/submission',
   '/api/app/following/catalog',
   'followingSetting',
@@ -80,6 +93,9 @@ for(const token of [
   'dataset.followStamp',
   'cachePayload',
 ])requireToken(ui,token,'following UI');
+const conversionAt=ui.indexOf("original('/api/app/discovery/interest'");
+const followMutationAt=ui.indexOf("app.api('/api/app/following/submission'");
+if(conversionAt<0||followMutationAt<0)throw new Error('demand conversion and explicit follow mutation must both remain present');
 requireToken(html,'/app/title-following-ui.js?v=20260812-follow1','asset wiring');
 requireToken(html,'/app/title-following-ui.css?v=20260812-follow1','asset wiring');
 
