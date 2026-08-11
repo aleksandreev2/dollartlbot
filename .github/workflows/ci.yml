@@ -174,7 +174,7 @@ jobs:
           grep -q '/app/suggest-content-api.js?v=20260810-content4' public/app/index.html
           ! grep -q '/app/suggest-content-activation.js' public/app/index.html
           grep -q '/app/view-requests-account.js?v=20260811-lang1' public/app/index.html
-          grep -q '/app/language-switch.css?v=20260811-lang1' public/app/index.html
+          grep -q '/app/language-switch.css?v=20260811-lang2' public/app/index.html
           grep -q '/app/view-admin.js?v=20260810-app1' public/app/index.html
           grep -q '/app/novel-presenter.js?v=20260810-runtime4' public/app/index.html
           grep -q '/app/cover-ui.js?v=20260810-runtime4' public/app/index.html
