@@ -1,10 +1,11 @@
 .language-picker-sheet .sheet-title{margin-bottom:14px}
 .language-picker-sheet .sheet-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.language-picker-sheet .language-picker-option{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 24px;align-items:center;gap:10px;min-height:52px;margin:0!important;padding:11px 13px;text-align:left;cursor:pointer;overflow:visible;transition:transform .15s ease,border-color .15s ease,background .15s ease}
+.language-picker-sheet .language-picker-option{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-width:0;min-height:52px;margin:0!important;padding:11px 13px;text-align:left;cursor:pointer;overflow:hidden;transition:transform .15s ease,border-color .15s ease,background .15s ease}
 .language-picker-sheet .language-picker-option:hover{transform:translateY(-1px);border-color:rgba(168,121,22,.35)}
 .language-picker-sheet .language-picker-option[aria-current="true"]{background:var(--gold-soft,#f6edda);border-color:rgba(168,121,22,.38)}
-.language-picker-name{display:block;min-width:0;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;font-weight:700;line-height:1.22}
-.language-picker-check,.language-picker-check-spacer{display:grid;place-items:center;width:22px;height:22px;justify-self:end}
+.language-picker-sheet .language-picker-circle-flag{width:22px;height:22px;flex:0 0 22px}
+.language-picker-name{display:block;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:clip;white-space:nowrap;overflow-wrap:normal;word-break:normal;font-weight:700;line-height:1.22}
+.language-picker-check,.language-picker-check-spacer{display:grid;place-items:center;width:22px;height:22px;flex:0 0 22px;margin-left:auto}
 .language-picker-check{border-radius:50%;background:#151515;color:#fff;font-size:12px;font-weight:900}
 .language-picker-sheet.is-saving::after{content:attr(data-saving-text);position:sticky;display:flex;align-items:center;justify-content:center;bottom:0;min-height:38px;margin-top:10px;border-radius:12px;background:rgba(20,20,20,.93);color:#fff;font-size:12px;font-weight:700;letter-spacing:.01em}
 .language-picker-sheet.is-saving .language-picker-option{opacity:.62;pointer-events:none}
