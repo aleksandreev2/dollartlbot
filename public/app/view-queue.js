@@ -85,7 +85,7 @@
     if(stateName==='in_progress')return [dt('working'),dt('workingSub'),'languages',true];
     if(stateName==='completed')return [dt('completed'),dt('completedSub'),'circle-check-big',false];
     if(stateName==='queued')return [dt('queued'),dt('queuedSub'),'clock-3',false];
-    return [escapeHtml(tr('status')),escapeHtml(tr(stateName)),'circle',false];
+    return [tr('status'),tr(stateName),'circle',false];
   }
 
   function renderDetail(){
@@ -105,6 +105,7 @@
     const statusLabel=stateName==='in_progress'?dt('live'):stateName==='completed'?dt('completed'):stateName==='queued'?dt('queued'):tr(stateName);
     const [activityTitle,activitySub,activityIcon,activityLive]=activityCopy(stateName);
     const chapterLabel=total?`${current} / ${total}`:String(current||'—');
+    const progressLabel=dt('progress')||copy('progress');
 
     viewRoot.innerHTML=`<section class="page page-back live-detail" data-live-detail data-detail-state="${escapeHtml(stateName)}">
       <button class="detail-back" type="button" id="detailBack" aria-label="${escapeHtml(tr('back'))}"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
@@ -115,13 +116,13 @@
           <div class="live-detail-title">${escapeHtml(novel.title)}</div>
           <div class="live-detail-language"><span>${languageFlag(novel.original_language)} ${escapeHtml(original||dt('unknown'))}</span><span class="live-detail-language-arrow">→</span><span>${escapeHtml(target)}</span></div>
           <div class="live-detail-chapter-line"><strong>${escapeHtml(dt('current'))}: ${escapeHtml(chapterLabel)}</strong><span class="live-detail-percent">${progress}% ${escapeHtml(dt('translated'))}</span></div>
-          <div class="live-detail-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}" aria-label="${escapeHtml(dt('progress'))}"><div class="live-detail-progress-fill" style="--progress:${progress}%"></div></div>
-          <div class="live-detail-progress-caption"><span>${escapeHtml(dt('progress'))}</span><span>${escapeHtml(dt('updated'))} ${escapeHtml(updated)}</span></div>
+          <div class="live-detail-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}" aria-label="${escapeHtml(progressLabel)}"><div class="live-detail-progress-fill" style="--progress:${progress}%"></div></div>
+          <div class="live-detail-progress-caption"><span>${escapeHtml(progressLabel)}</span><span>${escapeHtml(dt('updated'))} ${escapeHtml(updated)}</span></div>
         </div>
       </section>
 
       <section class="live-detail-section">
-        <div class="live-detail-section-head"><div class="live-detail-section-title">${escapeHtml(dt('progress'))}</div><div class="live-detail-updated">${escapeHtml(dt('updated'))} ${escapeHtml(updated)}</div></div>
+        <div class="live-detail-section-head"><div class="live-detail-section-title">${escapeHtml(progressLabel)}</div><div class="live-detail-updated">${escapeHtml(dt('updated'))} ${escapeHtml(updated)}</div></div>
         <div class="live-progress-card">
           <div class="live-progress-stats">
             <div class="live-progress-stat"><strong>${current}</strong><span>${escapeHtml(dt('current'))}</span></div>
