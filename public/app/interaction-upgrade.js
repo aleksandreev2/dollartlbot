@@ -13,9 +13,13 @@
   let pointer = null;
   let sheetWasOpen = false;
   let sheetReturnFocus = null;
+  let viewportRaf = 0;
+  let viewportWidth = window.innerWidth;
+  let stableVisualHeight = Math.max(window.innerHeight, window.visualViewport?.height || 0);
 
   const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const interactiveSelector = 'button,a,input,textarea,select,label,[role="button"],.filter-row,.segmented,.timeline,.tag-list,.quick-tags';
+  const editableSelector = 'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="file"]),textarea,select,[contenteditable="true"]';
 
   function haptic() {
     try { tg?.HapticFeedback?.selectionChanged(); } catch {}
@@ -69,6 +73,61 @@
         try { target.focus({ preventScroll:true }); } catch {}
       });
     }
+  }
+
+  function activeEditable() {
+    const active = document.activeElement;
+    return active instanceof HTMLElement && active.matches(editableSelector) ? active : null;
+  }
+
+  function ensureFocusedFieldVisible(field, visualTop, visualHeight) {
+    if (!field?.isConnected || document.activeElement !== field) return;
+    const adjust = () => {
+      if (!field?.isConnected || document.activeElement !== field) return;
+      const rect = field.getBoundingClientRect();
+      const topLimit = visualTop + 14;
+      const bottomLimit = visualTop + visualHeight - 22;
+      let delta = 0;
+      if (rect.top < topLimit) delta = rect.top - topLimit;
+      else if (rect.bottom > bottomLimit) delta = rect.bottom - bottomLimit;
+      if (Math.abs(delta) < 1) return;
+      try { window.scrollBy({ top:delta, left:0, behavior:'auto' }); }
+      catch { window.scrollBy?.(0, delta); }
+    };
+
+    // Browser/WebView may do its own focus scroll in the same resize frame. Clamp once
+    // now and once after layout settles instead of centering and fighting the browser.
+    adjust();
+    requestAnimationFrame(adjust);
+  }
+
+  function syncVisualViewport() {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    const width = Math.round(viewport?.width || window.innerWidth);
+    const visualHeight = Math.max(280, Math.round(viewport?.height || window.innerHeight));
+    const visualTop = Math.max(0, Math.round(viewport?.offsetTop || 0));
+    const field = activeEditable();
+
+    if (!field && Math.abs(width - viewportWidth) > 72) stableVisualHeight = visualHeight;
+    viewportWidth = width;
+    if (!field && visualHeight >= stableVisualHeight - 48) stableVisualHeight = Math.max(stableVisualHeight, visualHeight);
+
+    const overlap = Math.max(0, Math.round(stableVisualHeight - visualHeight - visualTop));
+    const keyboardOpen = Boolean(field && window.innerWidth < 900 && overlap >= 96);
+    root.style.setProperty('--dtl-visual-height', `${visualHeight}px`);
+    root.style.setProperty('--dtl-visual-top', `${visualTop}px`);
+    root.style.setProperty('--dtl-keyboard-overlap', `${keyboardOpen ? overlap : 0}px`);
+    root.classList.toggle('dtl-keyboard-open', keyboardOpen);
+    if (keyboardOpen) ensureFocusedFieldVisible(field, visualTop, visualHeight);
+  }
+
+  function scheduleVisualViewportSync() {
+    if (viewportRaf) cancelAnimationFrame(viewportRaf);
+    viewportRaf = requestAnimationFrame(() => {
+      viewportRaf = 0;
+      syncVisualViewport();
+    });
   }
 
   function wizardBack() {
@@ -146,9 +205,9 @@
     upgradeTimelines(document);
     syncSheetState();
     syncNativeBack();
+    syncVisualViewport();
   }
 
-  // Track the page that opened a novel detail view before app.js changes its internal state.
   document.addEventListener('click', event => {
     const nav = event.target.closest?.('.nav-item[data-nav]');
     if (nav) lastMainNav = nav.dataset.nav || lastMainNav;
@@ -156,7 +215,6 @@
     if (novel) detailOrigin = activeMainNav();
   }, true);
 
-  // Make the custom back button deterministic instead of relying on the module-local previousView.
   document.addEventListener('click', event => {
     if (!event.target.closest?.('#detailBack')) return;
     event.preventDefault();
@@ -164,8 +222,6 @@
     smartBack();
   }, true);
 
-  // Desktop/web fallback: Escape should close any visible sheet, including the custom
-  // Suggest content picker that does not use the account sheet's close button markup.
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || !visibleSheetBackdrop()) return;
     event.preventDefault();
@@ -183,8 +239,18 @@
     });
   });
 
-  // Pointer gesture layer: native-feeling edge-back, tab swipes on non-interactive space,
-  // and a downward swipe on the bottom-sheet handle/header.
+  document.addEventListener('focusin', event => {
+    if (!event.target.closest?.(editableSelector)) return;
+    scheduleVisualViewportSync();
+  });
+  document.addEventListener('focusout', event => {
+    if (!event.target.closest?.(editableSelector)) return;
+    window.setTimeout(scheduleVisualViewportSync, 80);
+  });
+  window.visualViewport?.addEventListener('resize', scheduleVisualViewportSync, { passive:true });
+  window.visualViewport?.addEventListener('scroll', scheduleVisualViewportSync, { passive:true });
+  window.addEventListener('resize', scheduleVisualViewportSync, { passive:true });
+
   app.addEventListener('pointerdown', event => {
     if (event.pointerType === 'mouse') return;
     pointer = {
@@ -250,7 +316,6 @@
     haptic();
   }, { passive:true });
 
-  // Android/WebView browser-back fallback where popstate is delivered to the page.
   window.addEventListener('popstate', () => { if (canGoBack()) smartBack(); });
 
   runtime.registerPatcher(patch);
