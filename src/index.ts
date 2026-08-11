@@ -13,6 +13,7 @@ import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
 import { handleCoverHealthRequest } from './cover-health';
 import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
+import { handleDiscoveryFeedRequest } from './discovery-feed';
 import { handleDiscoveryRequest } from './discovery';
 import { runDailyEngagement } from './engagement';
 import { handleUpdate } from './handlers';
@@ -53,6 +54,8 @@ export default {
     if (coverResponse) return coverResponse;
     const releasesResponse = await handleHomeReleasesRequest(request, env);
     if (releasesResponse) return releasesResponse;
+    const discoveryFeedResponse = await handleDiscoveryFeedRequest(request, env);
+    if (discoveryFeedResponse) return discoveryFeedResponse;
     const discoveryResponse = await handleDiscoveryRequest(request, env);
     if (discoveryResponse) return discoveryResponse;
 
