@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 
 function read(path) {
-  return fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  return fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 }
 function need(source, needle, label) {
   if (!source.includes(needle)) throw new Error(`${label}: missing ${needle}`);
@@ -15,7 +15,8 @@ const js = read('public/app/admin-navigation.js');
 const css = read('public/app/admin-navigation.css');
 
 need(index, '/app/admin-navigation.css?v=20260811-nav2', 'admin navigation CSS asset');
-need(index, '/app/admin-navigation.js?v=20260811-nav3', 'admin navigation JS asset');
+need(index, '/app/admin-navigation.js?v=20260811-nav4', 'admin navigation JS asset');
+need(index, '/app/admin-ui-utils.js?v=20260811-ui1', 'admin UI utils asset');
 
 for (const token of [
   'admin-nav-more',
@@ -29,13 +30,15 @@ for (const token of [
   'runtime.registerPatcher(install)',
   'visibleRouteSelector',
   'dtl:adminroutechange',
+  'dtl:adminrender',
+  'details.open = !details.open',
+  'requestAnimationFrame',
 ]) need(js, token, 'admin navigation runtime');
 
 for (const token of [
   'window.fetch =',
   'window.confirm(',
   'new MutationObserver',
-  'dtl:adminrender',
   'admin-publishing-shortcuts',
   'data-publishing-manage',
   'data-publishing-broadcasts',
@@ -52,4 +55,4 @@ for (const token of [
 ]) need(css, token, 'admin navigation CSS');
 forbid(css, '.admin-publishing-shortcuts', 'dead Publishing shortcut CSS');
 
-console.log('Admin navigation audit passed: primary workflow stays visible, Analytics/Settings live under More, active state follows the visible page, and Publishing navigation is owned only by Publishing Center.');
+console.log('Admin navigation audit passed: More toggles explicitly, active state settles after route/render events, and Publishing navigation stays unified.');
