@@ -11,11 +11,12 @@ async function boot(page){
   }));
   await page.goto('https://range.test/');
   await page.evaluate(()=>{
-    window.__range={calls:[],patchers:[],middlewares:[],nextCalls:0};
+    window.__range={calls:[],patchers:[],middlewares:[],handlers:[],nextCalls:0};
     window.lucide={createIcons(){}};
     window.DTL_RUNTIME={
       registerPatcher(fn){window.__range.patchers.push(fn);return()=>{};},
       registerFetchMiddleware(fn){window.__range.middlewares.push(fn);return()=>{};},
+      registerResponseHandler(fn){window.__range.handlers.push(fn);return()=>{};},
     };
     window.DTL_ADMIN={
       activeRoute(){return 'section:publishing';},
@@ -58,8 +59,30 @@ test('restores, autosaves and attaches structured chapter range to a new publica
   const rangeCall=result.calls.find(call=>call.path==='/api/app/admin/publications/42/release-range');
   expect(rangeCall).toBeTruthy();
   expect(JSON.parse(rangeCall.body)).toEqual({chapter_start:86,chapter_end:97});
+  await expect(page.locator('#pubChapterStart')).toHaveValue('86');
+  await expect(page.locator('#pubChapterEnd')).toHaveValue('97');
+
+  await page.evaluate(async()=>{
+    const response=new Response(JSON.stringify({publication:{publication:{id:42}}}),{status:201,headers:{'content-type':'application/json'}});
+    await window.__range.handlers[0](response,{pathname:'/api/app/admin/publications'});
+  });
   await expect(page.locator('#pubChapterStart')).toHaveValue('');
   await expect(page.locator('#pubChapterEnd')).toHaveValue('');
+});
+
+test('keeps range draft when a later publication middleware fails',async({page})=>{
+  await boot(page);
+  await page.locator('#pubChapterStart').fill('100');
+  await page.locator('#pubChapterEnd').fill('110');
+  await page.evaluate(async()=>{
+    const middleware=window.__range.middlewares[0];
+    const next=async()=>new Response(JSON.stringify({publication:{publication:{id:50}}}),{status:201,headers:{'content-type':'application/json'}});
+    await middleware('/api/app/admin/publications',{method:'POST',body:new FormData()},next,{pathname:'/api/app/admin/publications'});
+    const failure=new Response(JSON.stringify({error:{message:'request link failed'}}),{status:409,headers:{'content-type':'application/json'}});
+    await window.__range.handlers[0](failure,{pathname:'/api/app/admin/publications'});
+  });
+  await expect(page.locator('#pubChapterStart')).toHaveValue('100');
+  await expect(page.locator('#pubChapterEnd')).toHaveValue('110');
 });
 
 test('blocks an incomplete range before a publication draft is created',async({page})=>{
