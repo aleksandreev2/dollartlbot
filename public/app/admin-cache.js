@@ -4,20 +4,23 @@
 
   const cache = new Map();
   const pending = new Map();
-  const TTL = 8000;
+  const TTL = 15000;
+  const CACHEABLE = new Set(['/api/app/admin/analytics']);
   let prefetched = false;
 
   function requestMeta(input, init = {}) {
+    let pathname = '';
     let path = '';
     try {
       const raw = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input || '');
       const url = new URL(raw, location.href);
+      pathname = url.pathname;
       path = `${url.pathname}${url.search}`;
     } catch {}
     const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     new Headers(init?.headers || {}).forEach((value, key) => headers.set(key, value));
-    return { path, method, headers };
+    return { pathname, path, method, headers };
   }
 
   function keyFor(path, headers) {
@@ -34,17 +37,26 @@
   }
 
   runtime.registerFetchMiddleware(async (input, init = {}, next) => {
-    const { path, method, headers } = requestMeta(input, init);
-    const isAdmin = path.startsWith('/api/app/admin/');
-    if (!isAdmin) return next(input, init);
+    const { pathname, path, method, headers } = requestMeta(input, init);
+    if (!pathname.startsWith('/api/app/admin/')) return next(input, init);
+
     if (method !== 'GET') {
-      cache.clear(); pending.clear();
+      cache.clear();
+      pending.clear();
       return next(input, init);
     }
+
+    // Operational admin data must never be served from a silent TTL cache.
+    // The stability layer sets this header on every live admin read.
+    if (headers.get('x-dtl-admin-no-cache') === '1' || !CACHEABLE.has(pathname)) {
+      return next(input, { ...init, headers, cache: 'no-store' });
+    }
+
     const key = keyFor(path, headers);
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < TTL) return materialize(hit);
     if (pending.has(key)) return pending.get(key).then(materialize);
+
     const job = (async () => {
       const response = await next(input, init);
       const entry = await snapshot(response);
@@ -61,14 +73,7 @@
     const initData = window.Telegram?.WebApp?.initData || '';
     if (!initData) return;
     const init = { headers: { 'x-telegram-init-data': initData } };
-    const paths = [
-      '/api/app/admin/list?kind=pending',
-      '/api/app/admin/publishing',
-      '/api/app/admin/users?filter=all',
-      '/api/app/admin/analytics?days=30',
-      '/api/app/admin/publications',
-    ];
-    const run = () => paths.forEach(path => window.fetch(path, init).catch(() => undefined));
+    const run = () => window.fetch('/api/app/admin/analytics?days=30', init).catch(() => undefined);
     if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 1200 });
     else setTimeout(run, 250);
   }
@@ -81,5 +86,8 @@
     setTimeout(() => button.classList.remove('dtl-admin-pressed'), 140);
   }, true);
 
-  window.__DTL_ADMIN_CACHE__ = Object.freeze({ clear() { cache.clear(); pending.clear(); }, prefetch: prefetchAdmin });
+  window.__DTL_ADMIN_CACHE__ = Object.freeze({
+    clear() { cache.clear(); pending.clear(); },
+    prefetch: prefetchAdmin,
+  });
 })();
