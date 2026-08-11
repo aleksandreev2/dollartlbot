@@ -181,6 +181,7 @@
     const route = routes.get(routeId) || Object.freeze({ id: routeId, legacy: true });
     const shell = ensureShell();
     if (!shell.ready || sequence !== navigationSequence) return false;
+    const adoptBootstrapOverview = shell.bootstrapped && routeId === 'section:overview' && !options.sourceElement;
 
     if (sameRoute && !options.force && typeof route.refresh === 'function') {
       await route.refresh(current.context);
@@ -191,8 +192,10 @@
     try {
       await unmountCurrent(sameRoute ? 'refresh' : 'route-change');
       if (sequence !== navigationSequence) return false;
-      try { window.DTL_ADMIN_STABILITY?.abortReads?.(); } catch {}
-      try { window.__DTL_ADMIN_CACHE__?.clear?.(); } catch {}
+      if (!adoptBootstrapOverview) {
+        try { window.DTL_ADMIN_STABILITY?.abortReads?.(); } catch {}
+        try { window.__DTL_ADMIN_CACHE__?.clear?.(); } catch {}
+      }
 
       generation += 1;
       const localGeneration = generation;
@@ -202,7 +205,7 @@
       markRoute(routeId);
       persist(routeId);
 
-      let mounted = shell.bootstrapped && routeId === 'section:overview' && !options.sourceElement;
+      let mounted = adoptBootstrapOverview;
       if (!mounted && typeof route.mount === 'function') {
         await route.mount(built.context);
         mounted = built.context.isCurrent();
