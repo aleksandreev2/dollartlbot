@@ -54,7 +54,7 @@ for (const userToken of [
   '/control',
   '/message',
   '/recheck',
-  '/refresh-telegram',
+  'refresh-telegram',
 ]) need(userToken, `preserved Users feature ${userToken}`);
 
 for (const token of [
