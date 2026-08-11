@@ -21,6 +21,7 @@ for(const token of [
 
 for(const token of [
   'handleSubmissionIdentityPreflight',
+  'checkSubmissionIdentityDuplicate',
   'claimSubmissionIdentity',
   'bindSubmissionIdentity',
   'reconcileCommittedSubmissionIdentity',
@@ -38,6 +39,7 @@ for(const token of [
   "const form = await request.formData()",
   "field(form, 'identity_provider')",
   "field(form, 'identity_external_id')",
+  'checkSubmissionIdentityDuplicate',
   'reserveSubmissionQuota',
   'claimSubmissionIdentity',
   'identity_guard_rejected',
@@ -50,13 +52,15 @@ for(const token of [
 
 const formParseCount=(submit.match(/request\.formData\(\)/g)||[]).length;
 if(formParseCount!==1)throw new Error(`canonical submit must parse multipart exactly once; found ${formParseCount}`);
+const directCheckAt=submit.indexOf('const duplicateIdentity = await checkSubmissionIdentityDuplicate');
+const subscriptionAt=submit.indexOf('const subscription = await getSubscriptionState');
 const reserveAt=submit.indexOf('const reservationResult = await reserveSubmissionQuota');
 const claimAt=submit.indexOf('const identityGuard = await claimSubmissionIdentity');
 const uploadAt=submit.indexOf('uploaded = await telegram.sendDocumentUpload');
 const commitAt=submit.indexOf('insert = await commitSubmissionReservation');
 const bindAt=submit.indexOf('const identityError = await bindSubmissionIdentity');
-if([reserveAt,claimAt,uploadAt,commitAt,bindAt].some(value=>value<0)||!(reserveAt<claimAt&&claimAt<uploadAt&&uploadAt<commitAt&&commitAt<bindAt)){
-  throw new Error('identity race guard must be reservation -> claim -> Telegram upload -> commit -> bind');
+if([directCheckAt,subscriptionAt,reserveAt,claimAt,uploadAt,commitAt,bindAt].some(value=>value<0)||!(directCheckAt<subscriptionAt&&subscriptionAt<reserveAt&&reserveAt<claimAt&&claimAt<uploadAt&&uploadAt<commitAt&&commitAt<bindAt)){
+  throw new Error('identity flow must be direct duplicate check -> subscription -> reservation -> claim -> Telegram upload -> commit -> bind');
 }
 
 for(const token of ['/api/app/following','notifySubmissionFollowers','runTitleFollowingMaintenance','canonicalIdentityKeysForSubmission','notify_request_updates'])requireToken(following,token,'following backend');
