@@ -3,17 +3,7 @@
   if (!runtime?.registerPatcher) throw new Error('DTL runtime must load before admin-navigation.js');
 
   const ico = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
-  const primarySelectors = [
-    '[data-admin-section="overview"]',
-    '[data-admin-section="requests"]',
-    '[data-admin-section="queue"]',
-    '[data-admin-section="publishing"]',
-    '[data-admin-tools="users"]',
-    '[data-admin-health]',
-  ];
   const secondarySelectors = [
-    '[data-admin-tools="publications"]',
-    '[data-admin-section="broadcasts"]',
     '[data-admin-tools="analytics"]',
     '[data-admin-section="settings"]',
   ];
@@ -30,11 +20,9 @@
   }
 
   function rename() {
-    label('[data-admin-section="publishing"]', 'Публикации');
-    label('[data-admin-tools="publications"]', 'Управление постами');
+    label('[data-admin-section="publishing"]', 'Publishing');
     label('[data-admin-health]', 'Система');
     label('[data-admin-tools="analytics"]', 'Аналитика');
-    label('[data-admin-section="broadcasts"]', 'Рассылки');
     label('[data-admin-section="settings"]', 'Настройки');
   }
 
@@ -51,8 +39,7 @@
       const button = nav.querySelector(selector) || document.querySelector(`.admin-side-nav ${selector}`);
       if (button && button.parentElement !== body) body.append(button);
     }
-    const hasActive = Boolean(body?.querySelector('.active'));
-    if (hasActive) details.open = true;
+    details.open = Boolean(body?.querySelector('.active'));
   }
 
   function mobileNav(nav) {
@@ -74,29 +61,7 @@
       const button = nav.querySelector(selector);
       if (button) button.classList.add('admin-mobile-secondary');
     }
-    if (nav.querySelector('.admin-mobile-secondary.active')) nav.classList.add('admin-mobile-more-open');
-  }
-
-  function publishingShortcuts() {
-    const editor = document.querySelector('.publisher-editor');
-    if (editor && !editor.querySelector('.admin-publishing-shortcuts')) {
-      const box = document.createElement('div');
-      box.className = 'admin-publishing-shortcuts';
-      box.innerHTML = `<button type="button" data-publishing-manage>${ico('files')}<span><b>Управление постами</b><small>Проверка, редактирование и удаление</small></span></button><button type="button" data-publishing-broadcasts>${ico('megaphone')}<span><b>Рассылки</b><small>История release-уведомлений</small></span></button>`;
-      editor.querySelector('.admin-panel-head')?.after(box);
-      box.querySelector('[data-publishing-manage]')?.addEventListener('click', () => document.querySelector('[data-admin-tools="publications"]')?.click());
-      box.querySelector('[data-publishing-broadcasts]')?.addEventListener('click', () => document.querySelector('[data-admin-section="broadcasts"]')?.click());
-    }
-
-    const management = document.querySelector('.admin-publications-v3 .admin-v3-toolbar');
-    if (management && !management.querySelector('[data-publishing-create]')) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.dataset.publishingCreate = '1';
-      button.innerHTML = `${ico('plus')} Новая публикация`;
-      button.addEventListener('click', () => document.querySelector('[data-admin-section="publishing"]')?.click());
-      management.append(button);
-    }
+    nav.classList.toggle('admin-mobile-more-open', Boolean(nav.querySelector('.admin-mobile-secondary.active')));
   }
 
   function install() {
@@ -107,7 +72,6 @@
     const mobile = root.querySelector('.admin-mobile-nav');
     if (side) desktopNav(side);
     if (mobile) mobileNav(mobile);
-    publishingShortcuts();
     icons();
   }
 
@@ -117,7 +81,6 @@
     queueMicrotask(() => runtime.schedule());
   }, true);
 
-  document.addEventListener('dtl:adminrender', () => runtime.schedule());
   runtime.registerPatcher(install);
   window.DTL_ADMIN_NAVIGATION = Object.freeze({ refresh: install });
 })();
