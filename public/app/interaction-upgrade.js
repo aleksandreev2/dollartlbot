@@ -82,17 +82,23 @@
 
   function ensureFocusedFieldVisible(field, visualTop, visualHeight) {
     if (!field?.isConnected || document.activeElement !== field) return;
-    const rect = field.getBoundingClientRect();
-    const topLimit = visualTop + 14;
-    const bottomLimit = visualTop + visualHeight - 22;
-    if (rect.top >= topLimit && rect.bottom <= bottomLimit) return;
-    try {
-      // Keyboard resize is already a disruptive viewport change. Do not add another
-      // animation that can leave the focused control behind the keyboard for a frame.
-      field.scrollIntoView({ block:'center', inline:'nearest', behavior:'auto' });
-    } catch {
-      field.scrollIntoView?.({ block:'center', inline:'nearest' });
-    }
+    const adjust = () => {
+      if (!field?.isConnected || document.activeElement !== field) return;
+      const rect = field.getBoundingClientRect();
+      const topLimit = visualTop + 14;
+      const bottomLimit = visualTop + visualHeight - 22;
+      let delta = 0;
+      if (rect.top < topLimit) delta = rect.top - topLimit;
+      else if (rect.bottom > bottomLimit) delta = rect.bottom - bottomLimit;
+      if (Math.abs(delta) < 1) return;
+      try { window.scrollBy({ top:delta, left:0, behavior:'auto' }); }
+      catch { window.scrollBy?.(0, delta); }
+    };
+
+    // Browser/WebView may do its own focus scroll in the same resize frame. Clamp once
+    // now and once after layout settles instead of centering and fighting the browser.
+    adjust();
+    requestAnimationFrame(adjust);
   }
 
   function syncVisualViewport() {
@@ -202,7 +208,6 @@
     syncVisualViewport();
   }
 
-  // Track the page that opened a novel detail view before app.js changes its internal state.
   document.addEventListener('click', event => {
     const nav = event.target.closest?.('.nav-item[data-nav]');
     if (nav) lastMainNav = nav.dataset.nav || lastMainNav;
@@ -210,7 +215,6 @@
     if (novel) detailOrigin = activeMainNav();
   }, true);
 
-  // Make the custom back button deterministic instead of relying on the module-local previousView.
   document.addEventListener('click', event => {
     if (!event.target.closest?.('#detailBack')) return;
     event.preventDefault();
@@ -218,8 +222,6 @@
     smartBack();
   }, true);
 
-  // Desktop/web fallback: Escape should close any visible sheet, including the custom
-  // Suggest content picker that does not use the account sheet's close button markup.
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || !visibleSheetBackdrop()) return;
     event.preventDefault();
@@ -249,8 +251,6 @@
   window.visualViewport?.addEventListener('scroll', scheduleVisualViewportSync, { passive:true });
   window.addEventListener('resize', scheduleVisualViewportSync, { passive:true });
 
-  // Pointer gesture layer: native-feeling edge-back, tab swipes on non-interactive space,
-  // and a downward swipe on the bottom-sheet handle/header.
   app.addEventListener('pointerdown', event => {
     if (event.pointerType === 'mouse') return;
     pointer = {
@@ -316,7 +316,6 @@
     haptic();
   }, { passive:true });
 
-  // Android/WebView browser-back fallback where popstate is delivered to the page.
   window.addEventListener('popstate', () => { if (canGoBack()) smartBack(); });
 
   runtime.registerPatcher(patch);
