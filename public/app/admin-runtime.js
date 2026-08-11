@@ -77,14 +77,20 @@
     if (sub && subtitle !== undefined) sub.textContent = String(subtitle);
   }
 
+  function bindReadSignal(options = {}, signal = null) {
+    const method = String(options.method || 'GET').toUpperCase();
+    if (options.signal || !signal || (method !== 'GET' && method !== 'HEAD')) return options;
+    return { ...options, signal };
+  }
+
   async function api(path, options = {}) {
-    const headers = new Headers(options.headers || {});
+    const requestOptions = bindReadSignal(options, controller?.signal);
+    const headers = new Headers(requestOptions.headers || {});
     headers.set('x-telegram-init-data', tg?.initData || '');
     const response = await fetch(path, {
-      ...options,
+      ...requestOptions,
       headers,
-      signal: options.signal || controller?.signal,
-      cache: options.cache || 'no-store',
+      cache: requestOptions.cache || 'no-store',
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.error?.message || data?.message || `HTTP ${response.status}`);
@@ -110,7 +116,7 @@
       signal: localController?.signal,
       generation: localGeneration,
       sourceElement,
-      api: (path, options = {}) => api(path, { ...options, signal: options.signal || localController?.signal }),
+      api: (path, options = {}) => api(path, bindReadSignal(options, localController?.signal)),
       content,
       setHead,
       toast,
@@ -122,6 +128,10 @@
       },
     };
     return { context: Object.freeze(context), cleanups };
+  }
+
+  function abortReads() {
+    try { window.DTL_ADMIN_STABILITY?.abortReads?.(); } catch {}
   }
 
   async function unmountCurrent(reason = 'route-change') {
@@ -184,18 +194,16 @@
     const adoptBootstrapOverview = shell.bootstrapped && routeId === 'section:overview' && !options.sourceElement;
 
     if (sameRoute && !options.force && typeof route.refresh === 'function') {
+      abortReads();
       await route.refresh(current.context);
       return true;
     }
 
     transitionDepth += 1;
     try {
+      if (!adoptBootstrapOverview) abortReads();
       await unmountCurrent(sameRoute ? 'refresh' : 'route-change');
       if (sequence !== navigationSequence) return false;
-      if (!adoptBootstrapOverview) {
-        try { window.DTL_ADMIN_STABILITY?.abortReads?.(); } catch {}
-        try { window.__DTL_ADMIN_CACHE__?.clear?.(); } catch {}
-      }
 
       generation += 1;
       const localGeneration = generation;
@@ -227,6 +235,7 @@
   async function refresh() {
     if (!current?.id) return open('section:overview', { force: true });
     const route = routes.get(current.id);
+    abortReads();
     if (route?.refresh) return route.refresh(current.context);
     return open(current.id, { force: true });
   }
@@ -266,6 +275,7 @@
     const nav = event.target instanceof Element ? event.target.closest('[data-nav]') : null;
     if (!nav || nav.getAttribute('data-nav') === 'admin') return;
     navigationSequence += 1;
+    abortReads();
     void unmountCurrent('leave-admin');
     clearRouteMarker();
   }, true);
@@ -287,6 +297,7 @@
   document.addEventListener('dtl:viewchange', event => {
     if (event.detail?.view === 'admin') return;
     navigationSequence += 1;
+    abortReads();
     if (current) void unmountCurrent('leave-admin');
     clearRouteMarker();
   });

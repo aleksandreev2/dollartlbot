@@ -1,34 +1,38 @@
 (() => {
   const runtime=window.DTL_RUNTIME;
-  const tg=window.Telegram?.WebApp;
-  if(!runtime?.registerPatcher)throw new Error('DTL runtime must load before admin-health.js');
+  const admin=window.DTL_ADMIN;
+  if(!runtime?.registerPatcher||!admin?.registerRoute)throw new Error('Canonical admin runtime must load before admin-health.js');
 
   let active=false,busy=false,last=null;
-  const H=()=>({'x-telegram-init-data':tg?.initData||''});
   const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ico=n=>`<i data-lucide="${n}" aria-hidden="true"></i>`;
   const icons=()=>{try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}};
   const fmt=v=>{try{return new Intl.DateTimeFormat('ru-RU',{dateStyle:'short',timeStyle:'medium'}).format(new Date(v));}catch{return v||'—';}};
-  async function api(path,options={}){const r=await fetch(path,{...options,headers:{...H(),...(options.headers||{})},cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error?.message||d?.message||`HTTP ${r.status}`);return d;}
-  function toast(text,error=false){const host=document.getElementById('toastRegion');if(!host)return;const n=document.createElement('div');n.className=`toast ${error?'error':'success'}`;n.textContent=text;host.append(n);setTimeout(()=>n.remove(),3600);}
+  const api=(path,options={})=>admin.api(path,options);
+  function toast(text,error=false){admin.toast?.(text,error);}
 
   function installNav(){
     for(const nav of document.querySelectorAll('.admin-side-nav,.admin-mobile-nav')){
       if(nav.querySelector('[data-admin-health]'))continue;
       const b=document.createElement('button');b.type='button';b.dataset.adminHealth='1';b.innerHTML=`${ico('heart-pulse')}<span>Health</span>`;
       const settings=nav.querySelector('[data-admin-section="settings"]');if(settings)settings.before(b);else nav.append(b);
-      b.addEventListener('click',()=>{active=true;markActive();void render();});
     }
     markActive();icons();
   }
-  function markActive(){document.querySelectorAll('[data-admin-health]').forEach(b=>b.classList.toggle('active',active));if(active)document.querySelectorAll('[data-admin-section]').forEach(b=>b.classList.remove('active'));}
-  function setHead(title,subtitle){const h=document.querySelector('.admin-work-head h1'),p=document.querySelector('.admin-work-head p');if(h)h.textContent=title;if(p)p.textContent=subtitle;}
+  function markActive(){
+    document.querySelectorAll('[data-admin-health]').forEach(b=>b.classList.toggle('active',active));
+    if(active){
+      document.querySelectorAll('[data-admin-section],[data-admin-tools]').forEach(b=>b.classList.remove('active'));
+    }
+  }
+  function deactivate(){active=false;document.querySelectorAll('[data-admin-health]').forEach(b=>b.classList.remove('active'));}
+  function setHead(title,subtitle){admin.setHead?.(title,subtitle);}
 
   async function render(){
     const area=document.querySelector('.admin-content');if(!area)return;
     active=true;markActive();setHead('Operations & Health','Очереди, Telegram, публикации и доставка уведомлений');
     area.innerHTML=`<div class="admin-loading">${ico('loader-circle')} Проверяем систему…</div>`;icons();
-    try{last=await api('/api/app/admin/health');paint(last);}catch(e){area.innerHTML=`<div class="admin-panel admin-error">${ico('triangle-alert')}<strong>Не удалось получить состояние системы</strong><span>${esc(e.message)}</span></div>`;icons();}
+    try{last=await api('/api/app/admin/health');if(active)paint(last);}catch(e){if(!active||e?.name==='AbortError')return;area.innerHTML=`<div class="admin-panel admin-error">${ico('triangle-alert')}<strong>Не удалось получить состояние системы</strong><span>${esc(e.message)}</span></div>`;icons();}
   }
 
   function paint(d){
@@ -88,11 +92,15 @@
     const risky=new Set(['run_maintenance','retry_notifications','retry_broadcasts','retry_publications','retry_admin_deliveries']);
     if(risky.has(action)&&!window.confirm(action==='retry_notifications'||action==='retry_broadcasts'?'Повторить failed-доставки сейчас? Это может отправить сообщения пользователям.':'Запустить выбранное обслуживание прямо сейчас?'))return;
     busy=true;const old=button.innerHTML;button.disabled=true;button.innerHTML=`${ico('loader-circle')}<span><b>Выполняем…</b><small>Не закрывайте экран</small></span>`;icons();
-    try{const d=await api('/api/app/admin/health/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action})});last=d;toast('Операция завершена.');paint(d);}catch(e){toast(e.message,true);button.disabled=false;button.innerHTML=old;icons();}finally{busy=false;}
+    try{const d=await api('/api/app/admin/health/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action})});last=d;toast('Операция завершена.');if(active)paint(d);}catch(e){if(e?.name!=='AbortError')toast(e.message,true);if(active&&button.isConnected){button.disabled=false;button.innerHTML=old;icons();}}finally{busy=false;}
   }
 
-  document.addEventListener('click',e=>{if(e.target.closest?.('[data-admin-section]')){active=false;document.querySelectorAll('[data-admin-health]').forEach(b=>b.classList.remove('active'));}},true);
   document.addEventListener('dtl:adminrender',()=>installNav());
   runtime.registerPatcher(()=>{if(document.querySelector('.admin-v2'))installNav();});
-  window.DTL_ADMIN_HEALTH=Object.freeze({render,refresh:render,isActive:()=>active,last:()=>last});
+  admin.registerRoute('health:1',{
+    mount:()=>render(),
+    refresh:()=>{try{window.DTL_ADMIN_STABILITY?.abortReads?.();}catch{}return render();},
+    unmount:()=>deactivate(),
+  });
+  window.DTL_ADMIN_HEALTH=Object.freeze({render,refresh:render,deactivate,isActive:()=>active,last:()=>last});
 })();
