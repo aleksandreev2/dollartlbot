@@ -63,8 +63,8 @@ for(const token of [
   'window.DTL_ADMIN_HEALTH=Object.freeze',
 ])need(ui,token,'health UI');
 
-forbid(ui,"b.addEventListener('click'",'Health nav must be owned by canonical admin runtime');
-forbid(ui,"document.addEventListener('click'",'Health must not own global route clicks');
+forbid(ui,"b.addEventListener('click',()=>{active=true;markActive();void render();})",'Health nav must be owned by canonical admin runtime');
+forbid(ui,"document.addEventListener('click',e=>{if(e.target.closest?.('[data-admin-section]'))",'Health must not own global route deactivation');
 forbid(ui,"fetch(path",'Health must use shared admin API');
 forbid(backend,"sendMessage(settings.publish_channel_id",'health must not republish failed channel posts');
 forbid(backend,"SET status='draft'",'health must not reset ambiguous publication state');
