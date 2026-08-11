@@ -2,9 +2,15 @@ import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const runtimeSource = fs.readFileSync(new URL('../public/app/admin-runtime.js', import.meta.url), 'utf8');
+const fixtureHtml = '<div id="fixture"></div><button id="leaveAdmin" data-nav="home">Leave admin</button>';
 
 async function boot(page, { autoOpen = true } = {}) {
-  await page.setContent('<div id="fixture"></div><button id="leaveAdmin" data-nav="home">Leave admin</button>');
+  await page.route('https://dtl.test/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: fixtureHtml,
+  }));
+  await page.goto('https://dtl.test/');
   await page.evaluate(() => {
     window.__adminTest = {
       legacyClicks: Object.create(null),
