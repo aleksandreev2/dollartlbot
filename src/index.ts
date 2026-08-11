@@ -39,8 +39,14 @@ import { handlePublicTitleRequest } from './public-titles';
 import { normalizeQueuePositions } from './queue';
 import { runRawCatalogEnrichment } from './raw-fucknovelpia';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
+import {
+  finalizeSubmissionIdentityGuard,
+  handleSubmissionIdentityPreflight,
+  prepareSubmissionIdentityGuard,
+} from './request-identity';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
+import { handleTitleFollowingRequest, runTitleFollowingMaintenance } from './title-following';
 import { denyBlockedPrivateBotUpdate } from './user-controls';
 
 const MAX_UPDATE_BYTES = 1_000_000;
@@ -53,8 +59,14 @@ export default {
     if (publicTitleResponse) return publicTitleResponse;
     const onboardingResponse = await handleOnboardingRequest(request, env);
     if (onboardingResponse) return onboardingResponse;
+    const identityPreflightResponse = await handleSubmissionIdentityPreflight(request, env);
+    if (identityPreflightResponse) return identityPreflightResponse;
+    const submissionIdentityGuard = await prepareSubmissionIdentityGuard(request, env);
+    if (submissionIdentityGuard instanceof Response) return submissionIdentityGuard;
     const enhancedMiniAppResponse = await handleEnhancedMiniAppRequest(request, env, ctx);
-    if (enhancedMiniAppResponse) return enhancedMiniAppResponse;
+    if (enhancedMiniAppResponse) {
+      return finalizeSubmissionIdentityGuard(enhancedMiniAppResponse, submissionIdentityGuard, env);
+    }
     const coverHealthResponse = await handleCoverHealthRequest(request, env);
     if (coverHealthResponse) return coverHealthResponse;
     const coverResponse = await handleCoverRequest(request, env);
@@ -69,6 +81,8 @@ export default {
     if (discoveryRawV2Response) return discoveryRawV2Response;
     const discoveryResponse = await handleDiscoveryRequest(request, env);
     if (discoveryResponse) return discoveryResponse;
+    const followingResponse = await handleTitleFollowingRequest(request, env);
+    if (followingResponse) return followingResponse;
 
     const apiTelegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
     const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
@@ -178,6 +192,7 @@ export default {
     await runScheduledTask('access_gate_maintenance', () => runAccessGateMaintenance(env, scheduledAt));
     await runScheduledTask('admin_event_maintenance', () => runAdminEventMaintenance(env, telegram));
     await runScheduledTask('notification_maintenance', () => runNotificationMaintenance(env, telegram));
+    await runScheduledTask('title_following_maintenance', () => runTitleFollowingMaintenance(env, telegram));
     await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenanceWithLease(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
 
