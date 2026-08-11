@@ -39,11 +39,7 @@ import { handlePublicTitleRequest } from './public-titles';
 import { normalizeQueuePositions } from './queue';
 import { runRawCatalogEnrichment } from './raw-fucknovelpia';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
-import {
-  finalizeSubmissionIdentityGuard,
-  handleSubmissionIdentityPreflight,
-  prepareSubmissionIdentityGuard,
-} from './request-identity';
+import { handleSubmissionIdentityPreflight } from './request-identity';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { handleTitleFollowingRequest, runTitleFollowingMaintenance } from './title-following';
@@ -61,12 +57,8 @@ export default {
     if (onboardingResponse) return onboardingResponse;
     const identityPreflightResponse = await handleSubmissionIdentityPreflight(request, env);
     if (identityPreflightResponse) return identityPreflightResponse;
-    const submissionIdentityGuard = await prepareSubmissionIdentityGuard(request, env);
-    if (submissionIdentityGuard instanceof Response) return submissionIdentityGuard;
     const enhancedMiniAppResponse = await handleEnhancedMiniAppRequest(request, env, ctx);
-    if (enhancedMiniAppResponse) {
-      return finalizeSubmissionIdentityGuard(enhancedMiniAppResponse, submissionIdentityGuard, env);
-    }
+    if (enhancedMiniAppResponse) return enhancedMiniAppResponse;
     const coverHealthResponse = await handleCoverHealthRequest(request, env);
     if (coverHealthResponse) return coverHealthResponse;
     const coverResponse = await handleCoverRequest(request, env);
