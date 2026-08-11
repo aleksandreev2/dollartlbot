@@ -3,6 +3,7 @@ import { handleAccessChatMemberUpdate, runAccessGateMaintenance } from './access
 import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
 import { handleAdminEventsRequest } from './admin-events-api';
+import { handleAdminHealthRequest } from './admin-health';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminPublicationsRequest } from './admin-publications';
 import { handleAdminRequestOps } from './admin-request-ops';
@@ -57,6 +58,8 @@ export default {
     if (adminEventsResponse) return adminEventsResponse;
     const adminUsersResponse = await handleAdminUsersRequest(request, env, apiTelegram);
     if (adminUsersResponse) return adminUsersResponse;
+    const adminHealthResponse = await handleAdminHealthRequest(request, env, apiTelegram);
+    if (adminHealthResponse) return adminHealthResponse;
     const adminRequestOpsResponse = await handleAdminRequestOps(request, env, apiTelegram);
     if (adminRequestOpsResponse) return adminRequestOpsResponse;
     const adminAnalyticsResponse = await handleAdminAnalyticsRequest(request, env);
