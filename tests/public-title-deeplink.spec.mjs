@@ -43,14 +43,16 @@ test('unrelated start parameters do not hijack Mini App navigation',async({page}
 test('title detail exposes a share progress action with the public card URL',async({page})=>{
   await boot(page,'');
   await page.evaluate(()=>{
-    document.body.innerHTML='<div class="live-detail"><div class="live-detail-discovery"></div></div>';
+    document.getElementById('viewRoot').innerHTML='<div class="live-detail"><div class="live-detail-actions"><button id="detailQueue">Queue</button></div></div>';
     window.DTL_APP.state.view='detail';
     window.DTL_APP.state.detailNovel={id:7,title:'Academy Translator',queue_status:'in_progress',current_chapter:42,chapter_count:180};
     document.dispatchEvent(new CustomEvent('dtl:detail'));
   });
-  await expect(page.locator('.public-title-share')).toContainText('Share progress');
-  await page.locator('.public-title-share').click();
-  const shared=await expect.poll(()=>page.evaluate(()=>window.__telegramLinks[0]||'')).not.toBe('');
+  const share=page.locator('.live-detail-actions .public-title-share');
+  await expect(share).toContainText('Share progress');
+  await expect(share).toBeVisible();
+  await share.click();
+  await expect.poll(()=>page.evaluate(()=>window.__telegramLinks[0]||'')).not.toBe('');
   const target=await page.evaluate(()=>window.__telegramLinks[0]||'');
   const sharedUrl=new URL(target).searchParams.get('url');
   expect(sharedUrl).toBe('https://dollartl.test/share/title/7?kind=progress');
