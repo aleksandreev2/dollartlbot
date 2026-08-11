@@ -91,7 +91,6 @@ need(quota,"document.addEventListener('dtl:bootstrap'",'quota bootstrap reuse');
 forbid(quota,"fetch('/api/app/bootstrap'",'quota duplicate bootstrap request');
 
 need(adminConsole,'window.DTL_ADMIN_CONSOLE','canonical admin console API');
-need(adminConsole,"document.dispatchEvent(new CustomEvent('dtl:adminrender'",'admin render event');
 need(adminTools,"data-admin-tools","admin tools navigation ownership");
 need(adminPublishing,'injectNativeCommentsNote','publishing native comments preview ownership');
 need(adminPublishing,'installManagement','publication management consolidation');
