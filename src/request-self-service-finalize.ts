@@ -1,8 +1,12 @@
 import { authenticateMiniAppRequest, miniAppJsonError } from './miniapp-auth';
+import { escapeHtml, type TelegramClient } from './telegram';
+
+type RequestMutationAction = 'edit' | 'raw' | 'message';
 
 type RequestMutationGuard = {
   submissionId: number;
   userId: number;
+  action: RequestMutationAction;
   previousReviewState: 'ready' | 'needs_info' | 'user_replied';
   previousReviewResolvedAt: string | null;
   previousUpdatedAt: string;
@@ -52,9 +56,11 @@ export async function prepareRequestSelfServiceMutation(
     return null;
   }
 
+  const action = match[2] as RequestMutationAction;
   const guard: RequestMutationGuard = {
     submissionId,
     userId: auth.telegramUser.id,
+    action,
     previousReviewState: row.review_state,
     previousReviewResolvedAt: row.review_resolved_at,
     previousUpdatedAt: row.updated_at,
@@ -86,8 +92,20 @@ export async function finalizeRequestSelfServiceMutation(
   response: Response,
   env: Env,
   guard: RequestMutationGuard | null,
+  telegram: TelegramClient,
+  ctx: ExecutionContext,
 ): Promise<Response> {
-  if (!guard || !mutationMatch(request) || response.ok) return response;
+  if (!guard || !mutationMatch(request)) return response;
+
+  if (response.ok) {
+    // RAW replacement and request messages already notify the admin from their
+    // handlers. The pre-handler review lock hides the old needs_info state from
+    // editOwnRequest, so preserve that operational signal here for every saved edit.
+    if (guard.action === 'edit') {
+      ctx.waitUntil(notifyAdminEdit(env, telegram, guard.submissionId));
+    }
+    return response;
+  }
 
   await env.DB.prepare(`
     UPDATE submissions
@@ -102,6 +120,21 @@ export async function finalizeRequestSelfServiceMutation(
     guard.previousUpdatedAt,
   ).run();
   return response;
+}
+
+async function notifyAdminEdit(
+  env: Env,
+  telegram: TelegramClient,
+  submissionId: number,
+): Promise<void> {
+  const row = await env.DB.prepare(`
+    SELECT title,status FROM submissions WHERE id=?
+  `).bind(submissionId).first<{ title: string; status: string }>();
+  if (!row || row.status !== 'pending') return;
+  await telegram.sendMessage(
+    env.ADMIN_TELEGRAM_ID,
+    `<b>Request #${submissionId} updated by requester</b>\n\n<b>${escapeHtml(row.title)}</b>\nThe requester edited the request details. Review the newest information before accepting.`,
+  ).then(() => undefined).catch(() => undefined);
 }
 
 function mutationMatch(request: Request): RegExpExecArray | null {
