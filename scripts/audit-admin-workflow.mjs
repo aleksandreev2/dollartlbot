@@ -16,8 +16,8 @@ const css = read('public/app/admin-workflow.css');
 
 need(index, '/app/admin-workflow.css?v=20260811-workflow1', 'workflow CSS asset');
 need(index, '/app/admin-workflow.js?v=20260811-workflow1&routes=20260811d', 'workflow JS asset');
-const runtimePos = index.indexOf('/app/admin-runtime.js?v=20260811-runtime1');
-const consolePos = index.indexOf('/app/admin-console.js?v=20260810-admin1');
+const runtimePos = index.indexOf('/app/admin-runtime.js?v=20260811-runtime2&canonical=20260811h');
+const consolePos = index.indexOf('/app/admin-console.js?v=20260811-admin2&routes=20260811f');
 const workflowPos = index.indexOf('/app/admin-workflow.js?v=20260811-workflow1');
 if (!(runtimePos >= 0 && runtimePos < consolePos && consolePos < workflowPos)) {
   throw new Error('Workflow UX must load after the canonical admin console and with DTL_ADMIN runtime already available.');
