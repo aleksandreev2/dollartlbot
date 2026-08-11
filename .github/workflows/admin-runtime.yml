@@ -20,6 +20,8 @@ jobs:
         run: node --check public/app/view-admin.js
       - name: Syntax check admin console routes
         run: node --check public/app/admin-console.js
+      - name: Syntax check dedicated publishing route
+        run: node --check public/app/admin-publishing-view.js
       - name: Syntax check admin tools routes
         run: node --check public/app/admin-tools.js
       - name: Syntax check admin publishing lifecycle
@@ -32,3 +34,5 @@ jobs:
         run: node scripts/audit-admin-tools-routes.mjs
       - name: Audit admin publishing lifecycle
         run: node scripts/audit-admin-publishing-lifecycle.mjs
+      - name: Audit final admin consolidation
+        run: node scripts/audit-admin-final-consolidation.mjs
