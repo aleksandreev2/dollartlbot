@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 const runtime=fs.readFileSync(new URL('../public/app/public-title-deeplink.js',import.meta.url),'utf8');
+const shell='<!doctype html><html><body><main id="viewRoot"></main></body></html>';
 
 async function boot(page,startParam=''){
-  await page.setContent('<!doctype html><html><body><main id="viewRoot"></main></body></html>');
+  await page.route('https://dollartl.test/**',route=>route.fulfill({status:200,contentType:'text/html',body:shell}));
+  await page.goto('https://dollartl.test/app/');
   await page.evaluate((start)=>{
     window.Telegram={WebApp:{initDataUnsafe:{start_param:start}}};
     window.__opened=[];
@@ -48,5 +50,8 @@ test('title detail exposes a share progress action with the public card URL',asy
   });
   await expect(page.locator('.public-title-share')).toContainText('Share progress');
   await page.locator('.public-title-share').click();
-  await expect.poll(()=>page.evaluate(()=>window.__telegramLinks[0]||'')).toContain('/share/title/7%3Fkind%3Dprogress');
+  const shared=await expect.poll(()=>page.evaluate(()=>window.__telegramLinks[0]||'')).not.toBe('');
+  const target=await page.evaluate(()=>window.__telegramLinks[0]||'');
+  const sharedUrl=new URL(target).searchParams.get('url');
+  expect(sharedUrl).toBe('https://dollartl.test/share/title/7?kind=progress');
 });
