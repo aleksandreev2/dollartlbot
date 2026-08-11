@@ -428,3 +428,166 @@
   .live-detail-language-item{gap:5px;padding:3px 6px 3px 3px;}
   .live-detail-language-flag{width:17px;height:17px;flex-basis:17px;}
 }
+
+/* Detail visual polish: clearer hierarchy + restrained motion */
+.live-detail .detail-hero{
+  animation:detail-hero-enter .38s cubic-bezier(.2,.72,.28,1) both;
+}
+.live-detail .detail-hero::after{opacity:.48;}
+.live-detail .detail-hero .novel-cover{
+  animation:detail-cover-enter .46s cubic-bezier(.2,.72,.28,1) .035s both;
+  transition:transform .22s ease,box-shadow .22s ease;
+}
+.live-detail-copy>*{animation:detail-copy-enter .3s cubic-bezier(.2,.72,.28,1) both;}
+.live-detail-copy>*:nth-child(1){animation-delay:.06s}
+.live-detail-copy>*:nth-child(2){animation-delay:.085s}
+.live-detail-copy>*:nth-child(3){animation-delay:.11s}
+.live-detail-copy>*:nth-child(4){animation-delay:.135s}
+.live-detail-copy>*:nth-child(5){animation-delay:.16s}
+.live-detail-copy>*:nth-child(6){animation-delay:.185s}
+.live-detail-copy>*:nth-child(7){animation-delay:.21s}
+.live-detail-percent{font-size:19px;}
+.live-detail-requester{
+  width:max-content;
+  max-width:100%;
+  padding:4px 9px 4px 5px;
+  border:1px solid #ece5da;
+  border-radius:999px;
+  background:rgba(255,255,255,.62);
+  color:#83796b;
+}
+.live-detail-requester svg{
+  width:22px;
+  height:22px;
+  padding:4px;
+  box-sizing:border-box;
+  border-radius:50%;
+  border:1px solid #eadfce;
+  background:#fbf6ed;
+  color:#9a7640;
+}
+.live-progress-card{padding:15px 18px 17px;}
+.live-progress-stats{
+  display:flex;
+  align-items:flex-start;
+  gap:0;
+  padding:0 0 13px;
+  border-bottom:1px solid #eee8de;
+}
+.live-progress-stat{
+  position:relative;
+  flex:0 1 auto;
+  min-height:0;
+  padding:0 20px 0 0;
+  border:0;
+  border-radius:0;
+  background:transparent!important;
+  text-align:left;
+  animation:detail-stat-enter .32s cubic-bezier(.2,.72,.28,1) both;
+}
+.live-progress-stat+ .live-progress-stat{padding-left:20px;}
+.live-progress-stat+ .live-progress-stat::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:1px;
+  bottom:1px;
+  width:1px;
+  background:#ebe5db;
+}
+.live-progress-stat:nth-child(1){animation-delay:.12s}
+.live-progress-stat:nth-child(2){animation-delay:.17s}
+.live-progress-stat:nth-child(3){animation-delay:.22s}
+.live-progress-stat strong{font-size:21px;}
+.live-progress-stat span{margin-top:4px;font-size:9px;}
+.live-progress-rail{margin-top:17px;}
+.live-progress-rail::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:2;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 25% 13.5px,#fff 0 2.5px,#d9cfbf 2.8px 4px,transparent 4.3px),
+    radial-gradient(circle at 50% 13.5px,#fff 0 2.5px,#d9cfbf 2.8px 4px,transparent 4.3px),
+    radial-gradient(circle at 75% 13.5px,#fff 0 2.5px,#d9cfbf 2.8px 4px,transparent 4.3px);
+}
+.live-progress-rail-fill{
+  z-index:1;
+  transform-origin:left center;
+  animation:detail-rail-grow .72s cubic-bezier(.18,.72,.2,1) .14s both;
+}
+.live-progress-marker{
+  z-index:3;
+  opacity:0;
+  animation:detail-marker-settle .34s cubic-bezier(.18,.9,.28,1.15) .73s both;
+}
+.live-progress-labels{margin-top:2px;}
+.live-detail-card{
+  animation:detail-section-enter .34s cubic-bezier(.2,.72,.28,1) both;
+}
+.live-detail-grid .live-detail-card:nth-child(1){animation-delay:.16s}
+.live-detail-grid .live-detail-card:nth-child(2){animation-delay:.21s}
+.live-tag{
+  transition:transform .16s ease,border-color .16s ease,background .16s ease;
+}
+.live-detail-actions{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:10px;
+  align-items:stretch;
+  animation:detail-section-enter .32s cubic-bezier(.2,.72,.28,1) .22s both;
+}
+.live-detail-actions .secondary-button,.live-detail-actions .link-button{
+  min-height:48px;
+  width:100%;
+  border:1px solid #e4ddd2;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  background:#fff;
+  color:#312c26;
+  font-weight:760;
+  text-decoration:none;
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease,background .16s ease;
+}
+.live-detail-actions .link-button{padding:12px 14px;color:#9c651d;background:#fffcf6;}
+@media(hover:hover){
+  .live-detail .detail-hero .novel-cover:hover{transform:translateY(-3px) scale(1.012);box-shadow:0 20px 36px rgba(24,20,14,.2);}
+  .live-tag:hover{transform:translateY(-1px);border-color:#dcc9aa;background:#fff7e9;}
+  .live-detail-actions .secondary-button:hover,.live-detail-actions .link-button:hover{transform:translateY(-1px);border-color:#d9cbb7;box-shadow:0 8px 18px rgba(65,48,27,.07);}
+}
+@keyframes detail-hero-enter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes detail-cover-enter{from{opacity:0;transform:translateY(8px) scale(.975)}to{opacity:1;transform:none}}
+@keyframes detail-copy-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes detail-section-enter{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes detail-stat-enter{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
+@keyframes detail-rail-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes detail-marker-settle{0%{opacity:0;transform:scale(.65) translateY(3px)}70%{opacity:1;transform:scale(1.12) translateY(-1px)}100%{opacity:1;transform:none}}
+@media(max-width:620px){
+  .live-detail-actions{grid-template-columns:1fr;}
+}
+@media(max-width:390px){
+  .live-progress-card{padding:14px 13px 15px;}
+  .live-progress-stats{justify-content:space-between;}
+  .live-progress-stat{padding-right:10px;}
+  .live-progress-stat+ .live-progress-stat{padding-left:10px;}
+  .live-progress-stat strong{font-size:19px;}
+  .live-detail-requester{font-size:9.5px;padding-right:7px;}
+}
+@media(prefers-reduced-motion:reduce){
+  .live-detail .detail-hero,
+  .live-detail .detail-hero .novel-cover,
+  .live-detail-copy>*,
+  .live-progress-stat,
+  .live-progress-rail-fill,
+  .live-progress-marker,
+  .live-detail-card,
+  .live-detail-actions{animation:none!important;}
+  .live-detail .detail-hero .novel-cover,
+  .live-tag,
+  .live-detail-actions .secondary-button,
+  .live-detail-actions .link-button{transition:none!important;}
+}
