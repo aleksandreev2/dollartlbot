@@ -48,12 +48,18 @@ async function openLongSheet(page) {
   });
 }
 
+async function waitForSheetEntrance(page) {
+  // app.css animates sheets for 260ms; geometry assertions should inspect the settled frame.
+  await page.waitForTimeout(320);
+}
+
 test('long mobile sheet stays inside the Telegram viewport and scrolls internally', async ({ page }) => {
   await boot(page, 390, 720);
   await openLongSheet(page);
 
   const sheet = page.locator('.bottom-sheet');
   await expect(sheet).toBeVisible();
+  await waitForSheetEntrance(page);
   const box = await sheet.boundingBox();
   expect(box).not.toBeNull();
   expect(box.x).toBeGreaterThanOrEqual(-1);
@@ -75,6 +81,8 @@ test('desktop sheet is bounded and presented as a compact surface', async ({ pag
   await openLongSheet(page);
 
   const sheet = page.locator('.bottom-sheet');
+  await expect(sheet).toBeVisible();
+  await waitForSheetEntrance(page);
   const box = await sheet.boundingBox();
   expect(box).not.toBeNull();
   expect(box.width).toBeLessThanOrEqual(681);
