@@ -5,6 +5,11 @@ import {
   miniAppJsonError,
   type MiniAppAuthContext,
 } from './miniapp-auth';
+import {
+  getNovelpiaIngestState,
+  loadFreshNovelpiaCatalog,
+  type DiscoveryCatalogPresented,
+} from './novelpia-discovery';
 
 type DiscoveryFeedRow = {
   id: number;
@@ -32,6 +37,7 @@ type FeedOrder = 'trending' | 'demand' | 'recent';
 
 const MAX_SECTION = 12;
 const MAX_CATALOG = 72;
+const MAX_FRESH = 36;
 const FEED_PATH = '/api/app/discovery/feed';
 const OPPORTUNITIES_PATH = '/api/app/discovery/opportunities';
 
@@ -52,23 +58,48 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
   try {
     if (isOpportunitiesPath) {
       if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
-      const candidates = await loadFeedRows(env, auth, 'demand', 60);
+      const [localCandidates, freshCandidates, ingestState] = await Promise.all([
+        loadFeedRows(env, auth, 'demand', 60),
+        loadFreshNovelpiaCatalog(env, auth.telegramUser.id, 50),
+        getNovelpiaIngestState(env),
+      ]);
+      const localItems = localCandidates.map((row) => ({
+        ...row,
+        opportunity_score: opportunityScore(row),
+        opportunity_signals: ['Dollar TL demand', '7d momentum', row.raw_available ? 'RAW available' : null]
+          .filter(Boolean),
+      }));
+      const freshItems = freshCandidates.map((row) => ({
+        ...row,
+        opportunity_score: catalogOpportunityScore(row),
+        opportunity_signals: catalogOpportunitySignals(row),
+      }));
       return miniAppJson({
         generated_at: new Date().toISOString(),
-        items: candidates
-          .map((row) => ({ ...row, opportunity_score: opportunityScore(row) }))
+        items: [...localItems, ...freshItems]
           .sort((a, b) => b.opportunity_score - a.opportunity_score || b.demand_count - a.demand_count)
-          .slice(0, 24),
-        score_signals: ['demand', '7d momentum', 'RAW availability', 'chapter depth', 'publication status'],
+          .slice(0, 30),
+        score_signals: [
+          'Dollar TL demand',
+          '7d momentum',
+          'RAW availability',
+          'chapter depth',
+          'publication status',
+          'NovelPia new-rank',
+          'NovelPia views/favorites',
+        ],
+        novelpia_ingest: ingestPresentation(ingestState),
       });
     }
 
-    const [trending, mostRequested, rawAvailable, recentlyFound, catalog] = await Promise.all([
+    const [trending, mostRequested, rawAvailable, recentlyFound, catalog, freshNovelpia, ingestState] = await Promise.all([
       loadFeedRows(env, auth, 'trending', MAX_SECTION),
       loadFeedRows(env, auth, 'demand', MAX_SECTION),
       loadFeedRows(env, auth, 'demand', MAX_SECTION, true),
       loadFeedRows(env, auth, 'recent', MAX_SECTION),
       loadFeedRows(env, auth, 'demand', MAX_CATALOG),
+      loadFreshNovelpiaCatalog(env, auth.telegramUser.id, MAX_FRESH),
+      getNovelpiaIngestState(env),
     ]);
 
     return miniAppJson({
@@ -77,7 +108,9 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
       most_requested: mostRequested,
       raw_available: rawAvailable,
       recently_found: recentlyFound,
+      fresh_novelpia: freshNovelpia,
       catalog,
+      novelpia_ingest: ingestPresentation(ingestState),
     });
   } catch (error) {
     console.error(JSON.stringify({
@@ -171,6 +204,7 @@ function presentRow(row: DiscoveryFeedRow, viewerId: number) {
   const recent = Number(row.recent_interest_count ?? 0);
   const previous = Number(row.previous_interest_count ?? 0);
   return {
+    kind: 'local' as const,
     id: Number(row.id),
     title: row.title,
     original_language: row.original_language,
@@ -199,4 +233,50 @@ function opportunityScore(row: ReturnType<typeof presentRow>): number {
   const chapters = row.chapter_count >= 300 ? 10 : row.chapter_count >= 100 ? 8 : row.chapter_count >= 50 ? 5 : 2;
   const publication = row.publication_status === 'completed' ? 10 : row.publication_status === 'ongoing' ? 6 : 2;
   return Math.max(0, Math.min(100, Math.round(demand + momentum + raw + chapters + publication)));
+}
+
+function catalogOpportunityScore(row: DiscoveryCatalogPresented): number {
+  const demand = Math.min(32, Math.max(0, row.demand_count) * 8);
+  const rank = row.source_rank == null ? 0 : Math.max(0, 28 - Math.min(28, Math.floor((row.source_rank - 1) / 2)));
+  const popularity = Math.min(20,
+    Math.log10(Math.max(1, row.views_count)) * 2.5
+      + Math.log10(Math.max(1, row.favorites_count)) * 2,
+  );
+  const chapters = row.chapter_count == null
+    ? 2
+    : row.chapter_count >= 150
+      ? 10
+      : row.chapter_count >= 50
+        ? 7
+        : row.chapter_count >= 15
+          ? 5
+          : 2;
+  const freshness = row.fresh_signals.includes('novelpia_plus_new')
+    ? 8
+    : row.fresh_signals.includes('novelpia_free_new')
+      ? 6
+      : 3;
+  const plus = row.source_tier === 'plus' ? 4 : 0;
+  return Math.max(0, Math.min(100, Math.round(demand + rank + popularity + chapters + freshness + plus)));
+}
+
+function catalogOpportunitySignals(row: DiscoveryCatalogPresented): string[] {
+  const out: string[] = [];
+  if (row.demand_count > 0) out.push(`${row.demand_count} Dollar TL demand`);
+  if (row.source_rank != null) out.push(`NovelPia new #${row.source_rank}`);
+  if (row.views_count > 0) out.push(`${row.views_count} NovelPia views`);
+  if (row.favorites_count > 0) out.push(`${row.favorites_count} favorites`);
+  if (row.fresh_signals.includes('novelpia_plus_new')) out.push('New PLUS conversion');
+  else if (row.fresh_signals.includes('novelpia_free_new')) out.push('New free title');
+  return out.slice(0, 4);
+}
+
+function ingestPresentation(state: Awaited<ReturnType<typeof getNovelpiaIngestState>>) {
+  if (!state) return { available: false, last_success_at: null, item_count: 0, degraded: false };
+  return {
+    available: true,
+    last_success_at: state.last_success_at,
+    item_count: Number(state.last_item_count ?? 0),
+    degraded: Boolean(state.last_error),
+  };
 }
