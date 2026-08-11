@@ -14,6 +14,7 @@ export type FormStep =
 
 export type PublicationStatus = 'ongoing' | 'completed';
 export type QueueStatus = 'queued' | 'in_progress' | 'completed';
+export type SubmissionReviewState = 'ready' | 'needs_info' | 'user_replied';
 
 export type SubmissionDraft = {
   title?: string;
@@ -81,6 +82,11 @@ export type SubmissionRow = {
   completed_at: string | null;
   current_chapter: number | null;
   progress_updated_at: string | null;
+  review_state: SubmissionReviewState;
+  review_requested_at: string | null;
+  review_requested_by: number | null;
+  review_resolved_at: string | null;
+  withdrawn_at: string | null;
 };
 
 export type SubscriptionState = {
