@@ -137,7 +137,7 @@ for(const token of [
   '/app/publication-template-ui.js?v=20260811-pubtemplate3',
   '/app/publication-stability-ui.js?v=20260810-pubstable1',
 ])need(html,token,'Mini App request/publication assets');
-need(wrangler,'?build=20260810-ops1','fresh Mini App build');
+need(wrangler,'?build=20260811-public2','fresh Mini App build');
 
 new Function(opsUi);
 new Function(workflowUi);
