@@ -91,8 +91,7 @@ export async function handleMiniAppCoreRequest(
 
     if (request.method === 'GET' && url.pathname === '/api/app/admin/list') {
       if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
-      const kind = url.searchParams.get('kind') ?? 'pending';
-      return miniAppJson(await getAdminList(env, kind));
+      return miniAppJson(await getAdminList(env, url));
     }
 
     return null;
@@ -251,28 +250,106 @@ async function getAdminCounts(env: Env) {
   };
 }
 
-async function getAdminList(env: Env, kind: string) {
-  const where = kind === 'queue'
-    ? "s.status = 'accepted' AND s.queue_status IN ('queued', 'in_progress')"
-    : kind === 'all'
-      ? '1 = 1'
-      : "s.status = 'pending'";
-  const order = kind === 'queue'
-    ? "CASE WHEN s.queue_status = 'in_progress' THEN 0 ELSE 1 END, COALESCE(s.queue_position, 2147483647), s.id"
-    : 's.id DESC';
-  const rows = await env.DB.prepare(`
-    SELECT s.id, s.user_id, s.title, s.original_language, s.chapter_count,
-           s.publication_status, s.source_url, s.genres_tags, s.sexual_content,
-           s.sensitive_content, s.notes, s.plan, s.status, s.slot_returned,
-           s.queue_status, s.queue_position, s.current_chapter, s.progress_updated_at,
-           s.created_at, s.updated_at, u.username, u.first_name
-    FROM submissions s
-    LEFT JOIN users u ON u.telegram_id = s.user_id
-    WHERE ${where}
-    ORDER BY ${order}
-    LIMIT 100
-  `).all<Record<string, unknown>>();
-  return { counts: await getAdminCounts(env), requests: rows.results };
+async function getAdminList(env: Env, url: URL) {
+  const kind = (url.searchParams.get('kind') ?? 'pending').trim();
+  if (!['pending', 'active', 'completed', 'rejected', 'all', 'queue'].includes(kind)) {
+    throw new Error('invalid_admin_list_filter');
+  }
+
+  const counts = await getAdminCounts(env);
+  if (kind === 'queue') {
+    const limit = 500;
+    const [rows, count] = await Promise.all([
+      env.DB.prepare(`
+        SELECT s.id, s.user_id, s.title, s.original_language, s.chapter_count,
+               s.publication_status, s.source_url, s.genres_tags, s.sexual_content,
+               s.sensitive_content, s.notes, s.plan, s.status, s.slot_returned,
+               s.queue_status, s.queue_position, s.current_chapter, s.progress_updated_at,
+               s.created_at, s.updated_at, u.username, u.first_name
+        FROM submissions s
+        LEFT JOIN users u ON u.telegram_id = s.user_id
+        WHERE s.status = 'accepted' AND s.queue_status IN ('queued', 'in_progress')
+        ORDER BY CASE WHEN s.queue_status = 'in_progress' THEN 0 ELSE 1 END,
+                 COALESCE(s.queue_position, 2147483647), s.id
+        LIMIT ?
+      `).bind(limit).all<Record<string, unknown>>(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM submissions WHERE status='accepted' AND queue_status IN ('queued','in_progress')")
+        .first<{ n: number }>(),
+    ]);
+    const total = Number(count?.n ?? 0);
+    return {
+      counts,
+      requests: rows.results,
+      page: { total, limit, next_cursor: null, has_more: total > rows.results.length, truncated: total > rows.results.length },
+    };
+  }
+
+  const limit = boundedInt(url.searchParams.get('limit'), 30, 1, 50);
+  const cursor = positiveInt(url.searchParams.get('cursor'));
+  const q = (url.searchParams.get('q') ?? '').trim().slice(0, 120).toLowerCase();
+  const where = kind === 'pending'
+    ? "s.status='pending'"
+    : kind === 'active'
+      ? "s.status='accepted' AND s.queue_status IN ('queued','in_progress')"
+      : kind === 'completed'
+        ? "s.status='accepted' AND s.queue_status='completed'"
+        : kind === 'rejected'
+          ? "s.status='rejected'"
+          : '1=1';
+  const search = q ? ` AND (
+    CAST(s.id AS TEXT) LIKE ? ESCAPE '!'
+    OR CAST(s.user_id AS TEXT) LIKE ? ESCAPE '!'
+    OR LOWER(s.title) LIKE ? ESCAPE '!'
+    OR LOWER(COALESCE(u.username,'')) LIKE ? ESCAPE '!'
+    OR LOWER(COALESCE(u.first_name,'')) LIKE ? ESCAPE '!'
+    OR LOWER(s.original_language) LIKE ? ESCAPE '!'
+  )` : '';
+  const cursorClause = cursor ? ' AND s.id < ?' : '';
+  const needle = q ? `%${escapeLike(q)}%` : '';
+  const commonBinds = q ? [needle, needle, needle, needle, needle, needle] : [];
+  const rowBinds = cursor ? [...commonBinds, cursor, limit + 1] : [...commonBinds, limit + 1];
+
+  const [rows, count] = await Promise.all([
+    env.DB.prepare(`
+      SELECT s.id, s.user_id, s.title, s.original_language, s.chapter_count,
+             s.publication_status, s.source_url, s.genres_tags, s.sexual_content,
+             s.sensitive_content, s.notes, s.plan, s.status, s.slot_returned,
+             s.queue_status, s.queue_position, s.current_chapter, s.progress_updated_at,
+             s.created_at, s.updated_at, u.username, u.first_name
+      FROM submissions s
+      LEFT JOIN users u ON u.telegram_id = s.user_id
+      WHERE ${where}${search}${cursorClause}
+      ORDER BY s.id DESC
+      LIMIT ?
+    `).bind(...rowBinds).all<Record<string, unknown>>(),
+    env.DB.prepare(`
+      SELECT COUNT(*) AS n
+      FROM submissions s
+      LEFT JOIN users u ON u.telegram_id = s.user_id
+      WHERE ${where}${search}
+    `).bind(...commonBinds).first<{ n: number }>(),
+  ]);
+
+  const hasMore = rows.results.length > limit;
+  const visible = hasMore ? rows.results.slice(0, limit) : rows.results;
+  const nextCursor = hasMore && visible.length ? Number(visible[visible.length - 1]?.id ?? 0) : null;
+  return {
+    counts,
+    requests: visible,
+    page: { total: Number(count?.n ?? 0), limit, next_cursor: nextCursor || null, has_more: hasMore, query: q, kind },
+  };
+}
+
+function boundedInt(raw: string | null, fallback: number, min: number, max: number): number {
+  const value = Number(raw);
+  return raw && Number.isInteger(value) ? Math.max(min, Math.min(max, value)) : fallback;
+}
+function positiveInt(raw: string | null): number | null {
+  const value = Number(raw);
+  return raw && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+function escapeLike(value: string): string {
+  return value.replace(/!/g, '!!').replace(/%/g, '!%').replace(/_/g, '!_');
 }
 
 async function readJson<T>(request: Request): Promise<T> {
