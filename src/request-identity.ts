@@ -47,17 +47,12 @@ export async function handleSubmissionIdentityPreflight(
 
   const auth = await authenticateMiniAppRequest(request, env);
   if (auth instanceof Response) return auth;
+  const body = await readJson<Record<string, unknown>>(request);
   const input: SubmissionIdentityInput = {
-    provider: String((await readJson<Record<string, unknown>>(request)).provider ?? ''),
-    externalId: '',
-    sourceUrl: '',
+    provider: String(body.provider ?? ''),
+    externalId: String(body.external_id ?? ''),
+    sourceUrl: String(body.source_url ?? ''),
   };
-
-  // Read JSON only once while preserving the public snake_case request shape.
-  const body = await readJson<Record<string, unknown>>(request.clone());
-  input.provider = String(body.provider ?? input.provider);
-  input.externalId = String(body.external_id ?? '');
-  input.sourceUrl = String(body.source_url ?? '');
   const identity = canonicalIdentity(input);
   if (!identity) return miniAppJson({ ok: true, identity: null });
 
