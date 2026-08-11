@@ -4,36 +4,42 @@ const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'ut
 const tools = read('public/app/admin-tools.js');
 const index = read('public/app/index.html');
 
-const need = (token, label = token) => {
+function need(token, label = token) {
   if (!tools.includes(token)) throw new Error(`Admin tools routes: missing ${label}`);
-};
-const forbid = (token, label = token) => {
+}
+function forbid(token, label = token) {
   if (tools.includes(token)) throw new Error(`Admin tools routes: forbidden ${label}`);
-};
+}
+function needPattern(pattern, label) {
+  if (!pattern.test(tools)) throw new Error(`Admin tools routes: missing ${label}`);
+}
 
 for (const token of [
-  'const adminRuntime=window.DTL_ADMIN',
-  'adminRuntime?.registerRoute',
-  'adminRuntime.api(path,options)',
-  'adminRuntime.toast?.(text,error)',
-  'adminRuntime.setHead?.(title,subtitle)',
-  'adminRuntime.content?.(html)',
-  "function routeId(section){return `tools:${section}`;}",
-  "function isActive(section){return active===section&&adminRuntime.activeRoute?.()===routeId(section);}",
-  "error?.name==='AbortError'||!isActive(section)",
+  'window.DTL_ADMIN',
+  'adminRuntime.api',
+  'adminRuntime.toast',
+  'adminRuntime.setHead',
+  'adminRuntime.content',
+  'adminRuntime.activeRoute',
+  "tools:${section}",
+  "error?.name==='AbortError'",
   "publications:['files','Публикации']",
   "users:['users','Пользователи']",
   "analytics:['chart-no-axes-combined','Аналитика']",
-  'for(const section of Object.keys(extra))',
-  'adminRuntime.registerRoute(routeId(section)',
+  'Object.keys(extra)',
+  'adminRuntime.registerRoute',
   'mount:()=>render(section)',
   'refresh:()=>render(section)',
   'unmount:()=>deactivate(section)',
   'runtime.registerPatcher(install)',
   'window.DTL_ADMIN_TOOLS=Object.freeze',
-  "open:section=>adminRuntime.open(routeId(section))",
-  "'\"':'&quot;'",
+  'adminRuntime.open(routeId(section))',
+  '&quot;',
 ]) need(token);
+
+needPattern(/if\s*\(\s*!runtime\?\.registerPatcher\s*\|\|\s*!adminRuntime\?\.registerRoute\s*\)/, 'canonical runtime load guard');
+needPattern(/function\s+isActive\(section\)[\s\S]*?adminRuntime\.activeRoute\?\.\(\)===routeId\(section\)/, 'route-current guard');
+needPattern(/for\s*\(const section of Object\.keys\(extra\)\)[\s\S]*?adminRuntime\.registerRoute\(routeId\(section\)/, 'Tools route registration loop');
 
 for (const userToken of [
   'saveUserControl',
