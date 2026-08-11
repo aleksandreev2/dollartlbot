@@ -17,10 +17,10 @@ const css = read('public/app/admin-stability.css');
 
 need(index, '/app/admin-stability.css?v=20260811-stability1', 'admin stability CSS asset');
 need(index, '/app/admin-stability.js?v=20260811-stability1', 'admin stability JS asset');
-need(index, '/app/admin-cache.js?v=20260811-stability1', 'admin cache cache-bust');
+need(index, '/app/admin-cache.js?v=20260810-admin1&stability=20260811', 'admin cache cache-bust');
 
 const stabilityPos = index.indexOf('/app/admin-stability.js?v=20260811-stability1');
-const cachePos = index.indexOf('/app/admin-cache.js?v=20260811-stability1');
+const cachePos = index.indexOf('/app/admin-cache.js?v=20260810-admin1&stability=20260811');
 const consolePos = index.indexOf('/app/admin-console.js?v=20260810-admin1');
 if (!(stabilityPos >= 0 && stabilityPos < cachePos && cachePos < consolePos)) {
   throw new Error('Admin stability runtime must load before admin cache and admin console.');
