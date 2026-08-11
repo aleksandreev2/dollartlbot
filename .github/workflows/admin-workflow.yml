@@ -19,6 +19,7 @@ jobs:
           node --check public/app/admin-navigation.js
           node --check public/app/admin-broadcasts.js
           node --check public/app/admin-publishing-center.js
+          node --check public/app/admin-publication-pipeline.js
       - name: Audit admin workflow invariants
         run: node scripts/audit-admin-workflow.mjs
       - name: Audit admin data integrity
