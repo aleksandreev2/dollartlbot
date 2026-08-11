@@ -61,7 +61,7 @@ export default {
     if (releasesResponse) return releasesResponse;
     const discoveryFeedResponse = await handleDiscoveryFeedRequest(request, env);
     if (discoveryFeedResponse) return discoveryFeedResponse;
-    const discoveryCatalogResponse = await handleDiscoveryCatalogRequest(request, env);
+    const discoveryCatalogResponse = await handleDiscoveryCatalogRequest(request, env, ctx);
     if (discoveryCatalogResponse) return discoveryCatalogResponse;
     const discoveryResponse = await handleDiscoveryRequest(request, env);
     if (discoveryResponse) return discoveryResponse;
