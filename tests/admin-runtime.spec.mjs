@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 
 const runtimeSource = fs.readFileSync(new URL('../public/app/admin-runtime.js', import.meta.url), 'utf8');
 
-async function boot(page) {
+async function boot(page, { autoOpen = true } = {}) {
   await page.setContent('<div id="fixture"></div><button id="leaveAdmin" data-nav="home">Leave admin</button>');
   await page.evaluate(() => {
     window.__adminTest = {
@@ -11,6 +11,7 @@ async function boot(page) {
       abortReads: 0,
       mounts: Object.create(null),
       unmounts: Object.create(null),
+      routeErrors: [],
     };
     window.Telegram = { WebApp: { initData: 'signed-browser-test' } };
     window.DTL_RUNTIME = {
@@ -20,6 +21,9 @@ async function boot(page) {
     window.DTL_ADMIN_STABILITY = {
       abortReads() { window.__adminTest.abortReads += 1; },
     };
+    document.addEventListener('dtl:adminrouteerror', event => {
+      window.__adminTest.routeErrors.push(event.detail);
+    });
     window.DTL_ADMIN_CONSOLE = {
       open() {
         const host = document.getElementById('fixture');
@@ -56,21 +60,61 @@ async function boot(page) {
     };
   });
   await page.addScriptTag({ content: runtimeSource });
-  await page.evaluate(() => window.DTL_ADMIN.open('section:overview'));
-  await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:overview');
+  await page.evaluate(() => {
+    const canonical = id => ({
+      mount(ctx) {
+        window.__adminTest.mounts[id] = (window.__adminTest.mounts[id] || 0) + 1;
+        ctx.content(`<div data-canonical="${id}">${id}</div>`);
+      },
+      refresh(ctx) {
+        ctx.content(`<div data-canonical="${id}">${id}</div>`);
+      },
+      unmount() {
+        window.__adminTest.unmounts[id] = (window.__adminTest.unmounts[id] || 0) + 1;
+      },
+    });
+    window.DTL_ADMIN.registerRoute('section:overview', canonical('section:overview'));
+    window.DTL_ADMIN.registerRoute('section:requests', canonical('section:requests'));
+    window.DTL_ADMIN.registerRoute('section:queue', canonical('section:queue'));
+  });
+  if (autoOpen) {
+    await page.evaluate(() => window.DTL_ADMIN.open('section:overview'));
+    await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:overview');
+  }
 }
 
-test('legacy navigation is replayed exactly once through the canonical router', async ({ page }) => {
+test('registered navigation is owned only by the canonical router', async ({ page }) => {
   await boot(page);
 
   await page.locator('[data-admin-section="requests"]').click();
 
   await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:requests');
-  expect(await page.evaluate(() => window.__adminTest.legacyClicks['section:requests'] || 0)).toBe(1);
-  expect(await page.locator('.admin-content').textContent()).toBe('legacy:section:requests');
+  expect(await page.evaluate(() => window.__adminTest.legacyClicks['section:requests'] || 0)).toBe(0);
+  await expect(page.locator('[data-canonical="section:requests"]')).toHaveText('section:requests');
 });
 
-test('registered routes mount and unmount without invoking their legacy click handler', async ({ page }) => {
+test('unknown admin routes fail closed and never reach legacy handlers', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.adminSection = 'missing';
+    button.textContent = 'Missing';
+    button.addEventListener('click', () => {
+      window.__adminTest.legacyClicks['section:missing'] = (window.__adminTest.legacyClicks['section:missing'] || 0) + 1;
+    });
+    document.querySelector('.admin-side-nav').append(button);
+  });
+
+  await page.locator('[data-admin-section="missing"]').click();
+
+  await expect.poll(() => page.evaluate(() => window.__adminTest.routeErrors.length)).toBe(1);
+  expect(await page.evaluate(() => window.__adminTest.routeErrors[0]?.id)).toBe('section:missing');
+  expect(await page.evaluate(() => window.__adminTest.legacyClicks['section:missing'] || 0)).toBe(0);
+  expect(await page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:overview');
+});
+
+test('registered routes mount and unmount without invoking legacy click handlers', async ({ page }) => {
   await boot(page);
   await page.evaluate(() => {
     window.DTL_ADMIN.registerRoute('health:1', {
@@ -176,6 +220,23 @@ test('rapid route changes leave only the newest registered route active', async 
   await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('tools:analytics');
   await expect(page.locator('#analyticsMounted')).toHaveText('analytics');
   await expect(page.locator('#usersMounted')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__adminTest.legacyClicks['tools:users'] || 0)).toBe(0);
+  expect(await page.evaluate(() => window.__adminTest.legacyClicks['tools:analytics'] || 0)).toBe(0);
+});
+
+test('restore migrates the legacy session route without replaying a click', async ({ page }) => {
+  await boot(page, { autoOpen: false });
+  await page.evaluate(() => {
+    sessionStorage.removeItem('dtl:admin:route:v2');
+    sessionStorage.setItem('dtl:admin:last-section', 'section:requests');
+  });
+
+  await page.evaluate(() => window.DTL_ADMIN.restore());
+
+  await expect.poll(() => page.evaluate(() => window.DTL_ADMIN.activeRoute())).toBe('section:requests');
+  expect(await page.evaluate(() => sessionStorage.getItem('dtl:admin:route:v2'))).toBe('section:requests');
+  expect(await page.evaluate(() => sessionStorage.getItem('dtl:admin:last-section'))).toBe(null);
+  expect(await page.evaluate(() => window.__adminTest.legacyClicks['section:requests'] || 0)).toBe(0);
 });
 
 test('leaving Admin aborts route reads and clears route ownership', async ({ page }) => {
