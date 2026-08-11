@@ -183,8 +183,8 @@ jobs:
           grep -q '/app/admin-health.js?v=20260811-health1' public/app/index.html
           grep -q '/app/admin-tools.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-users-control.css?v=20260810-users1' public/app/index.html
-          grep -q '/app/admin-request-ops.css?v=20260810-ops1' public/app/index.html
-          grep -q '/app/admin-request-ops.js?v=20260810-ops1' public/app/index.html
+          grep -q '/app/admin-request-ops.css?v=20260811-ops2' public/app/index.html
+          grep -q '/app/admin-request-ops.js?v=20260811-ops2' public/app/index.html
           grep -q '/app/admin-activity.css?v=20260810-adminactivity1' public/app/index.html
           grep -q '/app/admin-activity.js?v=20260810-adminactivity1' public/app/index.html
           grep -q '/app/admin-publishing.css?v=20260810-app1' public/app/index.html
