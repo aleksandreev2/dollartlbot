@@ -82,7 +82,18 @@ export async function handleMiniAppCoreRequest(
         || submission.user_id === auth.telegramUser.id
         || auth.admin;
       if (!canRead) return miniAppJsonError('forbidden', 'You cannot view this request.', 403);
-      return miniAppJson({ novel: submission });
+      const requester = await env.DB.prepare(`
+        SELECT COALESCE(NULLIF(u.username,''), NULLIF(s.username_snapshot,'')) AS requester_username
+        FROM submissions s
+        LEFT JOIN users u ON u.telegram_id = s.user_id
+        WHERE s.id = ?
+      `).bind(id).first<{ requester_username: string | null }>();
+      return miniAppJson({
+        novel: {
+          ...submission,
+          requester_username: cleanPublicUsername(requester?.requester_username ?? null) || null,
+        },
+      });
     }
 
     if (request.method === 'POST' && url.pathname === '/api/app/language') {
@@ -350,6 +361,10 @@ function positiveInt(raw: string | null): number | null {
 }
 function escapeLike(value: string): string {
   return value.replace(/!/g, '!!').replace(/%/g, '!%').replace(/_/g, '!_');
+}
+function cleanPublicUsername(value: string | null): string {
+  const raw = String(value || '').trim().replace(/^@/, '');
+  return /^[A-Za-z0-9_]{5,32}$/.test(raw) ? raw : '';
 }
 
 async function readJson<T>(request: Request): Promise<T> {
