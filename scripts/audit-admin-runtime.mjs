@@ -13,8 +13,8 @@ function forbidToken(source, token, label = token) {
   if (source.includes(token)) throw new Error(`Forbidden ${label}`);
 }
 
-const runtimeTag = '/app/admin-runtime.js?v=20260811-runtime1';
-requireToken(index, runtimeTag, 'admin runtime asset');
+const runtimeTag = '/app/admin-runtime.js?v=20260811-runtime1&routes=20260811b&canonical=20260811g';
+requireToken(index, runtimeTag, 'admin runtime canonical cache-bust');
 const runtimeAt = index.indexOf(runtimeTag);
 for (const later of [
   '/app/admin-stability.js',
@@ -30,40 +30,53 @@ for (const later of [
 }
 
 for (const token of [
+  "const STORAGE_KEY = 'dtl:admin:route:v2'",
+  "const LEGACY_STORAGE_KEY = 'dtl:admin:last-section'",
   'const routes = new Map()',
   'new AbortController()',
   'async function unmountCurrent',
   'registerRoute',
   'onCleanup',
   'dtl:adminroutechange',
+  'dtl:adminrouteerror',
   'data-admin-section',
   'data-admin-tools',
   'data-admin-health',
   'data-jump',
   'event.stopImmediatePropagation()',
-  'replayLegacyNavigation',
-  'replayDepth',
   'navigationSequence',
   'adoptBootstrapOverview',
-  'if (!adoptBootstrapOverview) persist(routeId)',
+  'function restoredRouteId()',
+  'sessionStorage.removeItem(LEGACY_STORAGE_KEY)',
+  "routes.has('section:overview')",
+  'function rejectUnknownRoute(routeId)',
+  'if (!route) return rejectUnknownRoute(routeId)',
   "const method = String(options.method || 'GET').toUpperCase()",
   "method !== 'GET' && method !== 'HEAD'",
   'function bindReadSignal',
   'function abortReads()',
   'x-telegram-init-data',
   'async function api',
-  "sessionStorage.setItem(STORAGE_KEY, id)",
   'window.DTL_ADMIN = Object.freeze',
 ]) requireToken(runtime, token);
 
-forbidToken(runtime, 'signal: options.signal || controller?.signal', 'mutation-cancellable global route signal');
-forbidToken(runtime, 'window.__DTL_ADMIN_CACHE__?.clear?.()', 'cache clearing on every navigation');
-forbidToken(runtime, 'window.fetch =', 'direct fetch ownership');
-forbidToken(runtime, 'window.confirm =', 'confirmation ownership');
-forbidToken(runtime, 'MutationObserver', 'DOM mutation observer');
-forbidToken(runtime, 'setInterval(', 'polling loop');
+for (const token of [
+  'replayLegacyNavigation',
+  'replayDepth',
+  'legacy: true',
+  'button.click()',
+  "document.addEventListener('dtl:adminrender'",
+  'signal: options.signal || controller?.signal',
+  'window.__DTL_ADMIN_CACHE__?.clear?.()',
+  'window.fetch =',
+  'window.confirm =',
+  'MutationObserver',
+  'setInterval(',
+]) forbidToken(runtime, token);
 
-requireToken(view, "window.DTL_ADMIN?.open", 'canonical admin entry');
-requireToken(view, "window.DTL_ADMIN.open('section:overview')", 'overview route entry');
+requireToken(view, "window.DTL_ADMIN?.restore", 'canonical admin restore availability');
+requireToken(view, 'return window.DTL_ADMIN.restore()', 'canonical restored admin entry');
+forbidToken(view, 'DTL_ADMIN_CONSOLE.open()', 'direct console entry');
+forbidToken(view, "DTL_ADMIN.open('section:overview')", 'hard-coded overview entry');
 
-console.log('Admin runtime architecture audit passed.');
+console.log('Admin runtime architecture audit passed: registered routes only, fail-closed unknown routes, canonical restore migration, route-scoped reads and mutation-safe navigation.');

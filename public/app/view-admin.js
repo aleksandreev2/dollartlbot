@@ -7,8 +7,7 @@
       app.viewRoot.innerHTML=`<section class="page"><div class="empty-state surface-card"><div class="empty-icon">⚙</div><h2>${app.escapeHtml(app.tr('adminTitle'))}</h2><p>Admin preview requires Telegram authentication.</p></div></section>`;
       return;
     }
-    if(window.DTL_ADMIN?.open)return window.DTL_ADMIN.open('section:overview');
-    if(!window.DTL_ADMIN_CONSOLE?.open)throw new Error('Canonical admin console is unavailable.');
-    return window.DTL_ADMIN_CONSOLE.open();
+    if(!window.DTL_ADMIN?.restore)throw new Error('Canonical admin runtime is unavailable.');
+    return window.DTL_ADMIN.restore();
   });
 })();
