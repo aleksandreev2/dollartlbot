@@ -16,6 +16,8 @@ jobs:
       - name: Check workflow JavaScript syntax
         run: |
           node --check public/app/admin-workflow.js
+          node --check public/app/admin-queue-workspace.js
+          node --check public/app/admin-home-v2.js
           node --check public/app/admin-navigation.js
           node --check public/app/admin-broadcasts.js
           node --check public/app/admin-publishing-center.js
