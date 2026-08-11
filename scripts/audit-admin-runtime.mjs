@@ -46,12 +46,18 @@ for (const token of [
   'navigationSequence',
   'adoptBootstrapOverview',
   'if (!adoptBootstrapOverview) persist(routeId)',
+  "const method = String(options.method || 'GET').toUpperCase()",
+  "method !== 'GET' && method !== 'HEAD'",
+  'function bindReadSignal',
+  'function abortReads()',
   'x-telegram-init-data',
   'async function api',
   "sessionStorage.setItem(STORAGE_KEY, id)",
   'window.DTL_ADMIN = Object.freeze',
 ]) requireToken(runtime, token);
 
+forbidToken(runtime, 'signal: options.signal || controller?.signal', 'mutation-cancellable global route signal');
+forbidToken(runtime, 'window.__DTL_ADMIN_CACHE__?.clear?.()', 'cache clearing on every navigation');
 forbidToken(runtime, 'window.fetch =', 'direct fetch ownership');
 forbidToken(runtime, 'window.confirm =', 'confirmation ownership');
 forbidToken(runtime, 'MutationObserver', 'DOM mutation observer');
