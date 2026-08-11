@@ -147,6 +147,8 @@ jobs:
           test ! -e public/app/suggest-content-activation.js
           test -f public/app/suggest-content-picker.css
           test -f public/app/view-requests-account.js
+          test -f public/app/account-page.css
+          test -f public/app/referral-page.css
           test -f public/app/view-admin.js
           test ! -e public/app/admin-v2.js
           test ! -e public/app/admin-v3.js
@@ -173,7 +175,9 @@ jobs:
           grep -q '/app/suggest-content-picker.js?v=20260810-content4' public/app/index.html
           grep -q '/app/suggest-content-api.js?v=20260810-content4' public/app/index.html
           ! grep -q '/app/suggest-content-activation.js' public/app/index.html
-          grep -q '/app/view-requests-account.js?v=20260811-lang1' public/app/index.html
+          grep -q '/app/view-requests-account.js?v=20260811-account2' public/app/index.html
+          grep -q '/app/account-page.css?v=20260811-account1' public/app/index.html
+          grep -q '/app/referral-page.css?v=20260811-referral2' public/app/index.html
           grep -q '/app/language-switch.css?v=20260811-lang2' public/app/index.html
           grep -q '/app/view-admin.js?v=20260810-app1' public/app/index.html
           grep -q '/app/novel-presenter.js?v=20260810-runtime4' public/app/index.html
@@ -181,8 +185,8 @@ jobs:
           grep -q '/app/referrals-ui.js?v=20260810-runtime4' public/app/index.html
           grep -q '/app/onboarding-ui.js?v=20260810-runtime5' public/app/index.html
           grep -q '/app/home-v2.js?v=20260810-runtime4' public/app/index.html
-          grep -q '/app/notifications-ui.css?v=20260810-notify3' public/app/index.html
-          grep -q '/app/notifications-ui.js?v=20260810-notify3' public/app/index.html
+          grep -q '/app/notifications-ui.css?v=20260811-notify4' public/app/index.html
+          grep -q '/app/notifications-ui.js?v=20260811-notify4' public/app/index.html
           ! grep -q '/app/onboarding-interactions-fix.js' public/app/index.html
           grep -q '/app/admin-console.css?v=20260810-app1' public/app/index.html
           grep -q '/app/admin-health.css?v=20260811-health1' public/app/index.html
