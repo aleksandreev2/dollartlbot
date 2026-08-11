@@ -40,6 +40,7 @@ import { normalizeQueuePositions } from './queue';
 import { runRawCatalogEnrichment } from './raw-fucknovelpia';
 import { handleReferralApiRequest, handleReferralChatMemberUpdate, runReferralMaintenance } from './referrals';
 import { handleSubmissionIdentityPreflight } from './request-identity';
+import { enhanceRequestSelfServiceRead } from './request-self-service-read';
 import { handleRequestSelfService } from './request-self-service';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
@@ -125,7 +126,10 @@ export default {
       return baseMiniAppAccessResponse;
     }
     const miniAppCoreResponse = await handleMiniAppCoreRequest(request, env);
-    if (miniAppCoreResponse) return enhanceMiniAppResponse(request, miniAppCoreResponse, env);
+    if (miniAppCoreResponse) {
+      const positionAware = await enhanceMiniAppResponse(request, miniAppCoreResponse, env);
+      return enhanceRequestSelfServiceRead(request, positionAware, env);
+    }
 
     if (request.method === 'GET' && url.pathname === '/') {
       return Response.json({ ok: true, service: 'dollartlbot', mini_app: `${url.origin}/app/` });
