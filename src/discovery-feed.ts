@@ -32,22 +32,25 @@ type FeedOrder = 'trending' | 'demand' | 'recent';
 
 const MAX_SECTION = 12;
 const MAX_CATALOG = 72;
+const FEED_PATH = '/api/app/discovery/feed';
+const OPPORTUNITIES_PATH = '/api/app/discovery/opportunities';
 
 export async function handleDiscoveryFeedRequest(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
-  const isFeed = request.method === 'GET' && url.pathname === '/api/app/discovery/feed';
-  const isOpportunities = request.method === 'GET' && url.pathname === '/api/app/discovery/opportunities';
-  if (!isFeed && !isOpportunities) return null;
+  const isFeedPath = url.pathname === FEED_PATH;
+  const isOpportunitiesPath = url.pathname === OPPORTUNITIES_PATH;
+  if (!isFeedPath && !isOpportunitiesPath) return null;
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: miniAppApiHeaders() });
   }
+  if (request.method !== 'GET') return null;
 
   const auth = await authenticateMiniAppRequest(request, env);
   if (auth instanceof Response) return auth;
 
   try {
-    if (isOpportunities) {
+    if (isOpportunitiesPath) {
       if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
       const candidates = await loadFeedRows(env, auth, 'demand', 60);
       return miniAppJson({
