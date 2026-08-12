@@ -158,7 +158,7 @@ test('empty Fresh mode explains NovelPia source state instead of blaming filters
   await expect(empty).not.toContainText('По этим фильтрам пока ничего нет');
 });
 
-test('admin Refresh sources waits for NovelPia and requests a fresh Discover reload',async({page})=>{
+test('admin Refresh sources waits for all source stages and requests a fresh Discover reload',async({page})=>{
   await boot(page,{width:390,height:840,admin:true});
   await page.evaluate(()=>{
     const original=window.DTL_APP.api;
@@ -169,12 +169,19 @@ test('admin Refresh sources waits for NovelPia and requests a fresh Discover rel
         refreshed=true;
         return{started:true,busy:false,requested_at:'2026-08-12T08:00:00.000Z'};
       }
-      if(path==='/api/app/discovery/catalog/health')return{
-        provider:'novelpia',
-        state:refreshed
-          ?{last_attempt_at:'2026-08-12T08:00:00.000Z',last_success_at:'2026-08-12T08:00:00.000Z',last_error:null,last_item_count:30,catalog_count:10,active_signal_count:8,fresh_unlinked_count:1}
-          :{last_attempt_at:'2026-08-12T07:20:00.000Z',last_success_at:'2026-08-12T07:20:00.000Z',last_error:null,last_item_count:20,catalog_count:9,active_signal_count:7,fresh_unlinked_count:0},
-      };
+      if(path==='/api/app/discovery/catalog/health'){
+        const current=refreshed?'2026-08-12T08:00:00.000Z':'2026-08-12T07:20:00.000Z';
+        return{
+          provider:'novelpia',
+          homepage_provider:'novelpia_homepage_fresh',
+          homepage_state:{last_attempt_at:current,last_success_at:current,last_error:null,last_item_count:7,active_count:7,unlinked_count:1},
+          state:refreshed
+            ?{last_attempt_at:current,last_success_at:current,last_error:null,last_item_count:30,catalog_count:10,active_signal_count:8,fresh_unlinked_count:1}
+            :{last_attempt_at:current,last_success_at:current,last_error:null,last_item_count:20,catalog_count:9,active_signal_count:7,fresh_unlinked_count:0},
+          raw_provider:'raw_fucknovelpia',
+          raw_state:{last_attempt_at:current,last_success_at:current,last_error:null,last_item_count:4},
+        };
+      }
       const result=await original(path,options);
       if(path==='/api/app/discovery/feed'&&refreshed){
         result.fresh_novelpia=[{kind:'catalog',catalog_id:777,provider:'novelpia',external_id:'446837',title:'Recovered Fresh Novel',original_title:'Recovered Fresh Novel',author:'Author',original_language:'Korean',chapter_count:11,publication_status:'ongoing',genres_tags:'Fantasy',source_url:'https://novelpia.com/novel/446837',page_url:'https://novelpia.com/novel/446837',cover_url:null,source_tier:'free',views_count:0,favorites_count:0,recommendations_count:0,raw_available:false,demand_count:0,viewer_interested:false,source_rank:null,fresh_signals:['novelpia_free_new'],discovered_at:'2026-08-12T08:00:00.000Z',updated_at:'2026-08-12T08:00:00.000Z'}];
@@ -189,4 +196,39 @@ test('admin Refresh sources waits for NovelPia and requests a fresh Discover rel
   await expect(button).toBeEnabled();
   const calls=await page.evaluate(()=>window.__apiCalls.map(entry=>entry.path));
   expect(calls.filter(path=>path==='/api/app/discovery/feed').length).toBeGreaterThanOrEqual(2);
+});
+
+test('admin Refresh sources exposes homepage failure and never reports false Fresh success',async({page})=>{
+  await boot(page,{width:390,height:840,admin:true});
+  await page.evaluate(()=>{
+    const original=window.DTL_APP.api;
+    let refreshed=false;
+    document.addEventListener('dtl:discover-refresh-ready',event=>{event.preventDefault();window.__discoverRefreshReady=event.detail;});
+    window.DTL_APP.api=async(path,options={})=>{
+      if(path==='/api/app/discovery/catalog/refresh'){
+        refreshed=true;
+        return{started:true,busy:false,requested_at:'2026-08-12T08:00:00.000Z'};
+      }
+      if(path==='/api/app/discovery/catalog/health'){
+        const current=refreshed?'2026-08-12T08:00:00.000Z':'2026-08-12T07:20:00.000Z';
+        return{
+          provider:'novelpia',
+          homepage_provider:'novelpia_homepage_fresh',
+          homepage_state:refreshed
+            ?{last_attempt_at:current,last_success_at:'2026-08-12T07:20:00.000Z',last_error:'Error: novelpia_homepage_http_403',last_item_count:0,active_count:0,unlinked_count:0}
+            :{last_attempt_at:current,last_success_at:current,last_error:null,last_item_count:7,active_count:7,unlinked_count:0},
+          state:{last_attempt_at:current,last_success_at:current,last_error:null,last_item_count:30,catalog_count:10,active_signal_count:8,fresh_unlinked_count:0},
+          raw_provider:'raw_fucknovelpia',
+          raw_state:{last_attempt_at:current,last_success_at:current,last_error:null,last_item_count:4},
+        };
+      }
+      return original(path,options);
+    };
+  });
+  await page.evaluate(()=>{window.DTL_APP.state.locale='ru';document.dispatchEvent(new CustomEvent('dtl:localechange'));});
+  const button=page.locator('.discover-manual-refresh');
+  await button.click();
+  await expect.poll(()=>page.evaluate(()=>window.__toast||''),{timeout:5000}).toContain('novelpia_homepage_http_403');
+  await expect(button).toBeEnabled();
+  expect(await page.evaluate(()=>window.__discoverRefreshReady||null)).toBeNull();
 });
