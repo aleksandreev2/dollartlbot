@@ -132,4 +132,6 @@ export const ur = {
   accessGranted: 'رسائی کی تصدیق ہو گئی۔',
   accessCheckUnavailableTitle: 'رسائی ابھی چیک نہیں ہو سکی',
   accessCheckUnavailableText: 'Telegram کی membership verification عارضی طور پر دستیاب نہیں۔ تھوڑی دیر بعد دوبارہ کوشش کریں۔',
+  accessRestrictedTitle: 'Dollar TL تک رسائی دستیاب نہیں',
+  accessRestrictedText: 'اس اکاؤنٹ کے لیے Dollar TL تک رسائی فی الحال دستیاب نہیں۔',
 } satisfies Record<keyof typeof completeEnglish, string>;
