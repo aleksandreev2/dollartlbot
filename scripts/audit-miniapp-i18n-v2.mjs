@@ -95,6 +95,11 @@ function assertExactLocales(map,label,expected=legacyLocales){
   const missing=wanted.filter(x=>!actual.includes(x)),extra=actual.filter(x=>!wanted.includes(x));
   if(missing.length||extra.length)throw new Error(`${label}: locale mismatch; missing=${missing.join(',')} extra=${extra.join(',')}`);
 }
+function assertObjectKeys(node,label,expected){
+  const actual=objectKeys(node).sort(),wanted=[...expected].sort();
+  const missing=wanted.filter(x=>!actual.includes(x)),extra=actual.filter(x=>!wanted.includes(x));
+  if(missing.length||extra.length)throw new Error(`${label}: key mismatch; missing=${missing.join(',')} extra=${extra.join(',')}`);
+}
 function assertSameKeys(map,label,reference='en'){
   const ref=objectKeys(map[reference]).sort();
   for(const [locale,obj] of Object.entries(map)){
@@ -158,24 +163,26 @@ const urRoot=exportedObject('src/i18n/ur.ts','ur');
 const urExplicit=new Set(objectKeys(urRoot));
 const untranslated=[...englishKeys].filter(key=>!urExplicit.has(key)).sort();
 if(untranslated.length)throw new Error(`Urdu Telegram dictionary still falls back to English for: ${untranslated.join(',')}`);
-for(const key of ['accessRequiredTitle','accessRequiredText','accessJoinButton','accessRetryButton','accessGranted','accessCheckUnavailableTitle','accessCheckUnavailableText'])if(!urExplicit.has(key))throw new Error(`Access gate/ur: missing ${key}`);
+for(const key of ['accessRequiredTitle','accessRequiredText','accessJoinButton','accessRetryButton','accessGranted','accessCheckUnavailableTitle','accessCheckUnavailableText','accessRestrictedTitle','accessRestrictedText'])if(!urExplicit.has(key))throw new Error(`Access gate/ur: missing ${key}`);
 
-// Locale typed entry points and user-facing standalone lifecycle copy must know Urdu.
+// Locale typed entry points and standalone user-facing lifecycle copy must know Urdu.
 const types=read('src/i18n/types.ts');
 need(types,"{ code: 'ur', label: '🇵🇰 اردو' }",'supported languages');
 const index=read('src/i18n/index.ts');
 need(index,"import { ur } from './ur'",'backend i18n index');need(index,'ur: { ...ur }','backend i18n index');
 const ui=read('src/ui.ts');need(ui,"ur: 'ur-PK'",'Telegram Intl locale');need(ui,"ur: '📱 Dollar TL کھولیں'",'Telegram Mini App button');
-for(const [path,needles] of [
-  ['src/referrals.ts',["ur: { earned:","ur:'ریفرل بونس اپ ڈیٹ ہو گیا'","ur: {\n    title: '🎁 آپ کو Dollar TL میں مدعو کیا گیا ہے'"]],
-  ['src/notifications.ts',["request_submitted", "release_published"]],
-  ['src/title-following.ts',["const COPY: Record<string, FollowCopy>"]],
-]){
-  const source=read(path);for(const needle of needles)need(source,needle,path);
-}
-// These two maps are intentionally Record<string>; require explicit Urdu blocks so normalizeLocale('ur') never falls back to English.
-need(read('src/notifications.ts'),"ur: {",'notification lifecycle Urdu');
-need(read('src/title-following.ts'),"ur:{",'following lifecycle Urdu');
+const referrals=read('src/referrals.ts');
+for(const needle of ["ur: { earned:","ur:'ریفرل بونس اپ ڈیٹ ہو گیا'","ur: {\n    title: '🎁 آپ کو Dollar TL میں مدعو کیا گیا ہے'"])need(referrals,needle,'src/referrals.ts');
+
+const notificationCopy=localeObjects('src/notifications.ts','REQUEST_COPY');
+assertExactLocales(notificationCopy,'notification request lifecycle',allLocales);assertSameKeys(notificationCopy,'notification request lifecycle');
+const notificationTitles=Object.fromEntries(Object.entries(notificationCopy).map(([locale,obj])=>[locale,childObject(obj,'titles',`notification request lifecycle/${locale}`)]));
+assertSameKeys(notificationTitles,'notification request lifecycle titles');
+assertObjectKeys(variableObject('src/notifications.ts','OPEN_LABEL'),'notification open labels',allLocales);
+assertObjectKeys(variableObject('src/notifications.ts','RELEASE_TITLE'),'notification release titles',allLocales);
+
+const followCopy=localeObjects('src/title-following.ts','COPY');
+assertExactLocales(followCopy,'following lifecycle',allLocales);assertSameKeys(followCopy,'following lifecycle');
 
 // Product Analytics is now genuinely localized for all eleven locales.
 const analyticsMap=localeObjects('public/app/admin-product-analytics.js','COPY');
