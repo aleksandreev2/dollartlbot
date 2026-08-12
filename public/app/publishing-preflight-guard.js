@@ -7,7 +7,7 @@
 
   let editor = null;
   let timer = 0;
-  let checking = false;
+  let checkPromise = null;
 
   const isPublishing = () => admin.activeRoute?.() === 'section:publishing';
 
@@ -21,15 +21,18 @@
   }
 
   async function checkNow() {
-    if (checking || !isPublishing()) return false;
+    if (!isPublishing()) return false;
+    if (checkPromise) return checkPromise;
     const center = window.DTL_PUBLISHING_CENTER;
     if (!center?.runPreflight) return false;
-    checking = true;
-    try {
+    checkPromise = (async () => {
       await center.runPreflight();
       return Boolean(center.state?.().lastPreflight?.ready);
+    })();
+    try {
+      return await checkPromise;
     } finally {
-      checking = false;
+      checkPromise = null;
     }
   }
 
