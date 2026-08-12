@@ -5,7 +5,7 @@
 
   let busy=false,logTimer=0,installedEditor=null;
   const api=(path,options={})=>adminRuntime.api(path,options);
-  const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ico=n=>`<i data-lucide="${n}" aria-hidden="true"></i>`;
   function icons(){adminRuntime.icons?.();}
   function toast(text,error=false){adminRuntime.toast?.(text,error);}
