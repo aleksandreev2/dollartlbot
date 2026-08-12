@@ -220,6 +220,12 @@
     node.querySelectorAll('[data-source-watch-refresh-all]').forEach(button => button.addEventListener('click', () => void refreshAll(button)));
   }
 
+  function releaseButton(button) {
+    if (!button?.isConnected) return;
+    button.disabled = false;
+    button.classList.remove('admin-source-watch-loading');
+  }
+
   async function acknowledge(submissionId, button) {
     if (!submissionId || button.disabled) return;
     button.disabled = true;
@@ -233,8 +239,8 @@
       await refreshVisible(true);
     } catch (error) {
       admin.toast?.(error?.message || String(error), true);
-      button.disabled = false;
-      button.classList.remove('admin-source-watch-loading');
+    } finally {
+      releaseButton(button);
     }
   }
 
@@ -251,8 +257,8 @@
       await refreshVisible(true);
     } catch (error) {
       admin.toast?.(error?.message || String(error), true);
-      button.disabled = false;
-      button.classList.remove('admin-source-watch-loading');
+    } finally {
+      releaseButton(button);
     }
   }
 
@@ -262,15 +268,15 @@
     button.classList.add('admin-source-watch-loading');
     try {
       await admin.api('/api/app/admin/source-watch/refresh', {
-        method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ limit:20 }),
+        method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ limit:8 }),
       });
       admin.toast?.('Проверка источников завершена.');
       cached = null;
       await refreshVisible(true);
     } catch (error) {
       admin.toast?.(error?.message || String(error), true);
-      button.disabled = false;
-      button.classList.remove('admin-source-watch-loading');
+    } finally {
+      releaseButton(button);
     }
   }
 
