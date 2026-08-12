@@ -24,7 +24,7 @@ for(const token of [
   'CREATE TABLE IF NOT EXISTS submission_raw_history',
   'Remote D1 migration execution can split CREATE TRIGGER',
 ])need(migration,token,'migration');
-if(/CREATE\s+TRIGGER/i.test(migration))throw new Error('0029 must not contain CREATE TRIGGER; remote D1 migration parsing can split trigger bodies');
+if(/^\s*CREATE\s+TRIGGER\b/im.test(migration))throw new Error('0029 must not contain a CREATE TRIGGER statement; remote D1 migration parsing can split trigger bodies');
 
 for(const token of [
   'const userMatch =',
