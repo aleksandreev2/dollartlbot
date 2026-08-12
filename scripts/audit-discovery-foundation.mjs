@@ -1,52 +1,49 @@
 import fs from 'node:fs';
 
 const read=path=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
-const migration=read('migrations/0025_discovery_foundation.sql');
-const catalogMigration=read('migrations/0026_discovery_catalog.sql');
-const catalogSourcesMigration=read('migrations/0027_discovery_catalog_sources.sql');
-const legacyServer=read('src/discovery.ts');
-const rawApi=read('src/discovery-raw-v2.ts');
-const rawProvider=read('src/raw-fucknovelpia.ts');
-const rawCache=read('src/raw-fucknovelpia-cache.ts');
-const catalogApi=read('src/discovery-catalog-api.ts');
-const novelpia=read('src/novelpia-discovery.ts');
-const feed=read('src/discovery-feed.ts');
-const index=read('src/index.ts');
-const html=read('public/app/index.html');
-const ui=read('public/app/discovery-ui.js');
-const discoverView=read('public/app/view-discover.js');
-const discoverRuntime=read('public/app/discover-page-runtime.js');
-const discoverCss=read('public/app/discover-page.css');
-const suggest=read('public/app/view-suggest.js');
-const bot=read('scripts/configure-bot.mjs');
-
-const requireText=(source,needle,label)=>{
-  if(!source.includes(needle))throw new Error(`Discovery audit failed: ${label}: missing ${needle}`);
+const files={
+  migration:read('migrations/0025_discovery_foundation.sql'),
+  catalogMigration:read('migrations/0026_discovery_catalog.sql'),
+  catalogSourcesMigration:read('migrations/0027_discovery_catalog_sources.sql'),
+  legacy:read('src/discovery.ts'),
+  rawApi:read('src/discovery-raw-v2.ts'),
+  rawProvider:read('src/raw-fucknovelpia.ts'),
+  rawCache:read('src/raw-fucknovelpia-cache.ts'),
+  catalogApi:read('src/discovery-catalog-api.ts'),
+  novelpia:read('src/novelpia-discovery.ts'),
+  homepage:read('src/novelpia-homepage-fresh.ts'),
+  feed:read('src/discovery-feed.ts'),
+  index:read('src/index.ts'),
+  html:read('public/app/index.html'),
+  discoveryUi:read('public/app/discovery-ui.js'),
+  discoverView:read('public/app/view-discover.js'),
+  discoverRuntime:read('public/app/discover-page-runtime.js'),
+  discoverCss:read('public/app/discover-page.css'),
+  suggest:read('public/app/view-suggest.js'),
+  bot:read('scripts/configure-bot.mjs'),
 };
 
-requireText(migration,'CREATE TABLE IF NOT EXISTS discovery_interests','interest table');
-requireText(migration,'PRIMARY KEY (submission_id, user_id)','interest dedupe');
-requireText(migration,'CREATE TABLE IF NOT EXISTS submission_external_sources','generic external source table');
-requireText(migration,'UNIQUE(submission_id, provider)','one provider link per submission');
-requireText(legacyServer,'authenticateMiniAppRequest(request, env)','authenticated legacy discovery API');
-requireText(legacyServer,"'/api/app/discovery/interest'",'legacy interest endpoint retained');
-requireText(index,"import { handleDiscoveryRequest } from './discovery';",'legacy worker route import');
-requireText(index,'await handleDiscoveryRequest(request, env)','legacy worker route invocation');
-requireText(html,'/app/discovery-ui.css?v=20260811-discovery1','discovery CSS asset');
-requireText(html,'/app/discovery-ui.js?v=20260811-discovery1','discovery JS asset');
-if(html.indexOf('/app/discovery-ui.js?v=20260811-discovery1')>html.indexOf('/app/view-suggest.js?v=20260810-app4&discover=20260811a')){
-  throw new Error('Discovery audit failed: discovery UI must load before Suggest view');
+function need(source,tokens,label){
+  for(const token of tokens){
+    if(!source.includes(token))throw new Error(`Discovery audit failed: ${label}: missing ${token}`);
+  }
 }
-requireText(suggest,'discovery?.renderFinder?.()','finder mounted in Suggest');
-requireText(suggest,'discovery?.bindFinder?.()','finder lifecycle bound in Suggest');
-requireText(suggest,'persistSelectedSource?.(data.submission_id)','external source linked after successful submission');
-requireText(ui,"'/api/app/discovery/interest'",'demand action wired to discovery API');
-requireText(ui,"'/api/app/discovery/source'",'source persistence wired to discovery API');
-requireText(bot,"await api('setChatMenuButton'",'Telegram chat menu Mini App button');
-requireText(bot,'Configure Mini App → Enable Mini App','BotFather Main Mini App guidance');
-requireText(bot,'?startapp','Main Mini App direct link guidance');
+function ordered(source,tokens,label){
+  let cursor=-1;
+  for(const token of tokens){
+    const at=source.indexOf(token,cursor+1);
+    if(at<0||at<cursor)throw new Error(`Discovery audit failed: ${label}: expected ordered token ${token}`);
+    cursor=at;
+  }
+}
 
-for(const token of [
+need(files.migration,[
+  'CREATE TABLE IF NOT EXISTS discovery_interests',
+  'PRIMARY KEY (submission_id, user_id)',
+  'CREATE TABLE IF NOT EXISTS submission_external_sources',
+  'UNIQUE(submission_id, provider)',
+],'discovery foundation schema');
+need(files.catalogMigration,[
   'CREATE TABLE IF NOT EXISTS discovery_catalog',
   'UNIQUE(provider, external_id)',
   'CREATE TABLE IF NOT EXISTS discovery_catalog_signals',
@@ -54,25 +51,41 @@ for(const token of [
   'CREATE TABLE IF NOT EXISTS discovery_catalog_interests',
   'PRIMARY KEY (catalog_id, user_id)',
   'CREATE TABLE IF NOT EXISTS discovery_ingest_state',
-])requireText(catalogMigration,token,'external discovery catalog schema');
-
-for(const token of [
+],'catalog schema');
+need(files.catalogSourcesMigration,[
   'CREATE TABLE IF NOT EXISTS discovery_catalog_sources',
   "CHECK (verification_status IN ('unknown', 'verified', 'not_found', 'error'))",
   'PRIMARY KEY (catalog_id, provider)',
   'failure_count INTEGER NOT NULL DEFAULT 0',
   'next_check_at TEXT',
   'idx_discovery_catalog_sources_due',
-])requireText(catalogSourcesMigration,token,'verified catalog source schema');
+],'catalog source schema');
 
-for(const token of [
+need(files.legacy,[
+  'authenticateMiniAppRequest(request, env)',
+  "'/api/app/discovery/interest'",
+],'legacy discovery API');
+need(files.suggest,[
+  'discovery?.renderFinder?.()',
+  'discovery?.bindFinder?.()',
+  'persistSelectedSource?.(data.submission_id)',
+],'Suggest discovery integration');
+need(files.discoveryUi,[
+  "'/api/app/discovery/interest'",
+  "'/api/app/discovery/source'",
+],'discovery UI API wiring');
+need(files.bot,[
+  "await api('setChatMenuButton'",
+  'Configure Mini App → Enable Mini App',
+  '?startapp',
+],'Telegram Mini App wiring');
+
+need(files.novelpia,[
   "url: `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`",
   "url: `${NOVELPIA_ORIGIN}/freestory/new/date/1?main_genre=`",
   "url: `${NOVELPIA_ORIGIN}/top100/plus/today/view/all/all?main_genre=`",
   'const MAX_DETAIL_FETCHES = 24',
   'const FETCH_TIMEOUT_MS = 10_000',
-  "hostname === 'novelpia.com' || hostname === 'www.novelpia.com'",
-  "url.hostname !== 'images.novelpia.com'",
   'runNovelpiaDiscoveryIngestion',
   'novelpia_source_no_explicit_ids',
   'fresh_unlinked_count',
@@ -80,15 +93,96 @@ for(const token of [
   'discovery_catalog_interests',
   'linkCatalogToSubmission',
   "user_id <> ?",
-])requireText(novelpia,token,'safe NovelPia ingestion pipeline');
-const extractorBlock=novelpia.slice(novelpia.indexOf('function extractNovelIds'),novelpia.indexOf('function minSignalRank'));
-if(/ori\|thumb\|cover|_\(\\d/.test(extractorBlock)){
-  throw new Error('Discovery audit failed: NovelPia candidate extraction must never use cover/image asset IDs');
+],'standard NovelPia ingestion');
+const explicitExtractor=files.novelpia.slice(
+  files.novelpia.indexOf('function extractNovelIds'),
+  files.novelpia.indexOf('function minSignalRank'),
+);
+need(explicitExtractor,[
+  'explicitPatterns',
+  '/novel\\/(\\d{2,9})',
+  'novel_no|novelNo',
+],'explicit NovelPia identity extractor');
+if(/ori\|thumb\|cover|_\(\\d/.test(explicitExtractor)){
+  throw new Error('Discovery audit failed: standard NovelPia ingestion must not derive novel identity from image assets');
 }
-for(const token of ['explicitPatterns','/novel\\/(\\d{2,9})','novel_no|novelNo'])requireText(extractorBlock,token,'explicit NovelPia identity extraction');
 
-for(const token of [
-  "const FETCH_TIMEOUT_MS = 8_000",
+need(files.homepage,[
+  "const HOMEPAGE_CURATION_PATH = '/proc/main_v2'",
+  "const INGEST_PROVIDER = 'novelpia_homepage_fresh'",
+  "const HOMEPAGE_SIGNAL = 'novelpia_home_plus_new'",
+  "const PLUS_NEW_SIGNAL = 'novelpia_plus_new'",
+  'const FETCH_TIMEOUT_MS = 8_000',
+  'const API_MAX_BYTES = 1_000_000',
+  'const MAX_REDIRECTS = 3',
+  'const MAX_ITEMS = 12',
+  'runNovelpiaHomepageFreshIngestion',
+  'getHomepageFreshIngestState',
+  'parseHomepageFreshPayload',
+  "url.searchParams.set('cmd', 'new_novel_curation')",
+  "url.searchParams.set('novel_category', 'entry')",
+  "'x-requested-with': 'XMLHttpRequest'",
+  'Number(data.status)',
+  'if (!Array.isArray(data.list))',
+  'cleanExternalId(row.novel_no)',
+  'cleanLinkUrl(row.link_url)',
+  'idFromField && idFromLink && idFromField !== idFromLink',
+  "return /^\\/novel\\/(\\d{2,9})\\/?$/.exec(value)?.[1] ?? null",
+  'parseApiGenres(row.novel_genre ?? row.genre ?? row.genres)',
+  'const synopsis = cleanText(row.novel_story, 1200) || null',
+  "const publicationStatus = numberValue(row.is_complete) === 1 ? 'completed' : 'ongoing'",
+  'viewsCount: nonNegativeInteger(row.count_view)',
+  'favoritesCount: nonNegativeInteger(row.count_book)',
+  'recommendationsCount: nonNegativeInteger(row.count_good)',
+  "raw.startsWith('[')",
+  'JSON.parse(raw)',
+  "source_tier='plus'",
+  "source: 'novelpia_main_v2_new_novel_curation'",
+  "source: 'homepage_new_novel_curation'",
+  "redirect: 'manual'",
+  'fetchJsonLimited',
+  'validateApiUrl',
+  'readTextLimited',
+  "url.protocol !== 'https:' || host !== 'novelpia.com' || url.pathname !== HOMEPAGE_CURATION_PATH",
+],'homepage curation provider');
+if(
+  files.homepage.includes('parseHomepageFreshCards')
+  || files.homepage.includes('resolveHomepageCardsFromListHtml')
+  || files.homepage.includes('fetchNovelDetailHtml')
+  || files.homepage.includes('parseNovelDetail')
+){
+  throw new Error('Discovery audit failed: homepage Fresh must use the curation JSON directly with no rendered-HTML/detail resolver');
+}
+if(/coverId|imageId|assetId/.test(files.homepage)){
+  throw new Error('Discovery audit failed: homepage Fresh identity must not depend on image asset IDs');
+}
+if((files.homepage.match(/fetch\(/g)||[]).length!==1){
+  throw new Error('Discovery audit failed: homepage Fresh pass must use exactly one external fetch');
+}
+const parseFn=files.homepage.slice(
+  files.homepage.indexOf('export function parseHomepageFreshPayload'),
+  files.homepage.indexOf('async function fetchHomepageFreshPayload'),
+);
+ordered(parseFn,[
+  'const idFromField = cleanExternalId(row.novel_no)',
+  'const linkUrl = cleanLinkUrl(row.link_url)',
+  'const idFromLink = extractNovelpiaId(linkUrl)',
+  'idFromField && idFromLink && idFromField !== idFromLink',
+  'items.push({',
+],'homepage canonical identity validation');
+const ingestFn=files.homepage.slice(
+  files.homepage.indexOf('export async function runNovelpiaHomepageFreshIngestion'),
+  files.homepage.indexOf('export async function getHomepageFreshIngestState'),
+);
+ordered(ingestFn,[
+  'const payload = await fetchHomepageFreshPayload()',
+  'const parsed = parseHomepageFreshPayload(payload)',
+  'await upsertCatalogNovel(env, item, now)',
+  'await upsertHomepageSignals(env, row.id, item.rank, now)',
+],'homepage ingestion execution order');
+
+need(files.rawProvider,[
+  'const FETCH_TIMEOUT_MS = 8_000',
   'const MAX_HTML_BYTES = 2_000_000',
   'const MAX_REDIRECTS = 3',
   "redirect: 'manual'",
@@ -103,9 +197,8 @@ for(const token of [
   "verification_status = 'verified'",
   'next_check_at',
   'propagateCatalogRawSourceToSubmission',
-])requireText(rawProvider,token,'safe RAW FuckNovelPia provider v2');
-
-for(const token of [
+],'RAW provider');
+need(files.rawApi,[
   "const SEARCH_PATH = '/api/app/discovery/search'",
   "const SOURCE_PATH = '/api/app/discovery/source'",
   'authenticateMiniAppRequest(request, env)',
@@ -113,15 +206,14 @@ for(const token of [
   'searchRawFuckNovelpia(query)',
   'provider_source: providerSource',
   "verification_status: inspected ? 'verified' : 'unverified'",
-])requireText(rawApi,token,'cache-first RAW discovery API');
-
-for(const token of [
+],'RAW discovery API');
+need(files.rawCache,[
   'cacheRawResultForCatalog',
   "verification_status = 'verified'",
   'propagateCatalogRawSourceToSubmission',
-])requireText(rawCache,token,'live RAW result cache helper');
+],'RAW cache');
 
-for(const token of [
+need(files.catalogApi,[
   "'/api/app/discovery/catalog/search'",
   "'/api/app/discovery/catalog/interest'",
   "'/api/app/discovery/catalog/link'",
@@ -129,32 +221,49 @@ for(const token of [
   "'/api/app/discovery/catalog/refresh'",
   'authenticateMiniAppRequest(request, env)',
   "if (!auth.admin) return miniAppJsonError('forbidden'",
-  'ctx.waitUntil(',
-  'runNovelpiaDiscoveryIngestion(env, requestedAt)',
-  'runRawCatalogEnrichment(env, new Date())',
+  'getHomepageFreshIngestState(env)',
+  "homepage_provider: 'novelpia_homepage_fresh'",
+  'homepage_state: homepageState',
+  "stages: ['novelpia_homepage', 'novelpia', 'raw_fucknovelpia']",
   'getRawIngestState(env)',
   'propagateCatalogRawSourceToSubmission(env, catalogId, submissionId, now)',
-])requireText(catalogApi,token,'authenticated discovery catalog API');
+],'catalog API');
+ordered(files.catalogApi,[
+  'runNovelpiaHomepageFreshIngestion(env, requestedAt)',
+  'runNovelpiaDiscoveryIngestion(env, requestedAt)',
+  'runRawCatalogEnrichment(env, new Date())',
+],'manual source refresh chain');
 
-requireText(index,"import { handleDiscoveryRawV2Request } from './discovery-raw-v2';",'RAW v2 API route import');
-requireText(index,'await handleDiscoveryRawV2Request(request, env)','RAW v2 API route invocation');
-if(index.indexOf('await handleDiscoveryRawV2Request(request, env)')>index.indexOf('await handleDiscoveryRequest(request, env)')){
-  throw new Error('Discovery audit failed: RAW v2 search/source handler must shadow legacy discovery handler');
+need(files.index,[
+  "import { handleDiscoveryRawV2Request } from './discovery-raw-v2';",
+  'await handleDiscoveryRawV2Request(request, env)',
+  "import { runRawCatalogEnrichment } from './raw-fucknovelpia';",
+  "import { runNovelpiaHomepageFreshIngestion } from './novelpia-homepage-fresh';",
+  'scheduledAt.getUTCMinutes() % 20 === 0',
+  "runScheduledTask('novelpia_homepage_fresh'",
+  "runScheduledTask('novelpia_discovery_ingest'",
+  "runScheduledTask('raw_fucknovelpia_enrichment'",
+],'Worker discovery wiring');
+if(files.index.indexOf('await handleDiscoveryRawV2Request(request, env)')>files.index.indexOf('await handleDiscoveryRequest(request, env)')){
+  throw new Error('Discovery audit failed: RAW v2 handler must shadow the legacy discovery handler');
 }
-requireText(index,"import { runRawCatalogEnrichment } from './raw-fucknovelpia';",'RAW enrichment import');
-requireText(index,"scheduledAt.getUTCMinutes() % 20 === 0",'bounded 20-minute ingestion cadence');
-requireText(index,"runScheduledTask('novelpia_discovery_ingest'",'isolated NovelPia ingestion task');
-requireText(index,"runScheduledTask('raw_fucknovelpia_enrichment'",'isolated RAW enrichment task');
-requireText(feed,'fresh_novelpia: freshWithRaw','Fresh NovelPia feed with verified RAW overlay');
-requireText(feed,'catalogOpportunityScore','NovelPia opportunity score');
-requireText(feed,"out.push('RAW verified')",'verified RAW opportunity signal');
-requireText(feed,'raw_ingest: ingestPresentation','RAW ingestion health projection');
-requireText(feed,'loadRawCatalogSourceMap','verified RAW source overlay');
-requireText(feed,"'feed_catalog_mismatch'",'Fresh catalog/feed mismatch diagnostics');
-requireText(feed,"'no_unlinked_fresh'",'legitimate empty Fresh diagnostics');
-requireText(feed,"'never_refreshed'",'never-refreshed Fresh diagnostics');
+ordered(files.index,[
+  "runScheduledTask('novelpia_homepage_fresh'",
+  "runScheduledTask('novelpia_discovery_ingest'",
+  "runScheduledTask('raw_fucknovelpia_enrichment'",
+],'scheduled source refresh chain');
 
-for(const token of [
+need(files.feed,[
+  'fresh_novelpia: freshWithRaw',
+  'catalogOpportunityScore',
+  "out.push('RAW verified')",
+  'raw_ingest: ingestPresentation',
+  'loadRawCatalogSourceMap',
+  "'feed_catalog_mismatch'",
+  "'no_unlinked_fresh'",
+  "'never_refreshed'",
+],'Discover feed');
+need(files.discoverView,[
   "['fresh_novelpia','telescope',tx('fresh')]",
   '/api/app/discovery/catalog/search',
   "'/api/app/discovery/catalog/interest'",
@@ -162,8 +271,8 @@ for(const token of [
   'data-catalog-interest',
   "mode='fresh_novelpia'",
   'Fresh from NovelPia',
-])requireText(discoverView,token,'Fresh NovelPia Discover UI');
-for(const token of [
+],'Fresh Discover UI');
+need(files.discoverRuntime,[
   'discover-manual-refresh',
   "'/api/app/discovery/catalog/refresh'",
   'Refresh sources',
@@ -174,12 +283,17 @@ for(const token of [
   'waitForRefreshCompletion',
   "'/api/app/discovery/catalog/health'",
   "'dtl:discover-refresh-ready'",
-])requireText(discoverRuntime,token,'verified RAW Discover runtime');
-requireText(discoverCss,'.discover-catalog-row','Fresh catalog responsive row styling');
-requireText(html,'/app/discover-page.css?v=20260811-discover2','Fresh Discover CSS cache bust');
-requireText(html,'/app/view-discover.js?v=20260811-discover2','Fresh Discover JS cache bust');
-requireText(html,'/app/discover-page-runtime.js?v=20260812-discover4','Discover source recovery runtime cache bust');
+],'Discover source recovery runtime');
+need(files.discoverCss,['.discover-catalog-row'],'Fresh Discover CSS');
+need(files.html,[
+  '/app/discover-page.css?v=20260811-discover2',
+  '/app/view-discover.js?v=20260811-discover2',
+  '/app/discover-page-runtime.js?v=20260812-discover4',
+],'Discover assets');
+if(files.html.indexOf('/app/discovery-ui.js?v=20260811-discovery1')>files.html.indexOf('/app/view-suggest.js?v=20260810-app4&discover=20260811a')){
+  throw new Error('Discovery audit failed: discovery UI must load before Suggest view');
+}
 
-new Function(discoverView);
-new Function(discoverRuntime);
-console.log('Discovery foundation + NovelPia Fresh + RAW provider v2 audit passed.');
+new Function(files.discoverView);
+new Function(files.discoverRuntime);
+console.log('Discovery foundation + NovelPia homepage curation + NovelPia lists + RAW provider v2 audit passed.');
