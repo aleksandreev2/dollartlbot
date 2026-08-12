@@ -9,6 +9,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'fr', label: '🇫🇷 Français' },
   { code: 'de', label: '🇩🇪 Deutsch' },
   { code: 'ru', label: '🇷🇺 Русский' },
+  { code: 'ur', label: '🇵🇰 اردو' },
 ] as const;
 
 export type Locale = (typeof SUPPORTED_LANGUAGES)[number]['code'];
