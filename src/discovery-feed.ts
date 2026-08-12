@@ -102,7 +102,7 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
           'NovelPia new-rank',
           'NovelPia views/favorites',
         ],
-        novelpia_ingest: ingestPresentation(ingestState),
+        novelpia_ingest: ingestPresentation(ingestState, freshWithRaw.length, 'novelpia'),
         raw_ingest: ingestPresentation(rawIngestState),
       });
     }
@@ -127,7 +127,7 @@ export async function handleDiscoveryFeedRequest(request: Request, env: Env): Pr
       recently_found: recentlyFound,
       fresh_novelpia: freshWithRaw,
       catalog,
-      novelpia_ingest: ingestPresentation(ingestState),
+      novelpia_ingest: ingestPresentation(ingestState, freshWithRaw.length, 'novelpia'),
       raw_ingest: ingestPresentation(rawIngestState),
     });
   } catch (error) {
@@ -315,12 +315,41 @@ function ingestPresentation(state: {
   last_success_at: string | null;
   last_error: string | null;
   last_item_count: number;
-} | null) {
-  if (!state) return { available: false, last_success_at: null, item_count: 0, degraded: false };
+  catalog_count?: number;
+  active_signal_count?: number;
+  fresh_unlinked_count?: number;
+} | null, visibleCount?: number, provider: 'novelpia' | 'generic' = 'generic') {
+  if (!state) return {
+    available: false,
+    last_success_at: null,
+    item_count: 0,
+    visible_count: visibleCount ?? null,
+    degraded: provider === 'novelpia',
+    reason: provider === 'novelpia' ? 'never_refreshed' : null,
+  };
+  const visible = visibleCount == null ? null : Number(visibleCount);
+  const unlinked = Number(state.fresh_unlinked_count ?? 0);
+  const mismatch = provider === 'novelpia' && visible === 0 && unlinked > 0;
+  const noUnlinked = provider === 'novelpia'
+    && visible === 0
+    && unlinked === 0
+    && Number(state.last_item_count ?? 0) > 0;
+  const reason = state.last_error
+    ? 'provider_error'
+    : mismatch
+      ? 'feed_catalog_mismatch'
+      : noUnlinked
+        ? 'no_unlinked_fresh'
+        : null;
   return {
     available: true,
     last_success_at: state.last_success_at,
     item_count: Number(state.last_item_count ?? 0),
-    degraded: Boolean(state.last_error),
+    visible_count: visible,
+    catalog_count: Number(state.catalog_count ?? 0),
+    active_signal_count: Number(state.active_signal_count ?? 0),
+    fresh_unlinked_count: unlinked,
+    degraded: Boolean(state.last_error) || mismatch,
+    reason,
   };
 }
