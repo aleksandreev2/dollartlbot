@@ -52,12 +52,17 @@ CREATE TABLE IF NOT EXISTS submission_source_events (
   new_value TEXT,
   action TEXT NOT NULL CHECK (action IN ('auto_applied', 'review_required', 'observed')),
   metadata_json TEXT,
+  reviewed_at TEXT,
+  reviewed_by INTEGER,
   created_at TEXT NOT NULL,
   FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_submission_source_events_request
   ON submission_source_events(submission_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_submission_source_events_unreviewed
+  ON submission_source_events(action, reviewed_at, submission_id, id DESC);
 
 -- Existing progress cannot be reconstructed precisely, so preserve the current snapshot as a baseline.
 INSERT INTO submission_progress_events (
