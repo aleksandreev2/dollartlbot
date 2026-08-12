@@ -13,10 +13,11 @@
     if (runtime.supported?.includes(code)) app.LANGUAGE_NAMES[code] = meta.label;
   }
 
-  function patchPicker() {
+  function patchPicker(root = document) {
+    const scope = root?.querySelectorAll ? root : document;
     for (const [code, meta] of Object.entries(localeMeta)) {
       if (!runtime.supported?.includes(code)) continue;
-      document.querySelectorAll(`[data-lang="${CSS.escape(code)}"]`).forEach(button => {
+      scope.querySelectorAll(`[data-lang="${code}"]`).forEach(button => {
         if (button.querySelector(':scope > .circle-language-flag')) return;
         const img = document.createElement('img');
         img.className = 'circle-language-flag language-picker-circle-flag';
@@ -31,5 +32,6 @@
     }
   }
 
-  runtime.registerPatcher(patchPicker);
+  document.addEventListener('dtl:sheetopen', event => patchPicker(event.detail?.root || document));
+  runtime.registerPatcher(() => patchPicker(document));
 })();
