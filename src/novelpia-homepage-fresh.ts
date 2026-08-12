@@ -1,42 +1,26 @@
 const NOVELPIA_ORIGIN = 'https://novelpia.com';
-const HOMEPAGE_URL = `${NOVELPIA_ORIGIN}/`;
+const HOMEPAGE_CURATION_PATH = '/proc/main_v2';
 const INGEST_PROVIDER = 'novelpia_homepage_fresh';
 const HOMEPAGE_SIGNAL = 'novelpia_home_plus_new';
 const PLUS_NEW_SIGNAL = 'novelpia_plus_new';
-const FREE_NEW_SIGNAL = 'novelpia_free_new';
-const FETCH_TIMEOUT_MS = 10_000;
-const MAX_HTML_BYTES = 3_000_000;
+const FETCH_TIMEOUT_MS = 8_000;
+const API_MAX_BYTES = 1_000_000;
+const DETAIL_MAX_BYTES = 3_000_000;
 const MAX_REDIRECTS = 3;
-const MAX_HOMEPAGE_CARDS = 12;
-const MAX_SOURCE_IDS = 80;
-const MAX_FALLBACK_DETAIL_FETCHES = 28;
+const MAX_ITEMS = 12;
 
-type SourceTier = 'free' | 'plus';
-
-type ResolutionSource = {
-  name: 'plus_new' | 'free_new' | 'new_rank';
-  url: string;
-  tier: SourceTier;
-};
-
-type SourcePage = ResolutionSource & { html: string };
-
-type HomepageFreshCard = {
-  rank: number;
+type ApiNovel = {
+  externalId: string;
   title: string;
   author: string | null;
-};
-
-type Resolution = {
-  externalId: string;
-  tier: SourceTier;
-  source: ResolutionSource['name'];
+  coverUrl: string | null;
+  ageRating: string | null;
+  genresTags: string;
+  linkUrl: string;
+  rank: number;
 };
 
 type ParsedDetail = {
-  externalId: string;
-  title: string;
-  author: string | null;
   chapterCount: number | null;
   publicationStatus: 'ongoing' | 'completed';
   genresTags: string;
@@ -50,30 +34,8 @@ type ParsedDetail = {
 
 type CatalogRow = {
   id: number;
-  title: string;
-  author: string | null;
   linked_submission_id: number | null;
 };
-
-type IdPosition = { id: string; index: number };
-
-const RESOLUTION_SOURCES: ResolutionSource[] = [
-  {
-    name: 'plus_new',
-    url: `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`,
-    tier: 'plus',
-  },
-  {
-    name: 'free_new',
-    url: `${NOVELPIA_ORIGIN}/freestory/new/date/1?main_genre=`,
-    tier: 'free',
-  },
-  {
-    name: 'new_rank',
-    url: `${NOVELPIA_ORIGIN}/top100/plus/today/view/all/all?main_genre=`,
-    tier: 'plus',
-  },
-];
 
 export type HomepageFreshIngestResult = {
   cards: number;
@@ -91,141 +53,60 @@ export async function runNovelpiaHomepageFreshIngestion(
   await writeIngestState(env, { attempt: now, success: null, error: null, count: null });
 
   try {
-    const fetched = await Promise.all([
-      fetchNovelpiaHtml(HOMEPAGE_URL),
-      ...RESOLUTION_SOURCES.map(async (source) => ({ ...source, html: await fetchNovelpiaHtml(source.url) })),
-    ]);
-    const homepageHtml = fetched[0] as string;
-    const sourcePages = fetched.slice(1) as SourcePage[];
+    const payload = await fetchHomepageFreshPayload();
+    const parsed = parseHomepageFreshPayload(payload);
+    if (!parsed.items.length) throw new Error('novelpia_homepage_fresh_empty');
 
-    const cards = parseHomepageFreshCards(homepageHtml, MAX_HOMEPAGE_CARDS);
-    if (!cards.length) throw new Error('novelpia_homepage_fresh_cards_missing');
-
-    const resolved = resolveHomepageCardsAcrossLists(cards, sourcePages);
-    const detailCache = new Map<string, ParsedDetail>();
-    const usedIds = new Set<string>([...resolved.values()].map((item) => item.externalId));
-
-    let pending = cards.filter((card) => !resolved.has(card.rank));
-    if (pending.length) {
-      const sourceCandidates = collectResolutionCandidates(sourcePages)
-        .filter((candidate) => !usedIds.has(candidate.externalId));
-      let fetchedDetails = 0;
-
-      for (
-        let offset = 0;
-        offset < sourceCandidates.length && pending.length && fetchedDetails < MAX_FALLBACK_DETAIL_FETCHES;
-        offset += 4
-      ) {
-        const batch = sourceCandidates.slice(
-          offset,
-          offset + Math.min(4, MAX_FALLBACK_DETAIL_FETCHES - fetchedDetails),
-        );
-        fetchedDetails += batch.length;
-        const details = await Promise.all(batch.map(async (candidate) => {
-          try {
-            const html = await fetchNovelpiaHtml(`${NOVELPIA_ORIGIN}/novel/${candidate.externalId}`);
-            return { candidate, detail: parseNovelDetail(candidate.externalId, html) };
-          } catch (error) {
-            console.warn(JSON.stringify({
-              event: 'novelpia_homepage_detail_probe_failed',
-              external_id: candidate.externalId,
-              source: candidate.source,
-              error: errorMessage(error),
-            }));
-            return { candidate, detail: null };
-          }
-        }));
-
-        for (const { candidate, detail } of details) {
-          if (!detail) continue;
-          detailCache.set(detail.externalId, detail);
-          const matches = pending.filter((card) => detailMatchesCard(detail, card));
-          if (matches.length !== 1 || usedIds.has(detail.externalId)) continue;
-          const card = matches[0];
-          resolved.set(card.rank, candidate);
-          usedIds.add(detail.externalId);
-          pending = pending.filter((item) => item.rank !== card.rank);
-        }
-      }
-    }
-
-    let applied = 0;
     let enriched = 0;
     let linked = 0;
-    const unresolvedTitles: string[] = [];
+    const detailErrors: string[] = [];
 
-    for (const card of cards) {
-      const resolution = resolved.get(card.rank);
-      if (!resolution) {
-        unresolvedTitles.push(card.title);
-        continue;
-      }
-      const externalId = resolution.externalId;
+    for (let offset = 0; offset < parsed.items.length; offset += 4) {
+      const batch = parsed.items.slice(offset, offset + 4);
+      const details = await Promise.all(batch.map(async (item) => {
+        try {
+          const html = await fetchNovelDetailHtml(item.externalId);
+          return { item, detail: parseNovelDetail(html) };
+        } catch (error) {
+          detailErrors.push(`${item.externalId}:${errorMessage(error)}`);
+          return { item, detail: null };
+        }
+      }));
 
-      let row = await loadCatalogRow(env, externalId);
-      const rowMatches = row ? catalogMatchesCard(row, card) : false;
-      let detail = detailCache.get(externalId) ?? null;
+      for (const { item, detail } of details) {
+        await upsertCatalogNovel(env, item, detail, now);
+        const row = await loadCatalogRow(env, item.externalId);
+        if (!row) continue;
+        await upsertHomepageSignals(env, row.id, item.rank, now);
+        if (detail) enriched += 1;
 
-      if (!row || !rowMatches) {
-        if (!detail) {
-          try {
-            const html = await fetchNovelpiaHtml(`${NOVELPIA_ORIGIN}/novel/${externalId}`);
-            detail = parseNovelDetail(externalId, html);
-          } catch (error) {
-            console.warn(JSON.stringify({
-              event: 'novelpia_homepage_detail_failed',
-              external_id: externalId,
-              title: card.title,
-              source: resolution.source,
-              error: errorMessage(error),
-            }));
-            detail = null;
+        if (row.linked_submission_id == null) {
+          const submissionId = await findMatchingSubmission(env, item.externalId);
+          if (submissionId) {
+            await linkCatalogRow(env, row.id, submissionId, now);
+            linked += 1;
           }
-        }
-        if (!detail || !detailMatchesCard(detail, card)) {
-          unresolvedTitles.push(card.title);
-          continue;
-        }
-        await upsertCatalogNovel(env, detail, resolution.tier, now);
-        enriched += 1;
-        row = await loadCatalogRow(env, externalId);
-      } else {
-        await touchCatalogNovel(env, row.id, resolution.tier, now);
-      }
-
-      if (!row) {
-        unresolvedTitles.push(card.title);
-        continue;
-      }
-
-      await upsertHomepageSignals(env, row.id, card.rank, resolution, now);
-      applied += 1;
-
-      if (row.linked_submission_id == null) {
-        const submissionId = await findMatchingSubmission(env, externalId);
-        if (submissionId) {
-          await linkCatalogRow(env, row.id, submissionId, now);
-          linked += 1;
         }
       }
     }
 
-    const warning = unresolvedTitles.length
-      ? `novelpia_homepage_unresolved:${unresolvedTitles.length}/${cards.length}:${unresolvedTitles.slice(0, 4).join('|')}`.slice(0, 1200)
-      : null;
+    const warnings = [
+      ...parsed.warnings,
+      ...detailErrors.slice(0, 4).map((value) => `detail:${value}`),
+    ];
     await writeIngestState(env, {
       attempt: now,
       success: now,
-      error: warning,
-      count: applied,
+      error: warnings.length ? warnings.join('; ').slice(0, 1200) : null,
+      count: parsed.items.length,
     });
 
     return {
-      cards: cards.length,
-      resolved: applied,
+      cards: parsed.sourceCount,
+      resolved: parsed.items.length,
       enriched,
       linked,
-      unresolved: unresolvedTitles.length,
+      unresolved: Math.max(0, parsed.sourceCount - parsed.items.length),
     };
   } catch (error) {
     await writeIngestState(env, {
@@ -253,172 +134,234 @@ export async function getHomepageFreshIngestState(env: Env) {
   }>();
 }
 
-export function parseHomepageFreshCards(html: string, limit = MAX_HOMEPAGE_CARDS): HomepageFreshCard[] {
-  const heading = html.indexOf('따끈따끈 신규 작품');
-  if (heading < 0) return [];
-  const sectionEnd = html.indexOf('</section>', heading);
-  if (sectionEnd < 0) return [];
-  const scope = html.slice(heading, sectionEnd);
-  if (!scope.includes('신규 PLUS 작품')) return [];
-
-  const pattern = /<p\b[^>]*class\s*=\s*(?:"[^"]*\bnov-tit\b[^"]*"|'[^']*\bnov-tit\b[^']*'|[^\s>]*\bnov-tit\b[^\s>]*)[^>]*>([\s\S]*?)<\/p>\s*<p\b[^>]*class\s*=\s*(?:"[^"]*\bnov-writer\b[^"]*"|'[^']*\bnov-writer\b[^']*'|[^\s>]*\bnov-writer\b[^\s>]*)[^>]*>([\s\S]*?)<\/p>/gi;
-  const cards: HomepageFreshCard[] = [];
-  const seen = new Set<string>();
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(scope)) && cards.length < limit) {
-    const title = normalizeVisibleText(match[1]).slice(0, 240);
-    const author = normalizeVisibleText(match[2]).slice(0, 120) || null;
-    if (!title) continue;
-    const key = `${normalizeIdentityText(title)}|${normalizeIdentityText(author ?? '')}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    cards.push({ rank: cards.length + 1, title, author });
+export function parseHomepageFreshPayload(payload: unknown): {
+  sourceCount: number;
+  items: ApiNovel[];
+  warnings: string[];
+} {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('novelpia_homepage_invalid_payload');
   }
-  return cards;
+  const data = payload as Record<string, unknown>;
+  const status = Number(data.status);
+  if (!Number.isFinite(status) || status !== 200) {
+    throw new Error(`novelpia_homepage_api_status_${String(data.status ?? 'missing')}`);
+  }
+  if (!Array.isArray(data.list)) throw new Error('novelpia_homepage_list_missing');
+
+  const sourceCount = data.list.length;
+  const items: ApiNovel[] = [];
+  const warnings: string[] = [];
+  const seen = new Set<string>();
+
+  for (let index = 0; index < data.list.length && items.length < MAX_ITEMS; index += 1) {
+    const raw = data.list[index];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      warnings.push(`row_${index + 1}:not_object`);
+      continue;
+    }
+    const row = raw as Record<string, unknown>;
+    const idFromField = cleanExternalId(row.novel_no);
+    const linkUrl = cleanLinkUrl(row.link_url);
+    const idFromLink = extractNovelpiaId(linkUrl);
+    const externalId = idFromField || idFromLink;
+    if (!externalId || (idFromField && idFromLink && idFromField !== idFromLink)) {
+      warnings.push(`row_${index + 1}:invalid_identity`);
+      continue;
+    }
+    if (seen.has(externalId)) {
+      warnings.push(`row_${index + 1}:duplicate_${externalId}`);
+      continue;
+    }
+
+    const title = cleanText(row.novel_name, 240);
+    if (!title) {
+      warnings.push(`row_${index + 1}:missing_title`);
+      continue;
+    }
+    const author = cleanText(row.writer_nick ?? row.mem_nick, 120) || null;
+    const coverUrl = normalizeOfficialAssetUrl(cleanText(row.novel_thumb ?? row.novel_thumb_all, 1000));
+    const age = Number(row.novel_age ?? 0);
+    const ageRating = Number.isFinite(age) && age >= 19 ? '19+' : Number.isFinite(age) && age >= 15 ? '15+' : null;
+    const genresTags = parseApiGenres(row.novel_genre ?? row.genre ?? row.genres);
+
+    seen.add(externalId);
+    items.push({
+      externalId,
+      title,
+      author,
+      coverUrl,
+      ageRating,
+      genresTags,
+      linkUrl: `/novel/${externalId}`,
+      rank: index + 1,
+    });
+  }
+
+  return { sourceCount, items, warnings };
 }
 
-function resolveHomepageCardsAcrossLists(cards: HomepageFreshCard[], pages: SourcePage[]): Map<number, Resolution> {
-  const byRank = new Map<number, Map<string, Resolution>>();
+async function fetchHomepageFreshPayload(): Promise<unknown> {
+  const url = new URL(HOMEPAGE_CURATION_PATH, NOVELPIA_ORIGIN);
+  url.searchParams.set('cmd', 'new_novel_curation');
+  url.searchParams.set('novel_category', 'entry');
+  return fetchJsonLimited(url, API_MAX_BYTES);
+}
 
-  for (const page of pages) {
-    const local = resolveHomepageCardsFromListHtml(cards, page.html);
-    for (const [rank, externalId] of local.entries()) {
-      const matches = byRank.get(rank) ?? new Map<string, Resolution>();
-      const prior = matches.get(externalId);
-      matches.set(externalId, {
-        externalId,
-        tier: prior?.tier === 'plus' || page.tier === 'plus' ? 'plus' : 'free',
-        source: prior?.source ?? page.name,
+async function fetchJsonLimited(initial: URL, maxBytes: number): Promise<unknown> {
+  let current = initial;
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+    validateApiUrl(current);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(current.toString(), {
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          accept: 'application/json,text/plain,*/*',
+          'accept-language': 'ko-KR,ko;q=0.9,en;q=0.6',
+          'user-agent': 'DollarTL-HomepageFresh/3.0',
+          'x-requested-with': 'XMLHttpRequest',
+        },
       });
-      byRank.set(rank, matches);
+    } catch (error) {
+      clearTimeout(timer);
+      if (error instanceof Error && error.name === 'AbortError') throw new Error('novelpia_homepage_timeout');
+      throw error;
     }
-  }
 
-  const resolved = new Map<number, Resolution>();
-  for (const card of cards) {
-    const matches = byRank.get(card.rank);
-    if (!matches || matches.size !== 1) continue;
-    resolved.set(card.rank, [...matches.values()][0]);
-  }
-  return resolved;
-}
-
-function resolveHomepageCardsFromListHtml(cards: HomepageFreshCard[], html: string): Map<number, string> {
-  const resolved = new Map<number, string>();
-  const ids = collectExplicitNovelIdPositions(html);
-  if (!ids.length) return resolved;
-  const claimed = new Set<string>();
-
-  for (const card of cards) {
-    const titlePositions = findAllTextPositions(html, card.title);
-    const candidates = new Map<string, number>();
-
-    for (const titlePos of titlePositions) {
-      const authorWindow = html.slice(Math.max(0, titlePos - 1400), Math.min(html.length, titlePos + 1800));
-      if (card.author && !authorWindow.includes(card.author)) continue;
-      for (const item of ids) {
-        const distance = Math.abs(item.index - titlePos);
-        if (distance > 2600) continue;
-        const prior = candidates.get(item.id);
-        if (prior == null || distance < prior) candidates.set(item.id, distance);
+    try {
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (!location || redirects >= MAX_REDIRECTS) throw new Error('novelpia_homepage_redirect_failed');
+        current = new URL(location, current);
+        continue;
       }
-    }
-
-    const ranked = [...candidates.entries()]
-      .filter(([id]) => !claimed.has(id))
-      .sort((a, b) => a[1] - b[1]);
-    if (!ranked.length || ranked[0][1] > 2600) continue;
-    if (ranked[1] && ranked[1][1] - ranked[0][1] < 80) continue;
-    const externalId = ranked[0][0];
-    resolved.set(card.rank, externalId);
-    claimed.add(externalId);
-  }
-
-  return resolved;
-}
-
-function collectResolutionCandidates(pages: SourcePage[]): Resolution[] {
-  const byId = new Map<string, Resolution>();
-  for (const page of pages) {
-    for (const externalId of extractExplicitNovelIds(page.html, MAX_SOURCE_IDS)) {
-      const prior = byId.get(externalId);
-      if (!prior) {
-        byId.set(externalId, { externalId, tier: page.tier, source: page.name });
-      } else if (prior.tier === 'free' && page.tier === 'plus') {
-        byId.set(externalId, { externalId, tier: 'plus', source: page.name });
+      if (!response.ok) throw new Error(`novelpia_homepage_http_${response.status}`);
+      const length = Number(response.headers.get('content-length') || 0);
+      if (Number.isFinite(length) && length > maxBytes) throw new Error('novelpia_homepage_response_too_large');
+      const raw = await readTextLimited(response, maxBytes);
+      try {
+        return JSON.parse(raw);
+      } catch {
+        throw new Error('novelpia_homepage_invalid_json');
       }
+    } finally {
+      clearTimeout(timer);
     }
   }
-  return [...byId.values()];
+  throw new Error('novelpia_homepage_redirect_failed');
 }
 
-function collectExplicitNovelIdPositions(html: string): IdPosition[] {
-  const positions: IdPosition[] = [];
-  const patterns = [
-    /(?:https?:\/\/(?:www\.)?novelpia\.com)?\/novel\/(\d{2,9})/gi,
-    /(?:novel_no|novelNo)["']?\s*[:=]\s*["']?(\d{2,9})/gi,
-  ];
-  for (const pattern of patterns) {
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(html))) positions.push({ id: match[1], index: match.index });
+async function fetchNovelDetailHtml(externalId: string): Promise<string> {
+  let current = new URL(`/novel/${externalId}`, NOVELPIA_ORIGIN);
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+    validateDetailUrl(current);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(current.toString(), {
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'accept-language': 'ko-KR,ko;q=0.9,en;q=0.6',
+          'user-agent': 'DollarTL-HomepageFresh/3.0',
+        },
+      });
+    } catch (error) {
+      clearTimeout(timer);
+      if (error instanceof Error && error.name === 'AbortError') throw new Error('novelpia_detail_timeout');
+      throw error;
+    }
+
+    try {
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (!location || redirects >= MAX_REDIRECTS) throw new Error('novelpia_detail_redirect_failed');
+        current = new URL(location, current);
+        continue;
+      }
+      if (!response.ok) throw new Error(`novelpia_detail_http_${response.status}`);
+      const type = (response.headers.get('content-type') || '').toLowerCase();
+      if (!type.includes('text/html') && !type.includes('application/xhtml+xml')) throw new Error('novelpia_detail_non_html');
+      const length = Number(response.headers.get('content-length') || 0);
+      if (Number.isFinite(length) && length > DETAIL_MAX_BYTES) throw new Error('novelpia_detail_response_too_large');
+      return readTextLimited(response, DETAIL_MAX_BYTES);
+    } finally {
+      clearTimeout(timer);
+    }
   }
-  return positions.sort((a, b) => a.index - b.index);
+  throw new Error('novelpia_detail_redirect_failed');
 }
 
-function extractExplicitNovelIds(html: string, limit: number): string[] {
-  const ordered = collectExplicitNovelIdPositions(html);
-  const seen = new Set<string>();
-  const ids: string[] = [];
-  for (const item of ordered) {
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    ids.push(item.id);
-    if (ids.length >= limit) break;
+function validateApiUrl(url: URL): void {
+  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+  if (url.protocol !== 'https:' || host !== 'novelpia.com' || url.pathname !== HOMEPAGE_CURATION_PATH) {
+    throw new Error('novelpia_homepage_invalid_url');
   }
-  return ids;
-}
-
-function findAllTextPositions(haystack: string, needle: string): number[] {
-  const positions: number[] = [];
-  if (!needle) return positions;
-  let offset = 0;
-  while (offset < haystack.length) {
-    const index = haystack.indexOf(needle, offset);
-    if (index < 0) break;
-    positions.push(index);
-    offset = index + Math.max(1, needle.length);
+  if (url.searchParams.get('cmd') !== 'new_novel_curation' || url.searchParams.get('novel_category') !== 'entry') {
+    throw new Error('novelpia_homepage_invalid_query');
   }
-  return positions;
 }
 
-async function loadCatalogRow(env: Env, externalId: string): Promise<CatalogRow | null> {
-  return env.DB.prepare(`
-    SELECT id,title,author,linked_submission_id
-    FROM discovery_catalog
-    WHERE provider='novelpia' AND external_id=?
-  `).bind(externalId).first<CatalogRow>();
-}
-
-function catalogMatchesCard(row: CatalogRow, card: HomepageFreshCard): boolean {
-  if (normalizeIdentityText(row.title) !== normalizeIdentityText(card.title)) return false;
-  if (card.author) {
-    if (!row.author) return false;
-    if (normalizeIdentityText(row.author) !== normalizeIdentityText(card.author)) return false;
+function validateDetailUrl(url: URL): void {
+  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+  if (url.protocol !== 'https:' || host !== 'novelpia.com' || !/^\/novel\/\d{2,9}\/?$/.test(url.pathname)) {
+    throw new Error('novelpia_detail_invalid_url');
   }
-  return true;
 }
 
-function detailMatchesCard(detail: ParsedDetail, card: HomepageFreshCard): boolean {
-  if (normalizeIdentityText(detail.title) !== normalizeIdentityText(card.title)) return false;
-  if (card.author) {
-    if (!detail.author) return false;
-    if (normalizeIdentityText(detail.author) !== normalizeIdentityText(card.author)) return false;
+async function readTextLimited(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) return (await response.text()).slice(0, maxBytes);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      total += chunk.value.byteLength;
+      if (total > maxBytes) throw new Error('novelpia_response_too_large');
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    try { await reader.cancel(); } catch {}
   }
-  return true;
 }
 
-async function upsertCatalogNovel(env: Env, novel: ParsedDetail, tier: SourceTier, now: string): Promise<void> {
+function parseNovelDetail(html: string): ParsedDetail {
+  const text = collapse(stripHtml(html));
+  const hero = text.slice(0, 9000);
+  const chapterRaw = firstTextMatch(hero, /([\d,]{1,8})\s*회차/u);
+  const chapterCount = chapterRaw ? parseInteger(chapterRaw) : null;
+  const publicationStatus: 'ongoing' | 'completed' = /(?:^|\s)완결(?:\s|$)/u.test(hero) ? 'completed' : 'ongoing';
+  const tags = uniqueMatches(hero, /#([^#\s]{1,32})/gu, 14);
+  const synopsis = cleanDescription(extractMeta(html, 'og:description') ?? extractMeta(html, 'description'));
+  const cover = extractMeta(html, 'og:image');
+  const coverUrl = cover ? normalizeOfficialAssetUrl(cover) : null;
+  const ageRating = /(?:^|\s)19(?:\s|\+).*?PLUS/u.test(hero) || /19\s*PLUS/u.test(hero) ? '19+' : null;
+  return {
+    chapterCount,
+    publicationStatus,
+    genresTags: tags.join(', '),
+    synopsis,
+    coverUrl,
+    ageRating,
+    viewsCount: metric(hero, /조회\s*([\d,.]+(?:[KMB]|만|천)?)/iu),
+    favoritesCount: metric(hero, /선호(?:선호)?\s*([\d,.]+(?:[KMB]|만|천)?)/iu),
+    recommendationsCount: metric(hero, /추천\s*([\d,.]+(?:[KMB]|만|천)?)/iu),
+  };
+}
+
+async function upsertCatalogNovel(env: Env, item: ApiNovel, detail: ParsedDetail | null, now: string): Promise<void> {
+  const genres = detail?.genresTags || item.genresTags;
   await env.DB.prepare(`
     INSERT INTO discovery_catalog (
       provider,external_id,title,original_title,author,original_language,
@@ -426,79 +369,66 @@ async function upsertCatalogNovel(env: Env, novel: ParsedDetail, tier: SourceTie
       source_tier,age_rating,views_count,favorites_count,recommendations_count,
       raw_available,first_seen_at,last_seen_at,last_enriched_at,metadata_json,created_at,updated_at
     ) VALUES (
-      'novelpia',?,?,?,?, 'Korean',?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?
+      'novelpia',?,?,?,?, 'Korean',?,?,?,?,?,?, 'plus',?,?,?, ?,0,?,?,?,?,?,?
     )
     ON CONFLICT(provider,external_id) DO UPDATE SET
       title=excluded.title,
       original_title=excluded.original_title,
       author=COALESCE(excluded.author,discovery_catalog.author),
       chapter_count=COALESCE(excluded.chapter_count,discovery_catalog.chapter_count),
-      publication_status=excluded.publication_status,
+      publication_status=COALESCE(excluded.publication_status,discovery_catalog.publication_status),
       genres_tags=CASE WHEN excluded.genres_tags<>'' THEN excluded.genres_tags ELSE discovery_catalog.genres_tags END,
       synopsis=COALESCE(excluded.synopsis,discovery_catalog.synopsis),
       source_url=excluded.source_url,
       cover_url=COALESCE(excluded.cover_url,discovery_catalog.cover_url),
-      source_tier=CASE
-        WHEN excluded.source_tier='plus' THEN 'plus'
-        ELSE COALESCE(discovery_catalog.source_tier,excluded.source_tier)
-      END,
+      source_tier='plus',
       age_rating=COALESCE(excluded.age_rating,discovery_catalog.age_rating),
-      views_count=excluded.views_count,
-      favorites_count=excluded.favorites_count,
-      recommendations_count=excluded.recommendations_count,
+      views_count=CASE WHEN excluded.views_count>0 THEN excluded.views_count ELSE discovery_catalog.views_count END,
+      favorites_count=CASE WHEN excluded.favorites_count>0 THEN excluded.favorites_count ELSE discovery_catalog.favorites_count END,
+      recommendations_count=CASE WHEN excluded.recommendations_count>0 THEN excluded.recommendations_count ELSE discovery_catalog.recommendations_count END,
       last_seen_at=excluded.last_seen_at,
-      last_enriched_at=excluded.last_enriched_at,
+      last_enriched_at=COALESCE(excluded.last_enriched_at,discovery_catalog.last_enriched_at),
       metadata_json=excluded.metadata_json,
       updated_at=excluded.updated_at
   `).bind(
-    novel.externalId,
-    novel.title,
-    novel.title,
-    novel.author,
-    novel.chapterCount,
-    novel.publicationStatus,
-    novel.genresTags,
-    novel.synopsis,
-    `${NOVELPIA_ORIGIN}/novel/${novel.externalId}`,
-    novel.coverUrl,
-    tier,
-    novel.ageRating,
-    novel.viewsCount,
-    novel.favoritesCount,
-    novel.recommendationsCount,
+    item.externalId,
+    item.title,
+    item.title,
+    item.author,
+    detail?.chapterCount ?? null,
+    detail?.publicationStatus ?? 'ongoing',
+    genres,
+    detail?.synopsis ?? null,
+    `${NOVELPIA_ORIGIN}/novel/${item.externalId}`,
+    detail?.coverUrl || item.coverUrl,
+    detail?.ageRating || item.ageRating,
+    detail?.viewsCount ?? 0,
+    detail?.favoritesCount ?? 0,
+    detail?.recommendationsCount ?? 0,
     now,
     now,
-    now,
-    JSON.stringify({ source: 'official_novelpia_homepage_fresh', resolved_tier: tier }),
+    detail ? now : null,
+    JSON.stringify({
+      source: 'novelpia_main_v2_new_novel_curation',
+      homepage_rank: item.rank,
+      api_link_url: item.linkUrl,
+      detail_enriched: Boolean(detail),
+    }),
     now,
     now,
   ).run();
 }
 
-async function touchCatalogNovel(env: Env, catalogId: number, tier: SourceTier, now: string): Promise<void> {
-  await env.DB.prepare(`
-    UPDATE discovery_catalog
-    SET last_seen_at=?,
-        source_tier=CASE WHEN ?='plus' THEN 'plus' ELSE COALESCE(source_tier,?) END,
-        updated_at=?
-    WHERE id=?
-  `).bind(now, tier, tier, now, catalogId).run();
+async function loadCatalogRow(env: Env, externalId: string): Promise<CatalogRow | null> {
+  return env.DB.prepare(`
+    SELECT id,linked_submission_id
+    FROM discovery_catalog
+    WHERE provider='novelpia' AND external_id=?
+  `).bind(externalId).first<CatalogRow>();
 }
 
-async function upsertHomepageSignals(
-  env: Env,
-  catalogId: number,
-  rank: number,
-  resolution: Resolution,
-  now: string,
-): Promise<void> {
-  const normalSignal = resolution.tier === 'plus' ? PLUS_NEW_SIGNAL : FREE_NEW_SIGNAL;
-  const metadata = JSON.stringify({
-    tier: resolution.tier,
-    source: 'homepage_hot_new',
-    resolver_source: resolution.source,
-    homepage_rank: rank,
-  });
+async function upsertHomepageSignals(env: Env, catalogId: number, rank: number, now: string): Promise<void> {
+  const metadata = JSON.stringify({ tier: 'plus', source: 'homepage_new_novel_curation', homepage_rank: rank });
   await env.DB.batch([
     env.DB.prepare(`
       INSERT INTO discovery_catalog_signals (
@@ -514,7 +444,7 @@ async function upsertHomepageSignals(
       ON CONFLICT(catalog_id,signal) DO UPDATE SET
         rank_position=MIN(discovery_catalog_signals.rank_position,excluded.rank_position),
         metadata_json=excluded.metadata_json,last_seen_at=excluded.last_seen_at
-    `).bind(catalogId, normalSignal, rank, metadata, now, now),
+    `).bind(catalogId, PLUS_NEW_SIGNAL, rank, metadata, now, now),
   ]);
 }
 
@@ -554,140 +484,36 @@ async function linkCatalogRow(env: Env, catalogId: number, submissionId: number,
   ]);
 }
 
-function parseNovelDetail(externalId: string, html: string): ParsedDetail | null {
-  const canonicalId = extractNovelpiaId(extractMeta(html, 'og:url') ?? '') ?? externalId;
-  if (canonicalId !== externalId) return null;
-  const rawTitle = extractMeta(html, 'og:title') ?? extractTitleTag(html) ?? '';
-  const title = cleanNovelTitle(rawTitle);
-  if (!title || /^novelpia\s*#?\d+$/i.test(title)) return null;
-
-  const text = collapse(stripHtml(html));
-  const hero = text.slice(0, 9000);
-  const author = firstTextMatch(hero, /작가명\s*:?\s*([^\s]{1,80})/u)
-    ?? firstTextMatch(hero, /작가\s*:?\s*([^\s]{1,80})/u);
-  const chapterRaw = firstTextMatch(hero, /([\d,]{1,8})\s*회차/u);
-  const chapterCount = chapterRaw ? parseInteger(chapterRaw) : null;
-  const publicationStatus: 'ongoing' | 'completed' = /(?:^|\s)완결(?:\s|$)/u.test(hero) ? 'completed' : 'ongoing';
-  const tags = uniqueMatches(hero, /#([^#\s]{1,32})/gu, 14);
-  const synopsis = cleanDescription(extractMeta(html, 'og:description') ?? extractMeta(html, 'description'));
-  const cover = extractMeta(html, 'og:image');
-  const coverUrl = cover ? normalizeOfficialAssetUrl(cover) : null;
-  const ageRating = /(?:^|\s)19(?:\s|\+).*?PLUS/u.test(hero) || /19\s*PLUS/u.test(hero) ? '19+' : null;
-
-  return {
-    externalId,
-    title,
-    author: author ? decodeHtml(author).slice(0, 120) : null,
-    chapterCount,
-    publicationStatus,
-    genresTags: tags.join(', '),
-    synopsis,
-    coverUrl,
-    ageRating,
-    viewsCount: metric(hero, /조회\s*([\d,.]+(?:[KMB]|만|천)?)/iu),
-    favoritesCount: metric(hero, /선호(?:선호)?\s*([\d,.]+(?:[KMB]|만|천)?)/iu),
-    recommendationsCount: metric(hero, /추천\s*([\d,.]+(?:[KMB]|만|천)?)/iu),
-  };
+function cleanExternalId(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  return /^\d{2,9}$/.test(text) ? text : null;
 }
 
-async function fetchNovelpiaHtml(initialUrl: string): Promise<string> {
-  let current = new URL(initialUrl);
-  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-    validateNovelpiaUrl(current);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let response: Response;
-    try {
-      response = await fetch(current.toString(), {
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: {
-          accept: 'text/html,application/xhtml+xml',
-          'accept-language': 'ko-KR,ko;q=0.9,en;q=0.6',
-          'user-agent': 'DollarTL-HomepageFresh/2.0',
-        },
-      });
-    } catch (error) {
-      clearTimeout(timer);
-      if (error instanceof Error && error.name === 'AbortError') throw new Error('novelpia_homepage_timeout');
-      throw error;
-    }
+function cleanLinkUrl(value: unknown): string {
+  const text = String(value ?? '').trim();
+  return /^\/novel\/\d{2,9}\/?$/.test(text) ? text : '';
+}
 
-    try {
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location');
-        if (!location || redirects >= MAX_REDIRECTS) throw new Error('novelpia_homepage_redirect_failed');
-        current = new URL(location, current);
-        continue;
-      }
-      if (!response.ok) throw new Error(`novelpia_homepage_http_${response.status}`);
-      const type = (response.headers.get('content-type') || '').toLowerCase();
-      if (!type.includes('text/html') && !type.includes('application/xhtml+xml')) throw new Error('novelpia_homepage_non_html');
-      const length = Number(response.headers.get('content-length') || 0);
-      if (Number.isFinite(length) && length > MAX_HTML_BYTES) throw new Error('novelpia_homepage_response_too_large');
-      return await readTextLimited(response, MAX_HTML_BYTES);
-    } finally {
-      clearTimeout(timer);
-    }
+function extractNovelpiaId(value: string): string | null {
+  return /^\/novel\/(\d{2,9})\/?$/.exec(value)?.[1] ?? null;
+}
+
+function cleanText(value: unknown, maxLength: number): string {
+  return collapse(decodeHtml(stripHtml(String(value ?? '')))).slice(0, maxLength);
+}
+
+function parseApiGenres(value: unknown): string {
+  const source = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,#|]/) : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of source) {
+    const text = cleanText(entry, 32);
+    if (!text || seen.has(text.toLowerCase())) continue;
+    seen.add(text.toLowerCase());
+    out.push(text);
+    if (out.length >= 14) break;
   }
-  throw new Error('novelpia_homepage_redirect_failed');
-}
-
-function validateNovelpiaUrl(url: URL): void {
-  const host = url.hostname.toLowerCase().replace(/^www\./, '');
-  if (url.protocol !== 'https:' || host !== 'novelpia.com') throw new Error('novelpia_homepage_invalid_host');
-  if (url.pathname === '/') return;
-  if (url.pathname === '/plus/entry/date') return;
-  if (url.pathname === '/freestory/new/date/1') return;
-  if (url.pathname === '/top100/plus/today/view/all/all') return;
-  if (/^\/novel\/\d{2,9}\/?$/.test(url.pathname)) return;
-  throw new Error('novelpia_homepage_invalid_path');
-}
-
-async function readTextLimited(response: Response, maxBytes: number): Promise<string> {
-  if (!response.body) return (await response.text()).slice(0, maxBytes);
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let total = 0;
-  let text = '';
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      total += chunk.value.byteLength;
-      if (total > maxBytes) throw new Error('novelpia_homepage_response_too_large');
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-    text += decoder.decode();
-    return text;
-  } finally {
-    try { await reader.cancel(); } catch {}
-  }
-}
-
-async function writeIngestState(
-  env: Env,
-  value: { attempt: string; success: string | null; error: string | null; count: number | null },
-): Promise<void> {
-  await env.DB.prepare(`
-    INSERT INTO discovery_ingest_state (
-      provider,last_attempt_at,last_success_at,last_error,last_item_count,updated_at
-    ) VALUES (?,?,?,?,COALESCE(?,0),?)
-    ON CONFLICT(provider) DO UPDATE SET
-      last_attempt_at=excluded.last_attempt_at,
-      last_success_at=COALESCE(excluded.last_success_at,discovery_ingest_state.last_success_at),
-      last_error=excluded.last_error,
-      last_item_count=COALESCE(?,discovery_ingest_state.last_item_count),
-      updated_at=excluded.updated_at
-  `).bind(
-    INGEST_PROVIDER,
-    value.attempt,
-    value.success,
-    value.error,
-    value.count,
-    value.attempt,
-    value.count,
-  ).run();
+  return out.join(', ');
 }
 
 function extractMeta(html: string, property: string): string | null {
@@ -701,32 +527,6 @@ function extractMeta(html: string, property: string): string | null {
     if (match) return decodeHtml(match[1]).trim();
   }
   return null;
-}
-
-function extractTitleTag(html: string): string | null {
-  const match = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html);
-  return match ? normalizeVisibleText(match[1]) : null;
-}
-
-function cleanNovelTitle(value: string): string {
-  let title = normalizeVisibleText(value);
-  const marker = '웹소설로 꿈꾸는 세상!';
-  if (title.includes(marker)) title = title.slice(title.indexOf(marker) + marker.length).replace(/^\s*[-|:]\s*/, '');
-  title = title.replace(/\s*[-|]\s*노벨피아(?:\s*[-|].*)?$/u, '').trim();
-  return title.slice(0, 240);
-}
-
-function extractNovelpiaId(value: string): string | null {
-  const match = /(?:novelpia\.com\/(?:novel|viewer)\/|[?&](?:novel_no|novelNo|id)=)(\d{2,9})/i.exec(value);
-  return match?.[1] ?? null;
-}
-
-function normalizeVisibleText(value: string): string {
-  return collapse(decodeHtml(stripHtml(value)));
-}
-
-function normalizeIdentityText(value: string): string {
-  return normalizeVisibleText(value).normalize('NFKC').toLowerCase().replace(/[\s\u00a0]+/g, ' ').trim();
 }
 
 function stripHtml(value: string): string {
@@ -767,16 +567,17 @@ function uniqueMatches(text: string, pattern: RegExp, limit: number): string[] {
 
 function cleanDescription(value: string | null): string | null {
   if (!value) return null;
-  const text = normalizeVisibleText(value);
+  const text = collapse(stripHtml(value));
   return text ? text.slice(0, 1200) : null;
 }
 
 function normalizeOfficialAssetUrl(value: string): string | null {
+  if (!value) return null;
   try {
     const url = new URL(value, NOVELPIA_ORIGIN);
     const host = url.hostname.toLowerCase();
     if (url.protocol !== 'https:') return null;
-    if (host !== 'novelpia.com' && host !== 'www.novelpia.com' && host !== 'images.novelpia.com') return null;
+    if (host !== 'novelpia.com' && host !== 'www.novelpia.com' && host !== 'images.novelpia.com' && host !== 'image.novelpia.com') return null;
     return url.toString();
   } catch {
     return null;
