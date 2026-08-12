@@ -1,0 +1,22 @@
+name: NovelPia Live Probe
+
+on:
+  push:
+    branches:
+      - agent/fix-discover-fresh
+    paths:
+      - 'scripts/probe-novelpia-live.mjs'
+      - '.github/workflows/novelpia-live-probe.yml'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe current NovelPia HTML
+        run: node scripts/probe-novelpia-live.mjs
