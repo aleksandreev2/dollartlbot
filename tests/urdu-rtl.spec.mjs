@@ -45,7 +45,7 @@ const shell = `<!doctype html>
         <div class="admin-card"><label>Internal admin field <input value="LTR admin value"></label></div>
       </section>
     </main>
-    <nav class="bottom-nav"><button>ہوم</button><button>قطار</button><button>اکاؤنٹ</button></nav>
+    <nav class="bottom-nav"><button>ہوم</button><button>قطار</button><button>اکкаунт</button></nav>
   </div>
 </body>
 </html>`;
@@ -124,9 +124,10 @@ test('Urdu is exposed in the language picker with the Pakistan flag', async ({ p
 
   expect(await page.evaluate(() => window.DTL_APP.LANGUAGE_NAMES.ur)).toBe('اردو');
 
-  await page.locator('#sheetRoot').evaluate(root => {
+  const flagSrc = await page.locator('#sheetRoot').evaluate(root => {
     root.innerHTML = '<button class="language-picker-option" data-lang="ur"><span class="language-picker-name">اردو</span></button>';
     document.dispatchEvent(new CustomEvent('dtl:sheetopen', { detail:{ root } }));
+    return root.querySelector('[data-lang="ur"] > .language-picker-circle-flag')?.getAttribute('src') || null;
   });
-  await expect(page.locator('[data-lang="ur"] > .language-picker-circle-flag')).toHaveAttribute('src', '/app/flags/pk.svg');
+  expect(flagSrc).toBe('/app/flags/pk.svg');
 });
