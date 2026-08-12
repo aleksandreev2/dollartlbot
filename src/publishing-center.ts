@@ -37,7 +37,9 @@ type TemplateRow={
 
 type DraftPayload={
   internal_title?:unknown;
+  title?:unknown;
   body_html?:unknown;
+  body?:unknown;
   add_footer?:unknown;
   add_donate?:unknown;
   add_bot_comment?:unknown;
@@ -196,8 +198,10 @@ async function saveDraft(env:Env,adminId:number,draft:ReturnType<typeof normaliz
 }
 
 function normalizeDraft(body:DraftPayload){
-  const internal_title=String(body.internal_title??'').trim().slice(0,MAX_TITLE);
-  const body_html=String(body.body_html??'').trim().slice(0,MAX_BODY);
+  // Keep cached/older Mini App clients compatible with the canonical editor payload.
+  // Older builds used `title`/`body`; current builds use `internal_title`/`body_html`.
+  const internal_title=String(body.internal_title??body.title??'').trim().slice(0,MAX_TITLE);
+  const body_html=String(body.body_html??body.body??'').trim().slice(0,MAX_BODY);
   return {
     internal_title,body_html,
     add_footer:flag(body.add_footer,true),add_donate:flag(body.add_donate,true),add_bot_comment:flag(body.add_bot_comment,true),notify_users:flag(body.notify_users,false),

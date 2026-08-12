@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const runtime = read('public/app/i18n-core.js');
+const localePicker = read('public/app/locale-picker-compat.js');
 const css = [
   'public/app/app.css',
   'public/app/ui-polish.css',
@@ -44,7 +45,7 @@ const shell = `<!doctype html>
         <div class="admin-card"><label>Internal admin field <input value="LTR admin value"></label></div>
       </section>
     </main>
-    <nav class="bottom-nav"><button>ہوم</button><button>قطار</button><button>اکاؤنٹ</button></nav>
+    <nav class="bottom-nav"><button>ہوم</button><button>قطار</button><button>اکкаунт</button></nav>
   </div>
 </body>
 </html>`;
@@ -106,4 +107,27 @@ test('switching away from Urdu restores LTR document direction', async ({ page }
   await page.evaluate(() => window.DTL_RUNTIME.apply('en', 'playwright-ltr-restore'));
   await expect.poll(() => page.evaluate(() => document.documentElement.dir)).toBe('ltr');
   await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('en');
+});
+
+test('Urdu is exposed in the language picker with the Pakistan flag', async ({ page }) => {
+  await page.setContent('<div id="app"><div id="sheetRoot"></div></div>');
+  await page.addScriptTag({ content:runtime });
+  await page.evaluate(() => {
+    window.DTL_APP = {
+      LANGUAGE_NAMES: {
+        en:'English', es:'Español', fil:'Filipino', hi:'हिन्दी', pt:'Português',
+        id:'Bahasa Indonesia', vi:'Tiếng Việt', fr:'Français', de:'Deutsch', ru:'Русский',
+      },
+    };
+  });
+  await page.addScriptTag({ content:localePicker });
+
+  expect(await page.evaluate(() => window.DTL_APP.LANGUAGE_NAMES.ur)).toBe('اردو');
+
+  const flagSrc = await page.locator('#sheetRoot').evaluate(root => {
+    root.innerHTML = '<button class="language-picker-option" data-lang="ur"><span class="language-picker-name">اردو</span></button>';
+    document.dispatchEvent(new CustomEvent('dtl:sheetopen', { detail:{ root } }));
+    return root.querySelector('[data-lang="ur"] > .language-picker-circle-flag')?.getAttribute('src') || null;
+  });
+  expect(flagSrc).toBe('/app/flags/pk.svg');
 });

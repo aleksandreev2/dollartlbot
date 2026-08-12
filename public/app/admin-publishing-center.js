@@ -19,6 +19,7 @@
     if(isCreate()){
       const editor=document.querySelector('.publisher-editor');
       if(editor){syncPendingSubmission();void installCreate(editor);}
+      enhanceDraftHistory();
     }else if(isManage())installCloneButtons();
   }
 
@@ -187,7 +188,8 @@
 
   async function runPreflight(){
     if(!isCreate())return;const snapshot=editorSnapshot(),image=document.getElementById('pubImage')?.files?.[0]||null,files=[...(document.getElementById('pubFiles')?.files||[])];
-    const payload={...snapshot,image_size:image?.size||0,file_sizes:files.map(file=>file.size)},hash=JSON.stringify(payload),seq=++state.preflightSeq;setPreflightPending('Проверяем Telegram и содержимое…');
+    // Send both canonical and legacy aliases so cached Telegram WebViews remain compatible.
+    const payload={...snapshot,title:snapshot.internal_title,body:snapshot.body_html,image_size:image?.size||0,file_sizes:files.map(file=>file.size)},hash=JSON.stringify(payload),seq=++state.preflightSeq;setPreflightPending('Проверяем Telegram и содержимое…');
     try{const result=await api('/api/app/admin/publishing-center/preflight',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});if(seq!==state.preflightSeq||!isCreate())return;state.lastPreflight=result;state.lastPreflightHash=hash;renderPreflight(result);}
     catch(error){if(error?.name==='AbortError'||!isCreate())return;renderPreflight({ready:false,checks:[{id:'network',label:'Проверка',status:'error',message:error.message}]});}
   }
@@ -201,6 +203,21 @@
     const button=document.getElementById('pubPublish');if(button&&!button.dataset.dtlAdminBusy)button.disabled=!ready;admin.icons?.();
   }
 
+  function enhanceDraftHistory(){
+    const actions=[
+      ['[data-pub-test]','flask-conical','Тест'],
+      ['[data-pub-send]','send','Опубликовать'],
+      ['[data-pub-del]','trash-2','Удалить'],
+    ];
+    document.querySelectorAll('.publication-row .publication-actions').forEach(host=>{
+      for(const [selector,icon,label] of actions){
+        const button=host.querySelector(selector);if(!button||button.dataset.pcLabeled==='1')continue;
+        button.dataset.pcLabeled='1';button.innerHTML=`${ico(icon)}<span>${label}</span>`;button.setAttribute('aria-label',label);
+      }
+    });
+    admin.icons?.();
+  }
+
   function installCloneButtons(){
     document.querySelectorAll('.admin-publication-card').forEach(card=>{
       if(card.querySelector('[data-pc-clone]'))return;const source=card.querySelector('[data-check-pub]'),id=positive(source?.dataset.checkPub),actions=card.querySelector('.admin-publication-actions');if(!id||!actions)return;
@@ -211,14 +228,15 @@
     button.disabled=true;try{await api(`/api/app/admin/publishing-center/from-publication/${id}`,{method:'POST'});state.data=null;state.draftSource=id;admin.toast?.(`Публикация #${id} загружена в новый черновик.`);await admin.open('section:publishing');}catch(error){admin.toast?.(error.message,true);if(button.isConnected)button.disabled=false;}
   }
 
-  async function clearDraftAfterPublicationCreate(){
-    try{await api('/api/app/admin/publishing-center/draft',{method:'DELETE'});state.draftSource=null;state.pendingSubmission=null;if(isCreate())setSaveStatus('Рабочий черновик очищен — публикация сохранена в истории.','saved');}catch{}
+  async function clearDraftAfterPublish(){
+    try{await api('/api/app/admin/publishing-center/draft',{method:'DELETE'});state.draftSource=null;state.pendingSubmission=null;state.attachmentsDirty=false;syncClosingConfirmation();if(isCreate())setSaveStatus('Публикация отправлена — рабочий черновик очищен.','saved');}catch{}
   }
 
   runtime.registerFetchMiddleware(async(input,init={},next)=>{
     const raw=typeof input==='string'?input:input instanceof Request?input.url:String(input||'');let url;try{url=new URL(raw,location.href);}catch{return next(input,init);}
     const method=String(init.method||(input instanceof Request?input.method:'GET')).toUpperCase();const response=await next(input,init);
-    if(method==='POST'&&url.pathname==='/api/app/admin/publications'&&response.ok)queueMicrotask(()=>void clearDraftAfterPublicationCreate());
+    const published=/^\/api\/app\/admin\/publications\/\d+\/publish$/.test(url.pathname);
+    if(method==='POST'&&published&&response.ok)queueMicrotask(()=>void clearDraftAfterPublish());
     return response;
   });
 

@@ -86,7 +86,13 @@
       if(mode==='test'){await api(`/api/app/admin/publications/${id}/test`,{method:'POST'});toast('Тест отправлен вам в Telegram.');}
       else if(mode==='publish'){const r=await api(`/api/app/admin/publications/${id}/publish`,{method:'POST'});toast(`Пост опубликован${r.channel_message_id?` · message #${r.channel_message_id}`:''}.`);}
       else toast(`Черновик #${id} сохранён.`);
-      if(isPublishingRoute()){await refreshDiagnostics();await refreshLogs();scheduleRouteRefresh(mode==='save'?350:900);}
+      if(isPublishingRoute()){
+        await refreshDiagnostics();
+        await refreshLogs();
+        // Save and test are non-destructive actions: keep every field and selected file in place.
+        // A full route refresh is only useful after a real publish, when the result screen takes over.
+        if(mode==='publish')scheduleRouteRefresh(900);
+      }
     }catch(e){toast(e.message,true);if(isPublishingRoute()){await refreshDiagnostics();await refreshLogs();}}
     finally{busy=false;setBusy(false,mode);}
   }

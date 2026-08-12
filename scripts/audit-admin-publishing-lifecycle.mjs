@@ -29,7 +29,8 @@ for (const token of [
   "if(document.visibilityState==='visible'&&isPublishingRoute())",
   'if(!isPublishingRoute()||!body.isConnected)return',
   'if(!isManagementRoute()||!card.isConnected)return',
-  "adminRuntime.refresh()",
+  "if(mode==='publish')scheduleRouteRefresh(900)",
+  'adminRuntime.refresh()',
   'window.DTL_ADMIN_PUBLISHING=Object.freeze',
 ]) need(token);
 
@@ -39,6 +40,7 @@ for (const token of [
   'fetch(path',
   'window.fetch =',
   'setInterval(',
+  "scheduleRouteRefresh(mode==='save'?350:900)",
   "document.addEventListener('click',e=>{if(e.target.closest?.('[data-admin-tools=\"publications\"]')",
 ]) forbid(token);
 
@@ -55,9 +57,9 @@ for (const feature of [
   'installManagement',
 ]) need(feature, `preserved publishing feature ${feature}`);
 
-if (!index.includes('/app/admin-publishing.js?v=20260810-admin1&lifecycle=20260811f')) {
+if (!index.includes('/app/admin-publishing.js?v=20260810-admin1&lifecycle=20260811f&state=20260812a')) {
   throw new Error('Admin publishing lifecycle: cache-busted admin-publishing asset is missing from index.html');
 }
 
 new Function(publishing);
-console.log('Admin publishing lifecycle audit passed: shared API ownership, route-scoped diagnostics/log polling, stale-read guards, management route isolation and no always-on interval.');
+console.log('Admin publishing lifecycle audit passed: save/test preserve editor state, publish owns the destructive refresh, route-scoped diagnostics/log polling and management isolation remain intact.');
