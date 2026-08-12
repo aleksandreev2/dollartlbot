@@ -116,8 +116,14 @@ for(const token of [
   "source: 'official_novelpia_homepage_fresh'",
   'novelpia_homepage_unresolved:',
 ])requireText(homepageFresh,token,'authoritative NovelPia homepage Fresh source');
-if(/_ori|thumb|cover[^U]/i.test(homepageFresh.slice(homepageFresh.indexOf('resolveHomepageCardsFromListHtml'),homepageFresh.indexOf('async function loadCatalogRow')))){
-  throw new Error('Discovery audit failed: homepage Fresh identity resolution must never use image/cover asset IDs');
+const homepageResolverBlock=homepageFresh.slice(
+  homepageFresh.indexOf('function resolveHomepageCardsFromListHtml'),
+  homepageFresh.indexOf('async function loadCatalogRow'),
+);
+for(const forbidden of ['_ori','coverId','imageId','assetId','<img','img src']){
+  if(homepageResolverBlock.includes(forbidden)){
+    throw new Error(`Discovery audit failed: homepage Fresh identity resolver uses forbidden asset identity hint: ${forbidden}`);
+  }
 }
 if(!homepageFresh.includes('card.author && detail.author && normalizeIdentityText(detail.author) !== normalizeIdentityText(card.author)')){
   throw new Error('Discovery audit failed: homepage detail resolution must validate compatible author identity');
