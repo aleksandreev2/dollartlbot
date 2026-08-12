@@ -102,8 +102,10 @@ test('Queue shows unresolved NovelPia source changes and Reviewed clears the war
   await expect(page.locator('[data-qw-working="31"] [data-source-watch-inline]')).not.toContainText('86 → 93');
   await expect(page.locator('[data-qw-working="31"] [data-source-watch-inline]')).toContainText('Источник: 93 глав');
 
-  await page.locator('[data-qw-working="31"] [data-source-watch-refresh="31"]').click();
+  const refresh = page.locator('[data-qw-working="31"] [data-source-watch-refresh="31"]');
+  await refresh.click();
   await expect.poll(() => page.evaluate(() => window.__sourceWatchTest.refreshOne)).toBe(1);
+  await expect(refresh).toBeEnabled();
 });
 
 test('Health exposes source watch counts, unresolved changes and stays mobile-safe', async ({ page }) => {
@@ -118,8 +120,10 @@ test('Health exposes source watch counts, unresolved changes and stays mobile-sa
   await expect(page.locator('[data-source-watch-attention]')).toContainText('Working Novel');
   await expect(page.locator('[data-source-watch-attention]')).toContainText('86 → 93');
 
-  await card.locator('[data-source-watch-refresh-all]').click();
+  const refreshAll = card.locator('[data-source-watch-refresh-all]');
+  await refreshAll.click();
   await expect.poll(() => page.evaluate(() => window.__sourceWatchTest.refreshAll)).toBe(1);
+  await expect(refreshAll).toBeEnabled();
 
   const overflow = await page.evaluate(() => ({ width:document.documentElement.scrollWidth, viewport:window.innerWidth }));
   expect(overflow.width).toBeLessThanOrEqual(overflow.viewport + 1);
