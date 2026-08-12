@@ -90,10 +90,17 @@ for(const token of ['explicitPatterns','/novel\\/(\\d{2,9})','novel_no|novelNo']
 
 for(const token of [
   "const HOMEPAGE_URL = `${NOVELPIA_ORIGIN}/`",
-  "const PLUS_NEW_URL = `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`",
   "const INGEST_PROVIDER = 'novelpia_homepage_fresh'",
   "const HOMEPAGE_SIGNAL = 'novelpia_home_plus_new'",
-  'const MAX_FALLBACK_DETAIL_FETCHES = 20',
+  "const PLUS_NEW_SIGNAL = 'novelpia_plus_new'",
+  "const FREE_NEW_SIGNAL = 'novelpia_free_new'",
+  'const MAX_FALLBACK_DETAIL_FETCHES = 28',
+  "name: 'plus_new'",
+  "url: `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`",
+  "name: 'free_new'",
+  "url: `${NOVELPIA_ORIGIN}/freestory/new/date/1?main_genre=`",
+  "name: 'new_rank'",
+  "url: `${NOVELPIA_ORIGIN}/top100/plus/today/view/all/all?main_genre=`",
   'runNovelpiaHomepageFreshIngestion',
   'getHomepageFreshIngestState',
   'parseHomepageFreshCards',
@@ -101,10 +108,15 @@ for(const token of [
   "scope.includes('신규 PLUS 작품')",
   'nov-tit',
   'nov-writer',
+  'resolveHomepageCardsAcrossLists',
   'resolveHomepageCardsFromListHtml',
+  'collectResolutionCandidates',
   'detailMatchesCard',
   'catalogMatchesCard',
   'normalizeIdentityText(detail.title) !== normalizeIdentityText(card.title)',
+  'if (!detail.author) return false',
+  'if (!row.author) return false',
+  "const normalSignal = resolution.tier === 'plus' ? PLUS_NEW_SIGNAL : FREE_NEW_SIGNAL",
   "event: 'novelpia_homepage_detail_probe_failed'",
   "event: 'novelpia_homepage_detail_failed'",
   "redirect: 'manual'",
@@ -117,7 +129,7 @@ for(const token of [
   'novelpia_homepage_unresolved:',
 ])requireText(homepageFresh,token,'authoritative NovelPia homepage Fresh source');
 const homepageResolverBlock=homepageFresh.slice(
-  homepageFresh.indexOf('function resolveHomepageCardsFromListHtml'),
+  homepageFresh.indexOf('function resolveHomepageCardsAcrossLists'),
   homepageFresh.indexOf('async function loadCatalogRow'),
 );
 for(const forbidden of ['_ori','coverId','imageId','assetId','<img','img src']){
@@ -125,8 +137,11 @@ for(const forbidden of ['_ori','coverId','imageId','assetId','<img','img src']){
     throw new Error(`Discovery audit failed: homepage Fresh identity resolver uses forbidden asset identity hint: ${forbidden}`);
   }
 }
-if(!homepageFresh.includes('card.author && detail.author && normalizeIdentityText(detail.author) !== normalizeIdentityText(card.author)')){
-  throw new Error('Discovery audit failed: homepage detail resolution must validate compatible author identity');
+if(!homepageFresh.includes("if (card.author) {\n    if (!detail.author) return false;")){
+  throw new Error('Discovery audit failed: homepage detail resolution must require author when the homepage supplies one');
+}
+if(!homepageFresh.includes("source_tier=CASE\n        WHEN excluded.source_tier='plus' THEN 'plus'")){
+  throw new Error('Discovery audit failed: homepage resolver must preserve real free/plus source tier safely');
 }
 
 for(const token of [
