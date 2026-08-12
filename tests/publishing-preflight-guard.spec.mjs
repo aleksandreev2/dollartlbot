@@ -51,25 +51,26 @@ test('real Publish is blocked by a final failed preflight but Save/Test draft cr
       window.__guard.nextCalls += 1;
       return new Response(JSON.stringify({ ok:true }), { status:201, headers:{ 'content-type':'application/json' } });
     };
-    return window.__guard.middleware('/api/app/admin/publications', { method:'POST' }, next, { pathname:'/api/app/admin/publications' });
+    const response = await window.__guard.middleware('/api/app/admin/publications', { method:'POST' }, next, { pathname:'/api/app/admin/publications' });
+    return response.status;
   });
 
   // Save/Test path: no publish busy marker, so draft creation is not blocked by channel readiness.
   await page.evaluate(() => { window.__guard.ready = false; });
-  let response = await invoke();
-  expect(response.status()).toBe(201);
+  let status = await invoke();
+  expect(status).toBe(201);
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(1);
 
   // Real publish path: final preflight must pass before draft creation can continue.
   await page.locator('#pubPublish').evaluate(button => button.classList.add('is-busy'));
-  response = await invoke();
-  expect(response.status()).toBe(409);
+  status = await invoke();
+  expect(status).toBe(409);
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(1);
   expect(await page.evaluate(() => window.__guard.checks)).toBeGreaterThan(0);
 
   await page.evaluate(() => { window.__guard.ready = true; });
-  response = await invoke();
-  expect(response.status()).toBe(201);
+  status = await invoke();
+  expect(status).toBe(201);
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(2);
 });
 
@@ -79,13 +80,14 @@ test('invalid chapter range blocks final Publish before any publication row is c
   await page.evaluate(() => {
     window.DTL_PUBLICATION_RELEASE_RANGE.parsedRange = () => ({ ok:false, message:'Последняя глава не может быть меньше первой.' });
   });
-  const response = await page.evaluate(async () => {
+  const status = await page.evaluate(async () => {
     const next = async () => {
       window.__guard.nextCalls += 1;
       return new Response('{}', { status:201 });
     };
-    return window.__guard.middleware('/api/app/admin/publications', { method:'POST' }, next, { pathname:'/api/app/admin/publications' });
+    const response = await window.__guard.middleware('/api/app/admin/publications', { method:'POST' }, next, { pathname:'/api/app/admin/publications' });
+    return response.status;
   });
-  expect(response.status()).toBe(409);
+  expect(status).toBe(409);
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(0);
 });
