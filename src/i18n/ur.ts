@@ -1,0 +1,138 @@
+import { en } from './en';
+import { featureTranslations } from './features';
+import { policyTranslations } from './policy';
+import { policyOverrideTranslations } from './policy_override';
+import { statusOverrideTranslations } from './status_override';
+import { qualityOverrideTranslations } from './quality_override';
+import { rulesQualityOverrideTranslations } from './rules_quality_override';
+import { interfacePolishTranslations } from './interface_polish';
+import { localeCleanupTranslations } from './locale_cleanup';
+import { accessGateTranslations } from './access_gate';
+
+const completeEnglish = {
+  ...en,
+  ...featureTranslations.en,
+  ...policyTranslations.en,
+  ...policyOverrideTranslations.en,
+  ...statusOverrideTranslations.en,
+  ...qualityOverrideTranslations.en,
+  ...rulesQualityOverrideTranslations.en,
+  ...interfacePolishTranslations.en,
+  ...localeCleanupTranslations.en,
+  ...accessGateTranslations.en,
+};
+
+/**
+ * Urdu is kept as one consolidated dictionary rather than copied through every
+ * historical override layer. The `satisfies` contract means a new English key
+ * cannot be added without also being represented here (directly or via the
+ * temporary English spread while a translation is being added).
+ */
+export const ur = {
+  ...completeEnglish,
+
+  chooseLanguage: '<b>اپنی زبان منتخب کریں</b>\n\nآپ اسے بعد میں /language سے تبدیل کر سکتے ہیں۔',
+  languageSaved: 'زبان اپ ڈیٹ ہو گئی۔',
+  menuTitle: '<b>Dollar TL — ناول ترجمہ کی درخواستیں</b>',
+  submit: '📚 ناول تجویز کریں',
+  rules: '📋 درخواست کے قواعد',
+  limit: '📊 میری حد',
+  language: '🌐 زبان',
+  cancel: 'منسوخ کریں',
+  acceptRules: 'میں سمجھتا/سمجھتی ہوں اور متفق ہوں',
+  subscribe: '⭐ Boosty سبسکرپشن',
+  retryVerification: 'تصدیق دوبارہ آزمائیں',
+  skip: 'چھوڑ دیں',
+  none: 'کوئی نہیں',
+  ongoing: 'جاری',
+  completed: 'مکمل',
+  confirmSubmit: '✅ تصدیق کریں اور بھیجیں',
+  restart: '↩️ دوبارہ شروع کریں',
+  rulesText: `<b>ناول بھیجنے سے پہلے</b>\n\nبراہِ کرم اصل/raw فائل، اہم tags اور genres، تمام fetishes/kinks/sexual content، اور کسی بھی انتہائی، پریشان کن، متنازع یا ممکنہ طور پر حساس مواد کی مکمل معلومات دیں۔ اہم tags یا fetish content جان بوجھ کر نہ چھپائیں۔\n\n<b>میں ایسے ناول قبول نہیں کرتا جن میں یہ شامل ہو:</b>\n• Guro، انتہائی gore، mutilation، dismemberment یا graphic body horror\n• نابالغ یا کم عمر کرداروں سے متعلق کوئی sexual یا sexualized content\n• Bestiality / zoophilia\n• Necrophilia\n• Scat / coprophilia / human toilet\n• Snuff\n• انتہائی یا sexualized torture\n• Cannibalism\n• Vomit / emetophilia fetish content\n• Parasite / infestation fetish content\n• Unbirthing یا اسی نوعیت کا انتہائی fetish content\n• Futanari / futa\n• خاتون مرکزی کردار\n• حقیقی لوگوں کو کردار کے طور پر استعمال کرنا\n• Gender bender (MtF) کہانیاں\n• ٹیم کی صوابدید پر دیگر انتہائی fetish، پریشان کن یا shock content\n\n<b>ترجمہ اور دوبارہ پوسٹ کرنے کے قواعد</b>\nاجازت کے بغیر میرے تراجم کو دوسری ویب سائٹس، ایپس، پلیٹ فارمز یا کمیونٹیز پر copy، repost، reupload، mirror یا publish نہ کریں۔ اصل ترجمے کا لنک شیئر کرنا بالکل ٹھیک ہے۔`,
+  rulesGate: 'اوپر دیے گئے قواعد پڑھیں۔ آگے بڑھ کر آپ تصدیق کرتے ہیں کہ ناول میں ممنوعہ مواد شامل نہیں اور آپ نے اہم tags، fetish/sexual content اور حساس مواد ظاہر کر دیا ہے۔',
+  askTitle: '<b>1/9 — ناول</b>\n\nناول کا عنوان کیا ہے؟',
+  askOriginalLanguage: '<b>2/9 — اصل زبان</b>\n\nاصل/raw ناول کس زبان میں لکھا گیا ہے؟ مثال: Korean، Chinese، Japanese۔',
+  askChapterCount: '<b>3/9 — ابواب کی تعداد</b>\n\nناول میں اس وقت کتنے ابواب ہیں؟\n\nRegular status: زیادہ سے زیادہ <b>250 ابواب</b>۔ Boosty subscribers پر 250 ابواب کی پابندی لاگو نہیں ہوتی۔',
+  invalidChapterCount: 'براہِ کرم درست مثبت عدد بھیجیں۔',
+  freeChapterLimit: 'اس ناول میں <b>250 سے زیادہ ابواب</b> ہیں۔ Regular status والے صارف اسے نہیں بھیج سکتے۔ یہ پابندی Boosty subscribers پر لاگو نہیں ہوتی۔',
+  askStatus: '<b>4/9 — اشاعت کی حالت</b>\n\nکیا ناول ابھی جاری ہے یا مکمل ہو چکا ہے؟',
+  askSource: '<b>5/9 — اصل ماخذ</b>\n\nاگر دستیاب ہو تو اصل ناول/ماخذ کا لنک بھیجیں، ورنہ Skip دبائیں۔',
+  askRawFile: '<b>6/9 — Raw فائل</b>\n\nاصل/raw ناول Telegram document کے طور پر بھیجیں (ZIP، TXT، EPUB، DOCX وغیرہ)۔',
+  invalidRawFile: 'براہِ کرم raw فائل Telegram document کے طور پر بھیجیں۔',
+  askTags: '<b>7/9 — Genres اور tags</b>\n\nناول کے اہم genres اور tags درج کریں۔',
+  askSexual: '<b>8/9 — Fetishes / kinks / sexual content</b>\n\nناول میں موجود تمام متعلقہ مواد درج کریں۔ اگر کچھ نہیں تو None دبائیں۔',
+  askSensitive: '<b>9/9 — حساس مواد</b>\n\nکسی بھی پریشان کن، متنازع، انتہائی یا ممکنہ طور پر حساس مواد کی تفصیل دیں۔ اگر کچھ نہیں تو None دبائیں۔',
+  askNotes: '<b>اختیاری — اضافی نوٹس</b>\n\nکیا اور کچھ جاننا ضروری ہے؟ پیغام بھیجیں یا Skip دبائیں۔',
+  confirmHeader: '<b>اپنی درخواست کا جائزہ لیں</b>',
+  confirmFooter: 'درخواست بھیج کر آپ تصدیق کرتے ہیں کہ آپ نے اہم tags، fetish/sexual content یا حساس مواد جان بوجھ کر نہیں چھپایا۔',
+  submitted: '✅ <b>درخواست بھیج دی گئی۔</b>\n\nیہ براہِ راست جائزے کے لیے بھیج دی گئی ہے۔ مرکزی مینو سے اپنی باقی ماہانہ حد دیکھ سکتے ہیں۔',
+  limitReachedFree: 'آپ اس ماہ اپنی <b>1 Regular درخواست</b> پہلے ہی استعمال کر چکے ہیں۔ Boosty subscribers ماہانہ 5 درخواستیں بھیج سکتے ہیں۔',
+  limitReachedSubscriber: 'آپ اس ماہ کی تمام <b>5 subscriber درخواستیں</b> استعمال کر چکے ہیں۔',
+  verificationUnavailable: 'Boosty کی تصدیق عارضی طور پر دستیاب نہیں۔ تھوڑی دیر بعد دوبارہ کوشش کریں۔ آپ کی موجودہ Regular allowance متاثر نہیں ہوگی۔',
+  noSession: 'کوئی فعال درخواست موجود نہیں۔ نئی درخواست شروع کرنے کے لیے مینو استعمال کریں۔',
+  cancelled: 'درخواست منسوخ کر دی گئی۔',
+  statusAccepted: '✅ آپ کی درخواست قبول کر لی گئی ہے۔',
+  statusRejected: '❌ آپ کی درخواست مسترد کر دی گئی ہے۔',
+  statusRejectedReturned: '❌ آپ کی درخواست مسترد کر دی گئی ہے، لیکن ماہانہ slot واپس کر دیا گیا ہے۔',
+  adminMessagePrefix: '💬 <b>Dollar TL کی طرف سے پیغام:</b>\n\n',
+  unknownAction: 'یہ کارروائی اب دستیاب نہیں۔',
+  privateOnly: 'براہِ کرم اس bot کو نجی chat میں استعمال کریں۔',
+  limitTitle: '<b>آپ کی ماہانہ حد</b>',
+  planLabel: 'پلان',
+  planFree: 'Regular',
+  planSubscriber: 'Boosty Subscriber',
+  usedLabel: 'استعمال شدہ',
+  remainingLabel: 'باقی',
+  resetLabel: 'ری سیٹ',
+  titleLabel: 'ناول',
+  originalLanguageLabel: 'اصل زبان',
+  chaptersLabel: 'ابواب',
+  publicationStatusLabel: 'حالت',
+  sourceLabel: 'ماخذ',
+  tagsLabel: 'Genres / Tags',
+  sexualLabel: 'Fetishes / Sexual content',
+  sensitiveLabel: 'حساس مواد',
+  notesLabel: 'نوٹس',
+
+  welcomeText: '<b>Dollar TL Requests میں خوش آمدید۔</b>\n\nاس bot سے English translation کے لیے ناول تجویز کریں۔\n\nRegular status: <b>ہر ماہ 1 درخواست</b>، ناول زیادہ سے زیادہ <b>250 ابواب</b>۔\nBoosty: <b>ہر ماہ 5 درخواستیں</b>؛ 250 ابواب کی پابندی لاگو نہیں ہوتی۔\n\nقبول شدہ ناول عوامی translation queue میں شامل کیے جاتے ہیں۔',
+  queue: '📚 ترجمہ کی قطار',
+  myRequests: '🗂 میری درخواستیں',
+  guide: '❓ یہ کیسے کام کرتا ہے',
+  guideText: '<b>یہ کیسے کام کرتا ہے</b>\n\n1. ناول بھیجیں اور genres، tags، sexual content، fetishes اور حساس مواد ایمانداری سے بتائیں۔\n2. درخواست کا دستی جائزہ لیا جاتا ہے۔\n3. قبول ہونے پر ناول translation queue میں شامل ہوتا ہے۔\n4. بعد میں اس کی حالت <b>In progress</b> اور پھر <b>Completed</b> ہو سکتی ہے۔\n5. درخواستوں کی ماہانہ allowance ہر UTC calendar month کے پہلے دن reset ہوتی ہے۔\n\nRegular: <b>1 درخواست/ماہ</b>، 250 ابواب تک۔\nBoosty: <b>5 درخواستیں/ماہ</b>؛ 250 ابواب کی پابندی لاگو نہیں ہوتی۔',
+  queueTitle: '<b>Dollar TL — ترجمہ کی قطار</b>',
+  queueEmpty: 'ترجمہ کی قطار اس وقت خالی ہے۔',
+  myRequestsTitle: '<b>میری درخواستیں</b>',
+  myRequestsEmpty: 'آپ نے ابھی تک کوئی ناول نہیں بھیجا۔',
+  statusPending: 'جائزے کا منتظر',
+  statusQueued: 'قطار میں',
+  statusInProgress: 'ترجمہ جاری',
+  statusCompleted: 'مکمل',
+  statusRejected: 'مسترد',
+  statusRejectedReturned: 'مسترد · slot واپس',
+  positionLabel: 'پوزیشن',
+  pageLabel: 'صفحہ',
+  acceptedToQueue: '✅ آپ کی درخواست قبول کر کے translation queue میں شامل کر دی گئی ہے۔',
+  translationStarted: '▶️ آپ کی قبول شدہ درخواستوں میں سے ایک کا ترجمہ شروع ہو گیا ہے۔',
+  translationCompleted: '✅ آپ کی درخواستوں میں سے ایک کا ترجمہ مکمل نشان زد کر دیا گیا ہے۔',
+  limitResetNotice: '🔄 <b>آپ کی ماہانہ درخواست کی حد reset ہو گئی ہے۔</b>\n\nنیا calendar month شروع ہو گیا ہے۔ نیچے اپنی موجودہ allowance دیکھیں۔',
+  promoText: '⭐ <b>مزید ناول تجویز کرنا چاہتے ہیں؟</b>\n\nBoosty آپ کو ہر ماہ <b>5 درخواستیں</b> دیتا ہے اور Regular status والی 250 ابواب کی پابندی ہٹا دیتا ہے۔\n\nیہ reminder صرف کبھی کبھار بھیجا جاتا ہے۔',
+  promoButton: '⭐ Boosty آزمائیں',
+  promoOptOut: '🔕 یہ reminders بند کریں',
+  promoOptedOut: 'Boosty reminders بند کر دیے گئے ہیں۔',
+
+  statusLabel: 'حالت',
+  monthlyUsageLabel: 'اس ماہ کی درخواستیں',
+  chapterLimitLabel: 'ابواب کی حد',
+  subscriberChapterLimitValue: '250 ابواب کی پابندی لاگو نہیں',
+  hardChapterLimit: '⚠️ <b>نوٹ:</b> Regular status والے صارف <b>250 سے زیادہ ابواب</b> والا ناول نہیں بھیج سکتے۔ یہ پابندی Boosty subscribers پر لاگو نہیں ہوتی۔',
+  freeUpgradeHint: '⭐ <b>5 درخواستیں/ماہ</b> اور 250 سے زیادہ ابواب والے ناول تجویز کرنا چاہتے ہیں؟ Boosty سبسکرپشن لیں۔',
+  upgradeButton: '⭐ حد 5 کریں',
+
+  accessRequiredTitle: 'Dollar TL تک رسائی درکار ہے',
+  accessRequiredText: 'Mini App استعمال کرنے سے پہلے مطلوبہ Telegram channel join کریں، پھر دوبارہ چیک کریں۔',
+  accessJoinButton: 'Channel join کریں',
+  accessRetryButton: 'دوبارہ چیک کریں',
+  accessGranted: 'رسائی کی تصدیق ہو گئی۔',
+  accessCheckUnavailableTitle: 'رسائی ابھی چیک نہیں ہو سکی',
+  accessCheckUnavailableText: 'Telegram کی membership verification عارضی طور پر دستیاب نہیں۔ تھوڑی دیر بعد دوبارہ کوشش کریں۔',
+} satisfies Record<keyof typeof completeEnglish, string>;
