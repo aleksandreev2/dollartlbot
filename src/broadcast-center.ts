@@ -21,6 +21,8 @@ type BroadcastJob = {
   audience: BroadcastAudience;
   preference_key: BroadcastPreference;
   action_url: string | null;
+  template_key: string | null;
+  dedupe_key: string | null;
 };
 
 type BroadcastRecipient = {
@@ -38,16 +40,22 @@ type BroadcastLocalization = {
   action_label: string | null;
 };
 
+type AudienceFilter = {
+  sql: string;
+  binds: Array<string | number>;
+};
+
 const OPEN_LABEL: Record<string, string> = {
   en:'Open Dollar TL', es:'Abrir Dollar TL', fil:'Buksan ang Dollar TL', hi:'Dollar TL खोलें',
   pt:'Abrir Dollar TL', id:'Buka Dollar TL', vi:'Mở Dollar TL', fr:'Ouvrir Dollar TL',
-  de:'Dollar TL öffnen', ru:'Открыть Dollar TL',
+  de:'Dollar TL öffnen', ru:'Открыть Dollar TL', ur:'Dollar TL کھولیں',
 };
 
 const RELEASE_TITLE: Record<string, string> = {
   en:'New translation release', es:'Nueva publicación de traducción', fil:'Bagong salin',
   hi:'नया अनुवाद जारी', pt:'Nova tradução publicada', id:'Rilis terjemahan baru',
   vi:'Bản dịch mới', fr:'Nouvelle traduction', de:'Neue Übersetzung', ru:'Новый перевод',
+  ur:'نیا ترجمہ جاری ہوا',
 };
 
 export async function runBroadcastCenterMaintenanceWithLease(
@@ -92,7 +100,7 @@ export async function runBroadcastCenterMaintenance(
       SELECT id, status, kind, title, body,
              COALESCE(audience, 'release_followers') AS audience,
              COALESCE(preference_key, 'notify_releases') AS preference_key,
-             action_url
+             action_url, template_key, dedupe_key
       FROM broadcasts
       WHERE status IN ('queued', 'running')
       ORDER BY id ASC
@@ -127,6 +135,10 @@ export async function runBroadcastCenterMaintenance(
         await markBroadcastRecipientSkipped(env, job.id, recipient.user_id);
         continue;
       }
+      if (!(await recipientStillEligible(env, job, recipient.user_id, new Date()))) {
+        await markBroadcastRecipientSkipped(env, job.id, recipient.user_id);
+        continue;
+      }
       await deliverBroadcastRecipient(env, telegram, job, recipient);
     }
 
@@ -147,11 +159,9 @@ async function ensureBroadcastRecipients(env: Env, job: BroadcastJob, now: strin
   const preferenceSql = job.preference_key === 'notify_announcements'
     ? 'u.notify_announcements = 1'
     : 'u.notify_releases = 1';
-  const audienceSql = audiencePredicate(job.audience);
-  const monthKey = currentMonthKey();
-  const binds = audienceNeedsMonth(job.audience)
-    ? [job.id, now, now, now, monthKey]
-    : [job.id, now, now, now];
+  const monthKey = currentMonthKey(new Date(now));
+  const audience = audienceFilter(job.audience, monthKey, now);
+  const automationSql = isAutomatedBroadcast(job) ? 'u.language_selected = 1' : '1 = 1';
 
   await env.DB.batch([
     env.DB.prepare(`
@@ -168,29 +178,73 @@ async function ensureBroadcastRecipients(env: Env, job: BroadcastJob, now: strin
       LEFT JOIN user_admin_controls control ON control.user_id = u.telegram_id
       WHERE ${preferenceSql}
         AND control.blocked_at IS NULL
-        AND ${audienceSql}
-    `).bind(...binds),
+        AND ${automationSql}
+        AND ${audience.sql}
+    `).bind(job.id, now, now, now, ...audience.binds),
   ]);
 }
 
-function audiencePredicate(audience: BroadcastAudience): string {
+function audienceFilter(audience: BroadcastAudience, monthKey: string, now: string): AudienceFilter {
   if (audience === 'unused_quota') {
-    return `NOT EXISTS (
-      SELECT 1 FROM submissions s
-      WHERE s.user_id = u.telegram_id AND s.month_key = ? AND s.slot_returned = 0
-    )`;
+    return {
+      sql: `NOT EXISTS (
+        SELECT 1 FROM submissions s
+        WHERE s.user_id = u.telegram_id AND s.month_key = ? AND s.slot_returned = 0
+      ) AND NOT EXISTS (
+        SELECT 1 FROM submission_intake_reservations sr
+        WHERE sr.user_id = u.telegram_id
+          AND sr.month_key = ?
+          AND sr.state = 'reserved'
+          AND sr.expires_at > ?
+      )`,
+      binds: [monthKey, monthKey, now],
+    };
   }
   if (audience === 'has_requests') {
-    return 'EXISTS (SELECT 1 FROM submissions s WHERE s.user_id = u.telegram_id)';
+    return { sql: 'EXISTS (SELECT 1 FROM submissions s WHERE s.user_id = u.telegram_id)', binds: [] };
   }
   if (audience === 'no_requests') {
-    return 'NOT EXISTS (SELECT 1 FROM submissions s WHERE s.user_id = u.telegram_id)';
+    return { sql: 'NOT EXISTS (SELECT 1 FROM submissions s WHERE s.user_id = u.telegram_id)', binds: [] };
   }
-  return '1 = 1';
+  return { sql: '1 = 1', binds: [] };
 }
 
-function audienceNeedsMonth(audience: BroadcastAudience): boolean {
-  return audience === 'unused_quota';
+async function recipientStillEligible(
+  env: Env,
+  job: BroadcastJob,
+  userId: number,
+  now: Date,
+): Promise<boolean> {
+  const monthKey = currentMonthKey(now);
+  const automatedMonth = automationMonth(job);
+  if (automatedMonth && automatedMonth !== monthKey) return false;
+  const preferenceSql = job.preference_key === 'notify_announcements'
+    ? 'u.notify_announcements = 1'
+    : 'u.notify_releases = 1';
+  const automationSql = isAutomatedBroadcast(job) ? 'u.language_selected = 1' : '1 = 1';
+  const audience = audienceFilter(job.audience, monthKey, now.toISOString());
+  const row = await env.DB.prepare(`
+    SELECT 1 AS ok
+    FROM users u
+    LEFT JOIN user_admin_controls control ON control.user_id = u.telegram_id
+    WHERE u.telegram_id = ?
+      AND ${preferenceSql}
+      AND control.blocked_at IS NULL
+      AND ${automationSql}
+      AND ${audience.sql}
+    LIMIT 1
+  `).bind(userId, ...audience.binds).first<{ ok: number }>();
+  return Boolean(row?.ok);
+}
+
+function isAutomatedBroadcast(job: BroadcastJob): boolean {
+  return String(job.template_key || '').startsWith('auto:');
+}
+
+function automationMonth(job: BroadcastJob): string | null {
+  if (!isAutomatedBroadcast(job)) return null;
+  const match = /^automation:[^:]+:(\d{4}-\d{2}):/.exec(String(job.dedupe_key || ''));
+  return match?.[1] || null;
 }
 
 async function skipOptedOutRecipients(env: Env, job: BroadcastJob, now: string): Promise<void> {
