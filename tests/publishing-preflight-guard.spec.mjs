@@ -28,7 +28,16 @@ async function boot(page) {
         node.className = window.__guard.ready ? 'ready' : 'blocked';
         node.textContent = window.__guard.ready ? 'Готово' : 'Есть блокирующие проблемы';
       },
-      state(){ return { lastPreflight:{ ready:window.__guard.ready } }; },
+      state(){
+        return {
+          lastPreflight:{
+            ready:window.__guard.ready,
+            checks:window.__guard.ready
+              ? [{ status:'ok', message:'Готово' }]
+              : [{ status:'error', message:'Бот не может публиковать в выбранный канал.' }],
+          },
+        };
+      },
     };
     window.DTL_PUBLICATION_RELEASE_RANGE = { parsedRange(){ return { ok:true, chapter_start:1, chapter_end:10 }; } };
   });
@@ -43,6 +52,28 @@ test('typing automatically reruns publication preflight without requiring blur o
   await expect.poll(() => page.evaluate(() => window.__guard.checks), { timeout:1500 }).toBeGreaterThan(before);
 });
 
+test('readiness can never leave Publish disabled, but real busy state still can', async ({ page }) => {
+  await boot(page);
+  const publish = page.locator('#pubPublish');
+
+  await publish.evaluate(button => { button.disabled = true; });
+  await expect(publish).toBeEnabled();
+
+  await publish.evaluate(button => {
+    button.dataset.dtlAdminBusy = '1';
+    button.setAttribute('aria-busy', 'true');
+    button.disabled = true;
+  });
+  await page.waitForTimeout(30);
+  await expect(publish).toBeDisabled();
+
+  await publish.evaluate(button => {
+    delete button.dataset.dtlAdminBusy;
+    button.removeAttribute('aria-busy');
+  });
+  await expect(publish).toBeEnabled();
+});
+
 test('real Publish is blocked by a final failed preflight but Save/Test draft creation stays available', async ({ page }) => {
   await boot(page);
 
@@ -52,25 +83,26 @@ test('real Publish is blocked by a final failed preflight but Save/Test draft cr
       return new Response(JSON.stringify({ ok:true }), { status:201, headers:{ 'content-type':'application/json' } });
     };
     const response = await window.__guard.middleware('/api/app/admin/publications', { method:'POST' }, next, { pathname:'/api/app/admin/publications' });
-    return response.status;
+    return { status:response.status, body:await response.json().catch(() => ({})) };
   });
 
   // Save/Test path: no publish busy marker, so draft creation is not blocked by channel readiness.
   await page.evaluate(() => { window.__guard.ready = false; });
-  let status = await invoke();
-  expect(status).toBe(201);
+  let result = await invoke();
+  expect(result.status).toBe(201);
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(1);
 
   // Real publish path: final preflight must pass before draft creation can continue.
   await page.locator('#pubPublish').evaluate(button => button.classList.add('is-busy'));
-  status = await invoke();
-  expect(status).toBe(409);
+  result = await invoke();
+  expect(result.status).toBe(409);
+  expect(result.body.error.message).toBe('Бот не может публиковать в выбранный канал.');
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(1);
   expect(await page.evaluate(() => window.__guard.checks)).toBeGreaterThan(0);
 
   await page.evaluate(() => { window.__guard.ready = true; });
-  status = await invoke();
-  expect(status).toBe(201);
+  result = await invoke();
+  expect(result.status).toBe(201);
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(2);
 });
 
@@ -80,14 +112,15 @@ test('invalid chapter range blocks final Publish before any publication row is c
   await page.evaluate(() => {
     window.DTL_PUBLICATION_RELEASE_RANGE.parsedRange = () => ({ ok:false, message:'Последняя глава не может быть меньше первой.' });
   });
-  const status = await page.evaluate(async () => {
+  const result = await page.evaluate(async () => {
     const next = async () => {
       window.__guard.nextCalls += 1;
       return new Response('{}', { status:201 });
     };
     const response = await window.__guard.middleware('/api/app/admin/publications', { method:'POST' }, next, { pathname:'/api/app/admin/publications' });
-    return response.status;
+    return { status:response.status, body:await response.json().catch(() => ({})) };
   });
-  expect(status).toBe(409);
+  expect(result.status).toBe(409);
+  expect(result.body.error.message).toBe('Последняя глава не может быть меньше первой.');
   expect(await page.evaluate(() => window.__guard.nextCalls)).toBe(0);
 });
