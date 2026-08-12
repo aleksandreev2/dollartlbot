@@ -74,10 +74,18 @@ for(const token of [
   "hostname === 'novelpia.com' || hostname === 'www.novelpia.com'",
   "url.hostname !== 'images.novelpia.com'",
   'runNovelpiaDiscoveryIngestion',
+  'novelpia_source_no_explicit_ids',
+  'fresh_unlinked_count',
+  'active_signal_count',
   'discovery_catalog_interests',
   'linkCatalogToSubmission',
   "user_id <> ?",
 ])requireText(novelpia,token,'safe NovelPia ingestion pipeline');
+const extractorBlock=novelpia.slice(novelpia.indexOf('function extractNovelIds'),novelpia.indexOf('function minSignalRank'));
+if(/ori\|thumb\|cover|_\(\\d/.test(extractorBlock)){
+  throw new Error('Discovery audit failed: NovelPia candidate extraction must never use cover/image asset IDs');
+}
+for(const token of ['explicitPatterns','/novel\\/(\\d{2,9})','novel_no|novelNo'])requireText(extractorBlock,token,'explicit NovelPia identity extraction');
 
 for(const token of [
   "const FETCH_TIMEOUT_MS = 8_000",
@@ -142,6 +150,9 @@ requireText(feed,'catalogOpportunityScore','NovelPia opportunity score');
 requireText(feed,"out.push('RAW verified')",'verified RAW opportunity signal');
 requireText(feed,'raw_ingest: ingestPresentation','RAW ingestion health projection');
 requireText(feed,'loadRawCatalogSourceMap','verified RAW source overlay');
+requireText(feed,"'feed_catalog_mismatch'",'Fresh catalog/feed mismatch diagnostics');
+requireText(feed,"'no_unlinked_fresh'",'legitimate empty Fresh diagnostics');
+requireText(feed,"'never_refreshed'",'never-refreshed Fresh diagnostics');
 
 for(const token of [
   "['fresh_novelpia','telescope',tx('fresh')]",
@@ -159,11 +170,15 @@ for(const token of [
   'patchVerifiedRawLinks',
   "row.raw_verification_status==='verified'&&row.raw_available&&row.raw_page_url",
   'archive-check',
+  'patchFreshEmptyState',
+  'waitForRefreshCompletion',
+  "'/api/app/discovery/catalog/health'",
+  "'dtl:discover-refresh-ready'",
 ])requireText(discoverRuntime,token,'verified RAW Discover runtime');
 requireText(discoverCss,'.discover-catalog-row','Fresh catalog responsive row styling');
 requireText(html,'/app/discover-page.css?v=20260811-discover2','Fresh Discover CSS cache bust');
 requireText(html,'/app/view-discover.js?v=20260811-discover2','Fresh Discover JS cache bust');
-requireText(html,'/app/discover-page-runtime.js?v=20260811-discover3','RAW Discover runtime cache bust');
+requireText(html,'/app/discover-page-runtime.js?v=20260812-discover4','Discover source recovery runtime cache bust');
 
 new Function(discoverView);
 new Function(discoverRuntime);

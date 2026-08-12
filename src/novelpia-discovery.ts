@@ -118,6 +118,7 @@ export async function runNovelpiaDiscoveryIngestion(env: Env, scheduledAt = new 
       try {
         const html = await fetchNovelpiaHtml(source.url);
         const ids = extractNovelIds(html, source.maxIds);
+        if (!ids.length) throw new Error('novelpia_source_no_explicit_ids');
         ids.forEach((externalId, index) => {
           const current = candidates.get(externalId) ?? {
             externalId,
@@ -457,17 +458,39 @@ export async function linkCatalogToSubmission(env: Env, catalogId: number, submi
 }
 
 export async function getNovelpiaIngestState(env: Env) {
-  return env.DB.prepare(`
-    SELECT provider, last_attempt_at, last_success_at, last_error, last_item_count, updated_at
-    FROM discovery_ingest_state WHERE provider = ?
-  `).bind(INGEST_PROVIDER).first<{
-    provider: string;
-    last_attempt_at: string | null;
-    last_success_at: string | null;
-    last_error: string | null;
-    last_item_count: number;
-    updated_at: string;
-  }>();
+  const [state, stats] = await Promise.all([
+    env.DB.prepare(`
+      SELECT provider, last_attempt_at, last_success_at, last_error, last_item_count, updated_at
+      FROM discovery_ingest_state WHERE provider = ?
+    `).bind(INGEST_PROVIDER).first<{
+      provider: string;
+      last_attempt_at: string | null;
+      last_success_at: string | null;
+      last_error: string | null;
+      last_item_count: number;
+      updated_at: string;
+    }>(),
+    env.DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM discovery_catalog WHERE provider='novelpia') AS catalog_count,
+        (SELECT COUNT(DISTINCT s.catalog_id)
+          FROM discovery_catalog_signals s
+          JOIN discovery_catalog c ON c.id=s.catalog_id
+          WHERE c.provider='novelpia' AND s.last_seen_at >= datetime('now','-16 days')) AS active_signal_count,
+        (SELECT COUNT(DISTINCT s2.catalog_id)
+          FROM discovery_catalog_signals s2
+          JOIN discovery_catalog c2 ON c2.id=s2.catalog_id
+          WHERE c2.provider='novelpia' AND c2.linked_submission_id IS NULL
+            AND s2.last_seen_at >= datetime('now','-16 days')) AS fresh_unlinked_count
+    `).first<{ catalog_count: number; active_signal_count: number; fresh_unlinked_count: number }>(),
+  ]);
+  if (!state) return null;
+  return {
+    ...state,
+    catalog_count: Number(stats?.catalog_count ?? 0),
+    active_signal_count: Number(stats?.active_signal_count ?? 0),
+    fresh_unlinked_count: Number(stats?.fresh_unlinked_count ?? 0),
+  };
 }
 
 async function loadExistingCatalogRows(env: Env, externalIds: string[]): Promise<Map<string, CatalogDbRow>> {
@@ -724,13 +747,15 @@ async function fetchNovelpiaHtml(url: string): Promise<string> {
 }
 
 function extractNovelIds(html: string, limit: number): string[] {
+  // Only identities explicitly attached to NovelPia novel navigation are trustworthy.
+  // Asset filenames such as _523808_ori.jpg are image IDs and can accidentally resolve
+  // to completely unrelated old novels, so failing closed is safer than ingesting them.
   const positions = new Map<string, number>();
-  const patterns = [
+  const explicitPatterns = [
     /(?:https?:\/\/(?:www\.)?novelpia\.com)?\/novel\/(\d{2,9})/gi,
     /(?:novel_no|novelNo)["']?\s*[:=]\s*["']?(\d{2,9})/gi,
-    /_(\d{2,9})_(?:ori|thumb|cover)\b/gi,
   ];
-  for (const pattern of patterns) {
+  for (const pattern of explicitPatterns) {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(html))) {
       const id = match[1];

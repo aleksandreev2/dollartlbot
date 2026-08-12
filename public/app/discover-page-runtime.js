@@ -2,6 +2,8 @@
   let observer=null;
   let refreshBusy=false;
   let apiWrapped=false;
+  let lastFeed=null;
+  let lastHealth=null;
   const rawByCatalog=new Map();
 
   const REFRESH_COPY={
@@ -17,9 +19,14 @@
     de:{refresh:'Quellen aktualisieren',running:'Quellenaktualisierung gestartet',busy:'Quellen werden bereits aktualisiert',failed:'Quellenaktualisierung konnte nicht gestartet werden',verifiedRaw:'Verifiziertes RAW'},
   };
 
+  const SOURCE_COPY={
+    en:{freshNever:'Fresh from NovelPia has not been synced yet.',freshNeverSub:'The local Discover feed still works. An admin can run Refresh sources.',freshFailed:'NovelPia refresh failed.',freshFailedSub:'Dollar TL is showing local discovery data while the external source is unavailable.',freshMismatch:'Fresh catalog data is inconsistent.',freshMismatchSub:'NovelPia rows exist in the catalog but did not reach this feed. Refresh sources to repair it.',freshNoUnlinked:'No unlinked Fresh NovelPia titles right now.',freshNoUnlinkedSub:'NovelPia was checked successfully; current fresh titles are already linked or there is nothing new to show.',refreshReady:'Fresh NovelPia updated',refreshStillEmpty:'Source refresh finished; Fresh NovelPia is still empty',refreshWaiting:'Source refresh is still running'},
+    ru:{freshNever:'Свежее с NovelPia ещё не синхронизировано.',freshNeverSub:'Локальный Discover работает. Администратор может запустить «Обновить источники».',freshFailed:'Не удалось обновить NovelPia.',freshFailedSub:'Dollar TL продолжает показывать локальные данные, пока внешний источник недоступен.',freshMismatch:'Данные свежего каталога не совпадают с лентой.',freshMismatchSub:'Свежие строки NovelPia есть в каталоге, но не попали в эту ленту. Запустите «Обновить источники».',freshNoUnlinked:'Сейчас нет новых несвязанных тайтлов NovelPia.',freshNoUnlinkedSub:'NovelPia успешно проверена; свежие тайтлы уже связаны с заявками или новых пока нет.',refreshReady:'Свежее с NovelPia обновлено',refreshStillEmpty:'Источники обновлены, но Fresh NovelPia всё ещё пуст',refreshWaiting:'Обновление источников всё ещё выполняется'},
+  };
+
   function copy(key){
     const locale=window.DTL_APP?.state?.locale||'en';
-    return REFRESH_COPY[locale]?.[key]||REFRESH_COPY.en[key]||key;
+    return SOURCE_COPY[locale]?.[key]||SOURCE_COPY.en[key]||REFRESH_COPY[locale]?.[key]||REFRESH_COPY.en[key]||key;
   }
 
   function patchNavIcon(){
@@ -65,9 +72,13 @@
         link.style.textDecoration='none';
         host.appendChild(link);
       }
+      const label=copy('verifiedRaw');
+      const stamp=`${raw.url}|${label}`;
+      if(link.dataset.discoverRawStamp===stamp)return;
+      link.dataset.discoverRawStamp=stamp;
       link.href=raw.url;
-      link.setAttribute('aria-label',copy('verifiedRaw'));
-      link.innerHTML=`<i data-lucide="archive-check" aria-hidden="true"></i><span>${copy('verifiedRaw')}</span>`;
+      link.setAttribute('aria-label',label);
+      link.innerHTML=`<i data-lucide="archive-check" aria-hidden="true"></i><span>${label}</span>`;
     });
     try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}
   }
@@ -82,12 +93,67 @@
         const path=String(args[0]||'').split('?')[0];
         if(path==='/api/app/discovery/feed'||path==='/api/app/discovery/opportunities'){
           rememberRawRows(result);
-          queueMicrotask(patchVerifiedRawLinks);
+          if(path==='/api/app/discovery/feed')lastFeed=result;
+          queueMicrotask(()=>{patchVerifiedRawLinks();patchFreshEmptyState();});
         }
+        if(path==='/api/app/discovery/catalog/health')lastHealth=result;
         return result;
       };
       apiWrapped=true;
     }catch{}
+  }
+
+  function patchFreshEmptyState(){
+    if(window.DTL_APP?.state?.view!=='discover'||!lastFeed)return;
+    const freshTab=document.querySelector('[data-discover-mode="fresh_novelpia"].is-active');
+    if(!freshTab)return;
+    const list=document.querySelector('#discoverContent .discover-list');
+    if(!list||list.querySelector('[data-catalog]'))return;
+    const empty=list.querySelector('.discover-state');
+    if(!empty)return;
+    const info=lastFeed.novelpia_ingest||{};
+    let title='freshNoUnlinked';
+    let sub='freshNoUnlinkedSub';
+    if(!info.available||info.reason==='never_refreshed'){title='freshNever';sub='freshNeverSub';}
+    else if(info.reason==='provider_error'){title='freshFailed';sub='freshFailedSub';}
+    else if(info.reason==='feed_catalog_mismatch'){title='freshMismatch';sub='freshMismatchSub';}
+    empty.classList.add('discover-source-empty');
+    const strong=empty.querySelector('strong');
+    const detail=empty.querySelector('span');
+    const titleText=copy(title);
+    const detailText=copy(sub);
+    if(strong&&strong.textContent!==titleText)strong.textContent=titleText;
+    if(detail&&detail.textContent!==detailText)detail.textContent=detailText;
+  }
+
+  function refreshAttemptFinished(state,requestedAt){
+    if(!state?.last_attempt_at)return false;
+    const attempt=Date.parse(state.last_attempt_at);
+    const requested=Date.parse(requestedAt||'');
+    if(!Number.isFinite(attempt)||!Number.isFinite(requested)||attempt+1500<requested)return false;
+    const success=state.last_success_at?Date.parse(state.last_success_at):0;
+    return (Number.isFinite(success)&&success>=attempt)||Boolean(state.last_error);
+  }
+
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+  async function waitForRefreshCompletion(requestedAt){
+    const app=window.DTL_APP;
+    for(let attempt=0;attempt<20;attempt++){
+      await sleep(attempt===0?500:1000);
+      try{
+        const health=await app.api('/api/app/discovery/catalog/health');
+        lastHealth=health;
+        if(refreshAttemptFinished(health?.state,requestedAt))return health;
+      }catch{}
+    }
+    return lastHealth;
+  }
+
+  function requestDiscoverReload(feed){
+    const event=new CustomEvent('dtl:discover-refresh-ready',{cancelable:true,detail:{fresh_count:Array.isArray(feed?.fresh_novelpia)?feed.fresh_novelpia.length:0}});
+    document.dispatchEvent(event);
+    if(!event.defaultPrevented)setTimeout(()=>window.location.reload(),80);
   }
 
   function patchAdminRefresh(){
@@ -119,11 +185,27 @@
     try{
       const result=await app.api('/api/app/discovery/catalog/refresh',{method:'POST'});
       app.toast?.(result?.busy?copy('busy'):copy('running'),result?.busy?'info':'success');
+      const requestedAt=result?.requested_at||result?.last_attempt_at||new Date().toISOString();
+      const health=await waitForRefreshCompletion(requestedAt);
+      if(!refreshAttemptFinished(health?.state,requestedAt)){
+        app.toast?.(copy('refreshWaiting'),'info');
+        return;
+      }
+      const refreshedFeed=await app.api('/api/app/discovery/feed');
+      lastFeed=refreshedFeed;
+      patchFreshEmptyState();
+      const freshCount=Array.isArray(refreshedFeed?.fresh_novelpia)?refreshedFeed.fresh_novelpia.length:0;
+      if(freshCount>0){
+        app.toast?.(copy('refreshReady'),'success');
+        requestDiscoverReload(refreshedFeed);
+      }else{
+        app.toast?.(copy('refreshStillEmpty'),health?.state?.last_error?'error':'info');
+      }
     }catch(error){
       app.toast?.(error?.message||copy('failed'),'error');
     }finally{
       refreshBusy=false;
-      setTimeout(()=>queueMicrotask(patchAdminRefresh),500);
+      setTimeout(()=>queueMicrotask(()=>{patchAdminRefresh();patchFreshEmptyState();}),500);
     }
   }
 
@@ -137,7 +219,7 @@
     observer=new MutationObserver(()=>{
       if(window.DTL_APP?.state?.view!=='discover')return;
       document.dispatchEvent(new CustomEvent('dtl:viewrender',{detail:{view:'discover',source:'discover-content'}}));
-      queueMicrotask(()=>{patchAdminRefresh();patchVerifiedRawLinks();});
+      queueMicrotask(()=>{patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});
     });
     observer.observe(host,{childList:true});
   }
@@ -149,9 +231,12 @@
   }
 
   wrapDiscoveryApi();
-  document.addEventListener('dtl:discover',()=>{attach();queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();});});
-  document.addEventListener('dtl:viewchange',()=>queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();}));
-  document.addEventListener('dtl:viewrender',()=>queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();}));
-  document.addEventListener('dtl:localechange',()=>queueMicrotask(()=>{patchAdminRefresh();patchVerifiedRawLinks();}));
-  queueMicrotask(()=>{wrapDiscoveryApi();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();});
+  document.addEventListener('click',event=>{
+    if(event.target?.closest?.('[data-discover-mode]'))queueMicrotask(()=>{attach();patchFreshEmptyState();patchVerifiedRawLinks();});
+  });
+  document.addEventListener('dtl:discover',()=>{attach();queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});});
+  document.addEventListener('dtl:viewchange',()=>queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
+  document.addEventListener('dtl:viewrender',event=>queueMicrotask(()=>{if(event?.detail?.source!=='discover-content')attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
+  document.addEventListener('dtl:localechange',()=>queueMicrotask(()=>{attach();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
+  queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});
 })();

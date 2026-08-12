@@ -147,3 +147,46 @@ test('Discover demand vote updates in place and admin gets opportunity ranking',
   const call=await page.evaluate(()=>window.__apiCalls.find(entry=>entry.path==='/api/app/discovery/interest'));
   expect(JSON.parse(call.options.body)).toEqual({submission_id:1,interested:true});
 });
+
+
+test('empty Fresh mode explains NovelPia source state instead of blaming filters',async({page})=>{
+  await boot(page,{width:390,height:820});
+  await page.evaluate(()=>{window.DTL_APP.state.locale='ru';document.dispatchEvent(new CustomEvent('dtl:localechange'));});
+  await page.locator('[data-discover-mode="fresh_novelpia"]').click();
+  const empty=page.locator('.discover-list .discover-state');
+  await expect(empty).toContainText('Свежее с NovelPia ещё не синхронизировано');
+  await expect(empty).not.toContainText('По этим фильтрам пока ничего нет');
+});
+
+test('admin Refresh sources waits for NovelPia and requests a fresh Discover reload',async({page})=>{
+  await boot(page,{width:390,height:840,admin:true});
+  await page.evaluate(()=>{
+    const original=window.DTL_APP.api;
+    let refreshed=false;
+    document.addEventListener('dtl:discover-refresh-ready',event=>{event.preventDefault();window.__discoverRefreshReady=event.detail;});
+    window.DTL_APP.api=async(path,options={})=>{
+      if(path==='/api/app/discovery/catalog/refresh'){
+        refreshed=true;
+        return{started:true,busy:false,requested_at:'2026-08-12T08:00:00.000Z'};
+      }
+      if(path==='/api/app/discovery/catalog/health')return{
+        provider:'novelpia',
+        state:refreshed
+          ?{last_attempt_at:'2026-08-12T08:00:00.000Z',last_success_at:'2026-08-12T08:00:00.000Z',last_error:null,last_item_count:30,catalog_count:10,active_signal_count:8,fresh_unlinked_count:1}
+          :{last_attempt_at:'2026-08-12T07:20:00.000Z',last_success_at:'2026-08-12T07:20:00.000Z',last_error:null,last_item_count:20,catalog_count:9,active_signal_count:7,fresh_unlinked_count:0},
+      };
+      const result=await original(path,options);
+      if(path==='/api/app/discovery/feed'&&refreshed){
+        result.fresh_novelpia=[{kind:'catalog',catalog_id:777,provider:'novelpia',external_id:'446837',title:'Recovered Fresh Novel',original_title:'Recovered Fresh Novel',author:'Author',original_language:'Korean',chapter_count:11,publication_status:'ongoing',genres_tags:'Fantasy',source_url:'https://novelpia.com/novel/446837',page_url:'https://novelpia.com/novel/446837',cover_url:null,source_tier:'free',views_count:0,favorites_count:0,recommendations_count:0,raw_available:false,demand_count:0,viewer_interested:false,source_rank:null,fresh_signals:['novelpia_free_new'],discovered_at:'2026-08-12T08:00:00.000Z',updated_at:'2026-08-12T08:00:00.000Z'}];
+        result.novelpia_ingest={available:true,last_success_at:'2026-08-12T08:00:00.000Z',item_count:30,visible_count:1,catalog_count:10,active_signal_count:8,fresh_unlinked_count:1,degraded:false,reason:null};
+      }
+      return result;
+    };
+  });
+  const button=page.locator('.discover-manual-refresh');
+  await button.click();
+  await expect.poll(()=>page.evaluate(()=>window.__discoverRefreshReady?.fresh_count||0),{timeout:5000}).toBe(1);
+  await expect(button).toBeEnabled();
+  const calls=await page.evaluate(()=>window.__apiCalls.map(entry=>entry.path));
+  expect(calls.filter(path=>path==='/api/app/discovery/feed').length).toBeGreaterThanOrEqual(2);
+});
