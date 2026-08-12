@@ -10,6 +10,7 @@ const rawProvider=read('src/raw-fucknovelpia.ts');
 const rawCache=read('src/raw-fucknovelpia-cache.ts');
 const catalogApi=read('src/discovery-catalog-api.ts');
 const novelpia=read('src/novelpia-discovery.ts');
+const homepageFresh=read('src/novelpia-homepage-fresh.ts');
 const feed=read('src/discovery-feed.ts');
 const index=read('src/index.ts');
 const html=read('public/app/index.html');
@@ -88,6 +89,41 @@ if(/ori\|thumb\|cover|_\(\\d/.test(extractorBlock)){
 for(const token of ['explicitPatterns','/novel\\/(\\d{2,9})','novel_no|novelNo'])requireText(extractorBlock,token,'explicit NovelPia identity extraction');
 
 for(const token of [
+  "const HOMEPAGE_URL = `${NOVELPIA_ORIGIN}/`",
+  "const PLUS_NEW_URL = `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`",
+  "const INGEST_PROVIDER = 'novelpia_homepage_fresh'",
+  "const HOMEPAGE_SIGNAL = 'novelpia_home_plus_new'",
+  'const MAX_FALLBACK_DETAIL_FETCHES = 20',
+  'runNovelpiaHomepageFreshIngestion',
+  'getHomepageFreshIngestState',
+  'parseHomepageFreshCards',
+  "html.indexOf('따끈따끈 신규 작품')",
+  "scope.includes('신규 PLUS 작품')",
+  'nov-tit',
+  'nov-writer',
+  'resolveHomepageCardsFromListHtml',
+  'detailMatchesCard',
+  'catalogMatchesCard',
+  'normalizeIdentityText(detail.title) !== normalizeIdentityText(card.title)',
+  "event: 'novelpia_homepage_detail_probe_failed'",
+  "event: 'novelpia_homepage_detail_failed'",
+  "redirect: 'manual'",
+  'const MAX_HTML_BYTES = 3_000_000',
+  'const MAX_REDIRECTS = 3',
+  'readTextLimited',
+  "url.protocol !== 'https:' || host !== 'novelpia.com'",
+  "source: 'homepage_hot_new'",
+  "source: 'official_novelpia_homepage_fresh'",
+  'novelpia_homepage_unresolved:',
+])requireText(homepageFresh,token,'authoritative NovelPia homepage Fresh source');
+if(/_ori|thumb|cover[^U]/i.test(homepageFresh.slice(homepageFresh.indexOf('resolveHomepageCardsFromListHtml'),homepageFresh.indexOf('async function loadCatalogRow')))){
+  throw new Error('Discovery audit failed: homepage Fresh identity resolution must never use image/cover asset IDs');
+}
+if(!homepageFresh.includes('card.author && detail.author && normalizeIdentityText(detail.author) !== normalizeIdentityText(card.author)')){
+  throw new Error('Discovery audit failed: homepage detail resolution must validate compatible author identity');
+}
+
+for(const token of [
   "const FETCH_TIMEOUT_MS = 8_000",
   'const MAX_HTML_BYTES = 2_000_000',
   'const MAX_REDIRECTS = 3',
@@ -130,11 +166,22 @@ for(const token of [
   'authenticateMiniAppRequest(request, env)',
   "if (!auth.admin) return miniAppJsonError('forbidden'",
   'ctx.waitUntil(',
+  'getHomepageFreshIngestState(env)',
+  "homepage_provider: 'novelpia_homepage_fresh'",
+  'homepage_state: homepageState',
+  'runNovelpiaHomepageFreshIngestion(env, requestedAt)',
   'runNovelpiaDiscoveryIngestion(env, requestedAt)',
   'runRawCatalogEnrichment(env, new Date())',
+  "stages: ['novelpia_homepage', 'novelpia', 'raw_fucknovelpia']",
   'getRawIngestState(env)',
   'propagateCatalogRawSourceToSubmission(env, catalogId, submissionId, now)',
 ])requireText(catalogApi,token,'authenticated discovery catalog API');
+const manualHomepage=catalogApi.indexOf('runNovelpiaHomepageFreshIngestion(env, requestedAt)');
+const manualRegular=catalogApi.indexOf('runNovelpiaDiscoveryIngestion(env, requestedAt)');
+const manualRaw=catalogApi.indexOf('runRawCatalogEnrichment(env, new Date())');
+if(manualHomepage<0||manualRegular<0||manualRaw<0||!(manualHomepage<manualRegular&&manualRegular<manualRaw)){
+  throw new Error('Discovery audit failed: manual refresh must run homepage Fresh -> NovelPia lists -> RAW');
+}
 
 requireText(index,"import { handleDiscoveryRawV2Request } from './discovery-raw-v2';",'RAW v2 API route import');
 requireText(index,'await handleDiscoveryRawV2Request(request, env)','RAW v2 API route invocation');
@@ -142,9 +189,17 @@ if(index.indexOf('await handleDiscoveryRawV2Request(request, env)')>index.indexO
   throw new Error('Discovery audit failed: RAW v2 search/source handler must shadow legacy discovery handler');
 }
 requireText(index,"import { runRawCatalogEnrichment } from './raw-fucknovelpia';",'RAW enrichment import');
+requireText(index,"import { runNovelpiaHomepageFreshIngestion } from './novelpia-homepage-fresh';",'homepage Fresh import');
 requireText(index,"scheduledAt.getUTCMinutes() % 20 === 0",'bounded 20-minute ingestion cadence');
+requireText(index,"runScheduledTask('novelpia_homepage_fresh'",'isolated homepage Fresh task');
 requireText(index,"runScheduledTask('novelpia_discovery_ingest'",'isolated NovelPia ingestion task');
 requireText(index,"runScheduledTask('raw_fucknovelpia_enrichment'",'isolated RAW enrichment task');
+const cronHomepage=index.indexOf("runScheduledTask('novelpia_homepage_fresh'");
+const cronRegular=index.indexOf("runScheduledTask('novelpia_discovery_ingest'");
+const cronRaw=index.indexOf("runScheduledTask('raw_fucknovelpia_enrichment'");
+if(cronHomepage<0||cronRegular<0||cronRaw<0||!(cronHomepage<cronRegular&&cronRegular<cronRaw)){
+  throw new Error('Discovery audit failed: cron must run homepage Fresh -> NovelPia lists -> RAW');
+}
 requireText(feed,'fresh_novelpia: freshWithRaw','Fresh NovelPia feed with verified RAW overlay');
 requireText(feed,'catalogOpportunityScore','NovelPia opportunity score');
 requireText(feed,"out.push('RAW verified')",'verified RAW opportunity signal');
@@ -182,4 +237,4 @@ requireText(html,'/app/discover-page-runtime.js?v=20260812-discover4','Discover 
 
 new Function(discoverView);
 new Function(discoverRuntime);
-console.log('Discovery foundation + NovelPia Fresh + RAW provider v2 audit passed.');
+console.log('Discovery foundation + NovelPia homepage Fresh + NovelPia lists + RAW provider v2 audit passed.');
