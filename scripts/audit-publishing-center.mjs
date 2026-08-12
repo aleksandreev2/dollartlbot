@@ -42,6 +42,10 @@ for(const token of [
   'inspectPublishingEnvironment',
   'MAX_TOTAL_ASSET_BYTES',
   'submission.status',
+  'title?:unknown',
+  'body?:unknown',
+  "body.internal_title??body.title??''",
+  "body.body_html??body.body??''",
 ])need(backend,token,'publishing center backend');
 
 for(const token of [
@@ -77,9 +81,15 @@ for(const token of [
   'scheduleAutosave',
   'enableClosingConfirmation',
   'Файлы и изображение не сохраняются',
-  "url.pathname==='/api/app/admin/publications'",
-  'clearDraftAfterPublicationCreate',
+  'title:snapshot.internal_title',
+  'body:snapshot.body_html',
+  'clearDraftAfterPublish',
+  "const published=/^\\/api\\/app\\/admin\\/publications\\/\\d+\\/publish$/.test(url.pathname)",
+  'enhanceDraftHistory',
+  "['[data-pub-send]','send','Опубликовать']",
 ])need(frontend,token,'publishing center frontend');
+forbid(frontend,'clearDraftAfterPublicationCreate','publishing center must not clear editor on save/test');
+forbid(frontend,"url.pathname==='/api/app/admin/publications'&&response.ok",'publishing center must not clear editor after publication creation');
 forbid(frontend,'registerRoute(','publishing center route ownership');
 forbid(frontend,'MutationObserver','publishing center observer');
 forbid(frontend,'window.fetch =','publishing center fetch override');
@@ -120,17 +130,17 @@ for(const token of ['publisher-flow-map','publisher-flow-step','publisher-previe
 need(html,'/app/admin-publishing-center.css?v=20260811-pcenter2','publishing center CSS asset');
 need(html,'/app/admin-publishing-flow.css?v=20260811-pflow1','publishing flow CSS asset');
 need(html,'/app/admin-ui-utils.js?v=20260811-ui2','publishing time utility asset');
-need(html,'/app/admin-publishing-center.js?v=20260811-pcenter2','publishing center JS asset');
+need(html,'/app/admin-publishing-center.js?v=20260812-pcenter3','publishing center JS asset');
 need(html,'/app/admin-publishing-flow.js?v=20260811-pflow1','publishing flow JS asset');
 need(html,'/app/publication-template-ui.js?v=20260811-pubtemplate3','request-aware template JS asset');
 need(html,'/app/admin-publication-pipeline.js?v=20260811-pcenter1','publishing pipeline JS asset');
 const flowIndex=html.indexOf('/app/admin-publishing-flow.js?v=20260811-pflow1');
 const publishingIndex=html.indexOf('/app/admin-publishing.js?v=20260810-admin1');
 const utilsIndex=html.indexOf('/app/admin-ui-utils.js?v=20260811-ui2');
-const centerIndex=html.indexOf('/app/admin-publishing-center.js?v=20260811-pcenter2');
+const centerIndex=html.indexOf('/app/admin-publishing-center.js?v=20260812-pcenter3');
 const pipelineIndex=html.indexOf('/app/admin-publication-pipeline.js?v=20260811-pcenter1');
 if(flowIndex<0||publishingIndex<0||utilsIndex<0||centerIndex<0||pipelineIndex<0||flowIndex>publishingIndex||utilsIndex<publishingIndex||centerIndex<utilsIndex||pipelineIndex<centerIndex)throw new Error('Publishing flow must capture publish intent before canonical publishing and center enhancers must keep deterministic order.');
 need(pkg,'tests/admin-publishing-center.spec.mjs','publishing center browser coverage');
 need(pkg,'tests/admin-publication-pipeline.spec.mjs','publishing pipeline browser coverage');
 
-console.log('Unified Publishing Center audit passed: linear editor flow, request autofill + request cover reuse, compact preflight/autosave, success handoff, server draft/templates and delivery pipeline are wired.');
+console.log('Unified Publishing Center audit passed: linear editor flow, compatibility payloads, preserved save/test state, request autofill, preflight/autosave and delivery pipeline are wired.');
