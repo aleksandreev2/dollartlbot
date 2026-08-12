@@ -1,5 +1,6 @@
 import { getSubmission } from './db';
 import { notifySubmissionStatus, resetProgressNotificationState, type RequestNotificationKind } from './notifications';
+import { progressBeforeLatestCompletion, recordAdminProgressEvent } from './progress-ledger';
 import { normalizeQueuePositions } from './queue';
 import { notifySubmissionFollowers, type FollowLifecycleKind } from './title-following';
 import type { SubmissionRow } from './domain';
@@ -202,6 +203,7 @@ export async function applyAdminSubmissionAction(
       if (changed) await resetProgressNotificationState(env, submissionId, restored.currentChapter);
       auditMeta = {
         restored_current_chapter: restored.currentChapter,
+        restored_from_ledger: restored.fromLedger,
         restored_from_audit: restored.fromAudit,
       };
       break;
@@ -259,6 +261,14 @@ export async function applyAdminSubmissionAction(
   if (!after) throw new AdminStateError('not_found', 'Request disappeared after the update.', 500);
 
   await writeAudit(env, options.adminUserId, action, submissionId, before, after, auditMeta);
+  await recordAdminProgressEvent(env, before, after, action, options.adminUserId, auditMeta).catch((error) => {
+    console.error(JSON.stringify({
+      event: 'progress_ledger_admin_record_failed',
+      submission_id: submissionId,
+      action,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    }));
+  });
 
   if (notification) {
     await notifySubmissionStatus(env, telegram, submissionId, notification);
@@ -323,7 +333,22 @@ async function previousProgressBeforeCompletion(
   env: Env,
   submissionId: number,
   chapterCount: number,
-): Promise<{ currentChapter: number | null; progressUpdatedAt: string | null; fromAudit: boolean }> {
+): Promise<{
+  currentChapter: number | null;
+  progressUpdatedAt: string | null;
+  fromAudit: boolean;
+  fromLedger: boolean;
+}> {
+  const ledger = await progressBeforeLatestCompletion(env, submissionId, chapterCount).catch(() => null);
+  if (ledger) {
+    return {
+      currentChapter: ledger.currentChapter,
+      progressUpdatedAt: ledger.progressUpdatedAt,
+      fromAudit: false,
+      fromLedger: true,
+    };
+  }
+
   const row = await env.DB.prepare(`
     SELECT details
     FROM admin_audit_log
@@ -334,7 +359,9 @@ async function previousProgressBeforeCompletion(
     LIMIT 1
   `).bind(String(submissionId)).first<{ details: string | null }>();
 
-  if (!row?.details) return { currentChapter: null, progressUpdatedAt: null, fromAudit: false };
+  if (!row?.details) {
+    return { currentChapter: null, progressUpdatedAt: null, fromAudit: false, fromLedger: false };
+  }
 
   try {
     const parsed = JSON.parse(row.details) as {
@@ -350,9 +377,9 @@ async function previousProgressBeforeCompletion(
     const progressUpdatedAt = typeof parsed.before?.progress_updated_at === 'string'
       ? parsed.before.progress_updated_at
       : null;
-    return { currentChapter: validChapter, progressUpdatedAt, fromAudit: true };
+    return { currentChapter: validChapter, progressUpdatedAt, fromAudit: true, fromLedger: false };
   } catch {
-    return { currentChapter: null, progressUpdatedAt: null, fromAudit: false };
+    return { currentChapter: null, progressUpdatedAt: null, fromAudit: false, fromLedger: false };
   }
 }
 
