@@ -21,7 +21,7 @@
         if (button.querySelector(':scope > .circle-language-flag')) return;
         const img = document.createElement('img');
         img.className = 'circle-language-flag language-picker-circle-flag';
-        img.src = `/app/flags/${meta.country}.svg`;
+        img.src = `/app/flags/${meta.country}.svg?v=20260812a`;
         img.alt = '';
         img.decoding = 'async';
         img.loading = 'lazy';
