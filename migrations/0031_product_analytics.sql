@@ -30,3 +30,9 @@ CREATE INDEX IF NOT EXISTS idx_product_events_created
 CREATE INDEX IF NOT EXISTS idx_product_events_query_created
   ON product_events(query_text, created_at DESC)
   WHERE query_text IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS product_analytics_state (
+  state_key TEXT PRIMARY KEY,
+  state_value TEXT,
+  updated_at TEXT NOT NULL
+);
