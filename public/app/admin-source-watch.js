@@ -195,11 +195,20 @@
     return [row.last_success_at, row.last_error, row.last_remote_chapter_count, row.last_remote_publication_status, row.attention_count, row.attention_field, row.attention_old_value, row.attention_new_value].join('|');
   }
 
+  function sourceStatusLabel(status) {
+    if (status === 'completed') return 'завершён';
+    if (status === 'ongoing') return 'онгоинг';
+    if (status === 'paused') return 'пауза';
+    if (status === 'discontinued') return 'прекращён';
+    return '';
+  }
+
   function remoteSummary(row) {
     const chapters = Number(row.last_remote_chapter_count || 0);
-    const status = row.last_remote_publication_status === 'completed' ? 'завершён' : row.last_remote_publication_status === 'ongoing' ? 'онгоинг' : '';
+    const status = sourceStatusLabel(row.last_remote_publication_status);
     if (chapters && status) return `Источник: ${chapters} глав · ${status}`;
     if (chapters) return `Источник: ${chapters} глав`;
+    if (status) return `Источник: ${status}`;
     return `NovelPia #${row.external_id}`;
   }
 
