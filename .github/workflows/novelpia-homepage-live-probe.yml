@@ -17,28 +17,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Probe main_v2 curation variants
+      - name: Verify direct homepage curation payload
         shell: bash
         run: |
           node <<'NODE'
-          const origin='https://novelpia.com';
-          const headers={accept:'application/json,text/plain,*/*','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'Mozilla/5.0 DollarTL-LiveProbe/4.0','x-requested-with':'XMLHttpRequest'};
-          const variants=[];
-          for(const cmd of ['basic_curation','new_novel_curation']){
-            for(const main_group of ['', '68','70']){
-              for(const novel_category of ['entry','complete'])variants.push({cmd,main_group,novel_category});
+          const u=new URL('https://novelpia.com/proc/main_v2');
+          u.searchParams.set('cmd','new_novel_curation');
+          u.searchParams.set('novel_category','entry');
+          const r=await fetch(u,{headers:{accept:'application/json,text/plain,*/*','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'Mozilla/5.0 DollarTL-LiveProbe/5.0','x-requested-with':'XMLHttpRequest'},redirect:'follow'});
+          const raw=await r.text();const data=JSON.parse(raw);const list=Array.isArray(data.list)?data.list:[];
+          console.log('HTTP',r.status,'API_STATUS',data.status,'LIST',list.length);
+          console.log('FIRST_KEYS',Object.keys(list[0]||{}));
+          console.log('FIRST_ROW',JSON.stringify(list[0]||{}));
+          console.log('ROWS',list.map((x,i)=>({rank:i+1,novel_no:x.novel_no,novel_name:x.novel_name,writer_nick:x.writer_nick,link_url:x.link_url})));
+          if(r.status!==200||Number(data.status)!==200)throw new Error('main_v2 did not return status 200');
+          if(list.length!==7)throw new Error(`Expected 7 homepage Fresh rows, got ${list.length}`);
+          for(const [i,x] of list.entries()){
+            const id=String(x.novel_no||'').trim();const link=String(x.link_url||'').trim();
+            if(!/^\d{2,9}$/.test(id)||link!==`/novel/${id}`||!String(x.novel_name||'').trim()||!String(x.writer_nick||'').trim()){
+              throw new Error(`Invalid canonical homepage row ${i+1}: ${JSON.stringify(x)}`);
             }
-          }
-          for(const v of variants){
-            const u=new URL('/proc/main_v2',origin);
-            u.searchParams.set('cmd',v.cmd);
-            if(v.main_group)u.searchParams.set('main_group',v.main_group);
-            u.searchParams.set('novel_category',v.novel_category);
-            try{
-              const r=await fetch(u,{headers,redirect:'follow'});const raw=await r.text();
-              let data=null;try{data=JSON.parse(raw);}catch{}
-              const conf=data?.conf||{};const list=Array.isArray(data?.list)?data.list:[];
-              console.log('VARIANT',JSON.stringify(v),'HTTP',r.status,'API_STATUS',data?.status,'SUB',conf.sub_title,'TITLE',conf.title,'IDX',conf.idx,'LIST',list.length,'FIRST',list.slice(0,3).map(x=>({novel_no:x.novel_no,novel_name:x.novel_name,writer_nick:x.writer_nick,link_url:x.link_url})),'RAW_HEAD',data?undefined:raw.slice(0,240));
-            }catch(e){console.log('ERROR',JSON.stringify(v),String(e));}
           }
           NODE
