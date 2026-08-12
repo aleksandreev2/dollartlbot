@@ -16,7 +16,7 @@
   },
   "vars": {
     "BOOSTY_SUBSCRIPTION_URL": "https://boosty.to/domnekromanta/purchase/4041120?ssource=DIRECT&share=subscription_link",
-    "MINI_APP_URL": "https://dollartlbot.sashahumortele2.workers.dev/app/?build=20260812-pubfix3",
+    "MINI_APP_URL": "https://dollartlbot.sashahumortele2.workers.dev/app/?build=20260812-broadcast1",
     "BOT_USERNAME": "dollartlbot"
   },
   "secrets": {

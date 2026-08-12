@@ -2,6 +2,7 @@ import { handleAccessAdminRequest } from './access-admin';
 import { handleAccessChatMemberUpdate, runAccessGateMaintenance } from './access-gate';
 import { handleAdminActionV2 } from './admin-actions-v2';
 import { handleAdminAnalyticsRequest } from './admin-analytics';
+import { handleAdminBroadcastAutomationRequest, runBroadcastAutomations } from './broadcast-automation';
 import { handleAdminBroadcastRequest } from './admin-broadcasts';
 import { handleAdminEventsRequest } from './admin-events-api';
 import { handleAdminHealthRequest } from './admin-health';
@@ -109,6 +110,8 @@ export default {
     }
     const accessAdminResponse = await handleAccessAdminRequest(request, env, apiTelegram);
     if (accessAdminResponse) return accessAdminResponse;
+    const adminBroadcastAutomationResponse = await handleAdminBroadcastAutomationRequest(request, env);
+    if (adminBroadcastAutomationResponse) return adminBroadcastAutomationResponse;
     const adminBroadcastResponse = await handleAdminBroadcastRequest(request, env, apiTelegram, ctx);
     if (adminBroadcastResponse) return adminBroadcastResponse;
     const adminEventsResponse = await handleAdminEventsRequest(request, env, apiTelegram);
@@ -235,6 +238,11 @@ export default {
     await runScheduledTask('admin_event_maintenance', () => runAdminEventMaintenance(env, telegram));
     await runScheduledTask('notification_maintenance', () => runNotificationMaintenance(env, telegram));
     await runScheduledTask('title_following_maintenance', () => runTitleFollowingMaintenance(env, telegram));
+
+    if (scheduledAt.getUTCHours() === 10 && scheduledAt.getUTCMinutes() === 0) {
+      await runScheduledTask('broadcast_automation', () => runBroadcastAutomations(env, scheduledAt));
+    }
+
     await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenanceWithLease(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
 
