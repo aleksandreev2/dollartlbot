@@ -86,7 +86,7 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
   const zeroResultEvents=Number(eventMap.discover_zero_result?.events||0);
   const suggestStarted=Number(eventMap.suggest_started?.users||0);
   const suggestAbandoned=Number(eventMap.suggest_abandoned?.users||0);
-  const requestUsers=Number(productFunnel?.request_users||0);
+  const suggestSubmitted=Number(eventMap.request_submitted?.users||0);
 
   return miniAppJson({
     days,
@@ -116,8 +116,8 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
       suggest:{
         started_users:suggestStarted,
         abandoned_users:suggestAbandoned,
-        submitted_users:requestUsers,
-        completion_rate:suggestStarted?Math.round((Math.min(suggestStarted,requestUsers)/suggestStarted)*1000)/10:0,
+        submitted_users:suggestSubmitted,
+        completion_rate:suggestStarted?Math.round((Math.min(suggestStarted,suggestSubmitted)/suggestStarted)*1000)/10:0,
         steps:suggestSteps.results,
       },
     },
