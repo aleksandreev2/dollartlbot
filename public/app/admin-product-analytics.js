@@ -43,25 +43,25 @@
     const tracking=p.tracking_since?formatDate(p.tracking_since):'после первого события';
     return `
       <div class="product-analytics-head">
-        <div><span class="product-analytics-eyebrow">PRODUCT ANALYTICS</span><h2>Поведение и конверсия</h2><p>Поиск → открытие → интерес → заявка. Поведенческие события собираются с ${esc(tracking)}; реальные заявки, demand и follows считаются из основных таблиц.</p></div>
+        <div><span class="product-analytics-eyebrow">PRODUCT ANALYTICS</span><h2>Поведение и конверсия</h2><p>Поиск → открытие → интерес → заявка. Поведенческая воронка собирается с ${esc(tracking)}; реальные заявки и текущее состояние demand/follows считаются из основных таблиц.</p></div>
         <span class="product-analytics-period">${days} дней</span>
       </div>
       <div class="product-analytics-kpis">
         ${kpi('search',fmt(p.searches),'Поисков')}
         ${kpi('circle-off',`${fmt(p.zero_result_rate)}%`,'Zero-result')}
-        ${kpi('heart',fmt(Number(funnel.demand_adds||0)+Number(funnel.follow_adds||0)),'Intent actions')}
+        ${kpi('heart',fmt(Number(p.interest_adds||0)+Number(p.follow_adds||0)),'Intent actions')}
         ${kpi('send',fmt(funnel.requests),'Реальных заявок')}
       </div>
       <div class="product-analytics-grid">
         <article class="product-analytics-card product-funnel-card">
-          <div class="product-card-head"><div><h3>Основная воронка</h3><p>Уникальные пользователи за выбранный период.</p></div><i data-lucide="route" aria-hidden="true"></i></div>
+          <div class="product-card-head"><div><h3>Основная воронка</h3><p>Уникальные пользователи, зафиксированные телеметрией за выбранный период.</p></div><i data-lucide="route" aria-hidden="true"></i></div>
           <div class="product-funnel">
             ${funnelRow('Поиск',funnel.search_users,null)}
             ${funnelRow('Открыли тайтл',funnel.open_users,funnel.search_users)}
             ${funnelRow('Demand / Follow',funnel.intent_users,funnel.open_users)}
-            ${funnelRow('Отправили заявку',funnel.request_users,funnel.intent_users,true)}
+            ${funnelRow('Отправили заявку',funnel.request_users,funnel.intent_users)}
           </div>
-          <div class="product-hard-split"><span>Demand +${fmt(funnel.demand_adds)}</span><span>Follow +${fmt(funnel.follow_adds)}</span><span>Duplicate intercept ${fmt(p.duplicates_intercepted)}</span></div>
+          <div class="product-hard-split"><span>Active demand +${fmt(funnel.demand_adds)}</span><span>Active follows +${fmt(funnel.follow_adds)}</span><span>Duplicate intercept ${fmt(p.duplicates_intercepted)}</span></div>
         </article>
         <article class="product-analytics-card product-suggest-card">
           <div class="product-card-head"><div><h3>Suggest drop-off</h3><p>Где пользователь прекращает заполнение.</p></div><i data-lucide="list-checks" aria-hidden="true"></i></div>
@@ -87,10 +87,10 @@
       </div>`;
   }
 
-  function funnelRow(label,value,previous,hard=false){
+  function funnelRow(label,value,previous){
     const n=Number(value||0),prev=Number(previous||0);
     const conversion=prev>0&&n<=prev?`${Math.round((n/prev)*1000)/10}%`:'—';
-    return `<div class="product-funnel-row${hard?' hard':''}"><div><strong>${esc(label)}</strong><span>${prev?`${conversion} от предыдущего шага`:hard?'hard conversion':'telemetry'}</span></div><b>${fmt(n)}</b></div>`;
+    return `<div class="product-funnel-row"><div><strong>${esc(label)}</strong><span>${prev?`${conversion} от предыдущего шага`:'telemetry'}</span></div><b>${fmt(n)}</b></div>`;
   }
 
   function renderSuggestSteps(rows){
