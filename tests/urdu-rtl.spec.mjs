@@ -26,7 +26,7 @@ const shell = `<!doctype html>
   <div id="app" class="app-shell">
     <header class="topbar">
       <button class="brand"><span class="brand-copy"><strong>Dollar TL</strong></span></button>
-      <button class="icon-button" aria-label="Notifications">◉</button>
+      <button class="icon-button notification-button" aria-label="Notifications">◉</button>
     </header>
     <main class="view-root">
       <section class="page">
@@ -45,30 +45,33 @@ const shell = `<!doctype html>
         <div class="admin-card"><label>Internal admin field <input value="LTR admin value"></label></div>
       </section>
     </main>
-    <nav class="bottom-nav"><button>ہوم</button><button>قطار</button><button>اکкаунт</button></nav>
+    <nav class="bottom-nav"><button class="nav-item"><span>ہوم</span></button><button class="nav-item"><span>قطار</span></button><button class="nav-item"><span>اکاؤنٹ</span></button></nav>
   </div>
 </body>
 </html>`;
 
-async function boot(page) {
-  await page.setViewportSize({ width:390, height:844 });
+async function boot(page, width=390, height=844) {
+  await page.setViewportSize({ width, height });
   await page.setContent(shell);
   await page.addScriptTag({ content:runtime });
   await page.evaluate(() => window.DTL_RUNTIME.apply('ur', 'playwright-urdu-rtl'));
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
-test('Urdu Mini App uses RTL safely at 390px while admin stays LTR', async ({ page }) => {
-  await boot(page);
-
-  const state = await page.evaluate(() => {
+async function layoutState(page) {
+  return page.evaluate(() => {
     const html = document.documentElement;
     const bodyStyle = getComputedStyle(document.body);
+    const pageStyle = getComputedStyle(document.querySelector('.page'));
+    const topbarStyle = getComputedStyle(document.querySelector('.topbar'));
+    const brandStyle = getComputedStyle(document.querySelector('.brand'));
     const navStyle = getComputedStyle(document.querySelector('.bottom-nav'));
     const inputStyle = getComputedStyle(document.querySelector('.setting-row input'));
     const adminStyle = getComputedStyle(document.querySelector('.admin-v2'));
     const adminInputStyle = getComputedStyle(document.querySelector('.admin-v2 input'));
     const width = html.clientWidth;
+    const brandRect = document.querySelector('.brand').getBoundingClientRect();
+    const notificationRect = document.querySelector('.notification-button').getBoundingClientRect();
     const escaped = [...document.querySelectorAll('.app-shell,.topbar,.page,.premium-card,.settings-list,.setting-row,.novel-card,.button-row,.bottom-nav,.admin-v2')]
       .filter(el => {
         const style=getComputedStyle(el);
@@ -81,25 +84,49 @@ test('Urdu Mini App uses RTL safely at 390px while admin stays LTR', async ({ pa
       dir:html.dir,
       locale:html.dataset.locale,
       bodyDirection:bodyStyle.direction,
+      pageDirection:pageStyle.direction,
+      topbarDirection:topbarStyle.direction,
+      brandDirection:brandStyle.direction,
       navDirection:navStyle.direction,
       inputAlign:inputStyle.textAlign,
       adminDirection:adminStyle.direction,
       adminInputAlign:adminInputStyle.textAlign,
+      brandLeft:brandRect.left,
+      notificationLeft:notificationRect.left,
       overflow:html.scrollWidth-width,
       escaped,
     };
   });
+}
+
+test('Urdu content is RTL at 390px while structural chrome and admin stay LTR', async ({ page }) => {
+  await boot(page);
+  const state = await layoutState(page);
 
   expect(state.lang).toBe('ur');
   expect(state.dir).toBe('rtl');
   expect(state.locale).toBe('ur');
-  expect(state.bodyDirection).toBe('rtl');
-  expect(state.navDirection).toBe('rtl');
+  expect(state.bodyDirection).toBe('ltr');
+  expect(state.pageDirection).toBe('rtl');
+  expect(state.topbarDirection).toBe('ltr');
+  expect(state.brandDirection).toBe('ltr');
+  expect(state.navDirection).toBe('ltr');
   expect(state.inputAlign).toBe('right');
   expect(state.adminDirection).toBe('ltr');
   expect(state.adminInputAlign).toBe('left');
   expect(state.overflow, '390px Urdu page has horizontal overflow').toBeLessThanOrEqual(1);
   expect(state.escaped, 'RTL containers escape the 390px viewport').toEqual([]);
+});
+
+test('Urdu desktop keeps Dollar TL chrome in its normal physical positions', async ({ page }) => {
+  await boot(page, 1440, 900);
+  const state = await layoutState(page);
+  expect(state.pageDirection).toBe('rtl');
+  expect(state.topbarDirection).toBe('ltr');
+  expect(state.navDirection).toBe('ltr');
+  expect(state.brandLeft).toBeLessThan(state.notificationLeft);
+  expect(state.overflow, '1440px Urdu desktop has horizontal overflow').toBeLessThanOrEqual(1);
+  expect(state.escaped, 'Urdu desktop containers escape the viewport').toEqual([]);
 });
 
 test('switching away from Urdu restores LTR document direction', async ({ page }) => {
@@ -109,7 +136,10 @@ test('switching away from Urdu restores LTR document direction', async ({ page }
   await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('en');
 });
 
-test('Urdu is exposed in the language picker with the Pakistan flag', async ({ page }) => {
+test('Urdu is exposed in the language picker with a real Pakistan flag asset', async ({ page }) => {
+  expect(fs.existsSync(new URL('../public/app/flags/pk.svg', import.meta.url))).toBe(true);
+  expect(read('public/app/flags/pk.svg')).toContain('#01411c');
+
   await page.setContent('<div id="app"><div id="sheetRoot"></div></div>');
   await page.addScriptTag({ content:runtime });
   await page.evaluate(() => {
@@ -129,5 +159,5 @@ test('Urdu is exposed in the language picker with the Pakistan flag', async ({ p
     document.dispatchEvent(new CustomEvent('dtl:sheetopen', { detail:{ root } }));
     return root.querySelector('[data-lang="ur"] > .language-picker-circle-flag')?.getAttribute('src') || null;
   });
-  expect(flagSrc).toBe('/app/flags/pk.svg');
+  expect(flagSrc).toBe('/app/flags/pk.svg?v=20260812a');
 });
