@@ -4,9 +4,13 @@ const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'ut
 const migration = read('migrations/0030_source_watch_progress_ledger.sql');
 const ledger = read('src/progress-ledger.ts');
 const watch = read('src/source-watch.ts');
+const review = read('src/source-watch-review.ts');
 const state = read('src/admin-state.ts');
 const range = read('src/publication-release-range.ts');
 const index = read('src/index.ts');
+const ui = read('public/app/admin-source-watch.js');
+const css = read('public/app/admin-source-watch.css');
+const html = read('public/app/index.html');
 
 function need(source, token, label) {
   if (!source.includes(token)) throw new Error(`${label}: missing ${token}`);
@@ -21,6 +25,9 @@ for (const token of [
   'CREATE TABLE IF NOT EXISTS submission_source_events',
   "'auto_applied'",
   "'review_required'",
+  'reviewed_at TEXT',
+  'reviewed_by INTEGER',
+  'idx_submission_source_events_unreviewed',
   "'baseline'",
   "p.status='published'",
 ]) need(migration, token, '0030 migration');
@@ -79,6 +86,16 @@ if (/nextChapterCount\s*=\s*observed\.chapterCount/.test(watch)) {
 }
 
 for (const token of [
+  'handleSourceWatchReviewRequest',
+  '/api/app/admin/source-watch/status',
+  '/api/app/admin/source-watch/acknowledge',
+  "e.action='review_required' AND e.reviewed_at IS NULL",
+  'SET reviewed_at=?,reviewed_by=?',
+  "'source_watch_acknowledged'",
+  'reviewed_events: count',
+]) need(review, token, 'source watch review lifecycle');
+
+for (const token of [
   "import { progressBeforeLatestCompletion, recordAdminProgressEvent } from './progress-ledger';",
   'await recordAdminProgressEvent',
   'restored_from_ledger',
@@ -93,6 +110,7 @@ for (const token of [
 
 for (const token of [
   "handleProgressLedgerRequest(request, env)",
+  "handleSourceWatchReviewRequest(request, env)",
   "handleSourceWatchRequest(request, env)",
   "syncPublishedReleaseProgress(env, publicationId)",
   "event: 'publication_progress_sync_failed'",
@@ -106,5 +124,34 @@ const rawAt = index.indexOf("runScheduledTask('raw_fucknovelpia_enrichment'");
 if (watchAt < 0 || rawAt < 0 || watchAt > rawAt) {
   throw new Error('hourly NovelPia source watch must run before the minute-0 RAW enrichment pass');
 }
+
+for (const token of [
+  'runtime?.registerPatcher',
+  'runtime?.registerResponseHandler',
+  '/api/app/admin/source-watch/status',
+  '/api/app/admin/source-watch/acknowledge',
+  '/api/app/admin/source-watch/refresh',
+  "route() === 'section:queue'",
+  "route() === 'health:1'",
+  'data-source-watch-inline',
+  'data-source-watch-health',
+  'data-source-watch-attention',
+  'Проверить источники сейчас',
+  'Проверено',
+  'window.DTL_ADMIN_SOURCE_WATCH',
+]) need(ui, token, 'source watch admin UI');
+if (ui.includes('new MutationObserver')) throw new Error('source watch admin UI must not own a MutationObserver');
+for (const token of [
+  '.admin-source-watch-detail',
+  '.admin-source-watch-queue-status',
+  '.ops-source-watch-card',
+  '.ops-source-watch-row',
+  '@media(max-width:720px)',
+]) need(css, token, 'source watch admin CSS');
+for (const token of [
+  '/app/admin-source-watch.css?v=20260812-source1',
+  '/app/admin-source-watch.js?v=20260812-source1',
+]) need(html, token, 'source watch assets');
+new Function(ui);
 
 console.log('Source watch + progress ledger safety audit passed.');
