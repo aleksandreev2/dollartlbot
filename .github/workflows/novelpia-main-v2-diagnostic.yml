@@ -1,0 +1,75 @@
+name: NovelPia main_v2 diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/novelpia-main-v2-diagnostic.yml'
+      - 'src/novelpia-homepage-fresh.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compare current NovelPia response profiles
+        shell: bash
+        run: |
+          node <<'NODE'
+          const endpoint='https://novelpia.com/proc/main_v2?cmd=new_novel_curation&novel_category=entry';
+          const profiles=[
+            ['historical_probe',{
+              accept:'application/json,text/plain,*/*',
+              'accept-language':'ko-KR,ko;q=0.9,en;q=0.6',
+              'user-agent':'Mozilla/5.0 DollarTL-LiveProbe/5.0',
+              'x-requested-with':'XMLHttpRequest',
+            }],
+            ['production_browser',{
+              accept:'application/json,text/plain,*/*',
+              'accept-language':'ko-KR,ko;q=0.9,en;q=0.6',
+              referer:'https://novelpia.com/',
+              'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+              'x-requested-with':'XMLHttpRequest',
+              'sec-fetch-site':'same-origin',
+              'sec-fetch-mode':'cors',
+              'sec-fetch-dest':'empty',
+            }],
+            ['production_minimal',{
+              accept:'application/json,text/plain,*/*',
+              'accept-language':'ko-KR,ko;q=0.9,en;q=0.6',
+              referer:'https://novelpia.com/',
+              'user-agent':'DollarTL-HomepageFresh/5.0',
+              'x-requested-with':'XMLHttpRequest',
+            }],
+            ['plain_browser',{
+              accept:'application/json,text/plain,*/*',
+              'accept-language':'ko-KR,ko;q=0.9,en;q=0.6',
+              'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+              'x-requested-with':'XMLHttpRequest',
+            }],
+          ];
+          const safeHead=raw=>raw.slice(0,240).replace(/[\r\n\t]+/g,' ').replace(/[\u0000-\u001f\u007f]/g,'?');
+          for(const [name,headers] of profiles){
+            try{
+              const r=await fetch(endpoint,{headers,redirect:'follow'});
+              const raw=await r.text();
+              let data=null,parseError=null;
+              try{data=JSON.parse(raw);}catch(e){parseError=String(e);}
+              console.log('PROFILE',name);
+              console.log('HTTP',r.status,'FINAL',r.url);
+              console.log('CONTENT_TYPE',r.headers.get('content-type'));
+              console.log('CONTENT_LENGTH',r.headers.get('content-length'),'BODY_CHARS',raw.length);
+              console.log('PARSED',Boolean(data),'API_STATUS',data?.status,'LIST',Array.isArray(data?.list)?data.list.length:null);
+              console.log('FIRST_CODEPOINTS',[...raw.slice(0,8)].map(c=>c.codePointAt(0)));
+              console.log('PARSE_ERROR',parseError);
+              console.log('RAW_HEAD',JSON.stringify(safeHead(raw)));
+            }catch(e){
+              console.log('PROFILE',name,'FETCH_ERROR',String(e));
+            }
+          }
+          NODE
