@@ -42,17 +42,9 @@ CREATE TABLE IF NOT EXISTS submission_raw_history (
 CREATE INDEX IF NOT EXISTS idx_submission_raw_history_request
   ON submission_raw_history(submission_id, id DESC);
 
--- D1 batches execute all statements even when an UPDATE matched zero rows. If a
--- pending request is rejected while its replacement RAW is still uploading,
--- the history INSERT can therefore run after the guarded UPDATE did nothing.
--- Keep history truthful at the database boundary: a replacement record only
--- survives when its new Telegram file is actually the active RAW on the request.
-CREATE TRIGGER IF NOT EXISTS trg_submission_raw_history_active_replace
-AFTER INSERT ON submission_raw_history
-WHEN NOT EXISTS (
-  SELECT 1 FROM submissions
-  WHERE id = NEW.submission_id AND raw_file_id = NEW.new_file_id
-)
-BEGIN
-  DELETE FROM submission_raw_history WHERE id = NEW.id;
-END;
+-- IMPORTANT: keep D1 migration files to top-level statements only.
+-- Remote D1 migration execution can split CREATE TRIGGER ... BEGIN ... END bodies
+-- differently from the local workerd path and surface SQLITE_ERROR: incomplete input.
+-- RAW-history truthfulness is therefore enforced in the Worker by a conditional
+-- INSERT that only records a replacement when the uploaded Telegram file is still
+-- the active RAW on the pending request.

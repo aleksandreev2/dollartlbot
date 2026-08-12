@@ -22,10 +22,9 @@ for(const token of [
   'withdrawn_at TEXT',
   'CREATE TABLE IF NOT EXISTS submission_conversation',
   'CREATE TABLE IF NOT EXISTS submission_raw_history',
-  'CREATE TRIGGER IF NOT EXISTS trg_submission_raw_history_active_replace',
-  'raw_file_id = NEW.new_file_id',
-  'DELETE FROM submission_raw_history WHERE id = NEW.id',
+  'Remote D1 migration execution can split CREATE TRIGGER',
 ])need(migration,token,'migration');
+if(/^\s*CREATE\s+TRIGGER\b/im.test(migration))throw new Error('0029 must not contain a CREATE TRIGGER statement; remote D1 migration parsing can split trigger bodies');
 
 for(const token of [
   'const userMatch =',
@@ -41,6 +40,11 @@ for(const token of [
   'MINI_APP_MAX_UPLOAD_BYTES',
   'sendDocumentUpload',
   'INSERT INTO submission_raw_history',
+  'WHERE EXISTS (',
+  "status='pending' AND withdrawn_at IS NULL",
+  'AND raw_file_id=?',
+  'Number(results[1]?.meta?.changes ?? 0) !== 1',
+  'request_raw_history_guard_failed',
   "review_state='needs_info'",
   "'user_replied'",
   'sendUserNotification',
