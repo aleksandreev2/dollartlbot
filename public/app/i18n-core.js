@@ -1,13 +1,13 @@
 (() => {
-  const supported = new Set(['en','es','fil','hi','pt','id','vi','fr','de','ru']);
+  const supported = new Set(['en','es','fil','hi','pt','id','vi','fr','de','ru','ur']);
   const storageKey = 'dtl_locale';
   const patchers = new Set();
   const responseHandlers = new Set();
   const fetchMiddlewares = new Set();
-  const requestWords = {en:'Request',ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage'};
-  const requestPattern = /(?:Request|Заявка|Solicitud|Kahilingan|अनुरोध|Pedido|Permintaan|Yêu cầu|Demande|Anfrage)\s+#(\d+)/giu;
-  const positionPattern = /(?:Position|Позиция|Posición|Puwesto|स्थान|Posição|Posisi|Vị trí|Anfrageposition)\s+#(\d+)/giu;
-  const chapterPattern = /(\d+)\s+(?:chapters?|глав(?:а|ы)?|capítulos?|kabanata|अध्याय|bab|chương|chapitres?|Kapitel)/giu;
+  const requestWords = {en:'Request',ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage',ur:'درخواست'};
+  const requestPattern = /(?:Request|Заявка|Solicitud|Kahilingan|अनुरोध|Pedido|Permintaan|Yêu cầu|Demande|Anfrage|درخواست)\s+#(\d+)/giu;
+  const positionPattern = /(?:Position|Позиция|Posición|Puwesto|स्थान|Posição|Posisi|Vị trí|Anfrageposition|پوزیشن|مقام)\s+#(\d+)/giu;
+  const chapterPattern = /(\d+)\s+(?:chapters?|глав(?:а|ы)?|capítulos?|kabanata|अध्याय|bab|chương|chapitres?|Kapitel|ابواب|باب)/giu;
   let catalog = null;
   let raf = 0;
 
@@ -58,7 +58,7 @@
       } catch {}
     }
     const short = raw.toLowerCase().replace(/[^a-z]/g, '');
-    const aliases = {ko:'ko',kr:'ko',ja:'ja',jp:'ja',zh:'zh',cn:'zh',en:'en',gb:'en',ru:'ru',es:'es',pt:'pt',id:'id',vi:'vi',fr:'fr',de:'de',hi:'hi',fil:'fil',tl:'fil'};
+    const aliases = {ko:'ko',kr:'ko',ja:'ja',jp:'ja',zh:'zh',cn:'zh',en:'en',gb:'en',ru:'ru',es:'es',pt:'pt',id:'id',vi:'vi',fr:'fr',de:'de',hi:'hi',fil:'fil',tl:'fil',ur:'ur',pk:'ur'};
     return aliases[short] || null;
   }
 
@@ -129,6 +129,8 @@
     const previous = locale();
     window.__DTL_LOCALE__ = next;
     document.documentElement.lang = next;
+    document.documentElement.dir = next === 'ur' ? 'rtl' : 'ltr';
+    document.documentElement.dataset.locale = next;
     try { localStorage.setItem(storageKey, next); } catch {}
     if (previous !== next) {
       document.dispatchEvent(new CustomEvent('dtl:localechange', { detail: { locale: next, previous, source } }));
