@@ -54,18 +54,14 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
     env.DB.prepare(`SELECT
       (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name='discover_search' AND created_at>=?) AS search_users,
       (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name IN ('title_open','catalog_open') AND created_at>=?) AS open_users,
-      (SELECT COUNT(DISTINCT user_id) FROM (
-        SELECT user_id FROM discovery_interests WHERE created_at>=?
-        UNION SELECT user_id FROM discovery_catalog_interests WHERE created_at>=?
-        UNION SELECT user_id FROM title_follows WHERE created_at>=?
-      )) AS intent_users,
-      (SELECT COUNT(DISTINCT user_id) FROM submissions WHERE created_at>=?) AS request_users,
+      (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name IN ('interest_add','follow_add') AND created_at>=?) AS intent_users,
+      (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name='request_submitted' AND created_at>=?) AS request_users,
       (SELECT COUNT(*) FROM submissions WHERE created_at>=?) AS requests,
       (SELECT COUNT(*) FROM discovery_interests WHERE created_at>=?) +
         (SELECT COUNT(*) FROM discovery_catalog_interests WHERE created_at>=?) AS demand_adds,
       (SELECT COUNT(*) FROM title_follows WHERE created_at>=?) AS follow_adds
     `).bind(
-      sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,
+      sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,
     ).first<Record<string,number>>(),
     env.DB.prepare(`SELECT query_text,COUNT(*) AS count,COUNT(DISTINCT user_id) AS users,MAX(created_at) AS last_seen
       FROM product_events
@@ -107,6 +103,8 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
       zero_result_rate:searches?Math.round((zeroResultEvents/searches)*1000)/10:0,
       title_opens:Number(eventMap.title_open?.events||0)+Number(eventMap.catalog_open?.events||0),
       raw_opens:Number(eventMap.raw_open?.events||0),
+      interest_adds:Number(eventMap.interest_add?.events||0),
+      follow_adds:Number(eventMap.follow_add?.events||0),
       duplicates_intercepted:Number(eventMap.duplicate_intercepted?.events||0),
       shares:Number(eventMap.share_title?.events||0),
       release_opens:Number(eventMap.release_open?.events||0),
