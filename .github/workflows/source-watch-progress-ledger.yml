@@ -1,0 +1,46 @@
+name: Source Watch & Progress Ledger
+
+on:
+  pull_request:
+    paths:
+      - 'src/source-watch.ts'
+      - 'src/progress-ledger.ts'
+      - 'src/admin-state.ts'
+      - 'src/publication-release-range.ts'
+      - 'src/index.ts'
+      - 'migrations/0030_source_watch_progress_ledger.sql'
+      - 'scripts/audit-source-watch-progress-ledger.mjs'
+      - '.github/workflows/source-watch-progress-ledger.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/source-watch.ts'
+      - 'src/progress-ledger.ts'
+      - 'src/admin-state.ts'
+      - 'src/publication-release-range.ts'
+      - 'src/index.ts'
+      - 'migrations/0030_source_watch_progress_ledger.sql'
+      - 'scripts/audit-source-watch-progress-ledger.mjs'
+      - '.github/workflows/source-watch-progress-ledger.yml'
+
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run prepare:vendor
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Source watch / progress audit
+        run: node scripts/audit-source-watch-progress-ledger.mjs
+      - name: Validate full D1 migration chain
+        run: npx wrangler d1 migrations apply DB --local
+      - name: Verify core files
+        run: |
+          test -f migrations/0030_source_watch_progress_ledger.sql
+          test -f src/source-watch.ts
+          test -f src/progress-ledger.ts
