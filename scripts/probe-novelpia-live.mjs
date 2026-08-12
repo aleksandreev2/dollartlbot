@@ -1,7 +1,7 @@
 const sources = [
-  ['plus_new', 'https://novelpia.com/plus/entry/date?main_genre='],
-  ['free_new', 'https://novelpia.com/freestory/new/date/1?main_genre='],
-  ['new_rank', 'https://novelpia.com/top100/plus/today/view/all/all?main_genre='],
+  ['plus_new', 'https://novelpia.com/plus/entry/date?main_genre=', 48],
+  ['free_new', 'https://novelpia.com/freestory/new/date/1?main_genre=', 40],
+  ['new_rank', 'https://novelpia.com/top100/plus/today/view/all/all?main_genre=', 50],
 ];
 
 const headers = {
@@ -17,6 +17,28 @@ function collect(html, pattern) {
     if (id && !out.includes(id)) out.push(id);
   }
   return out;
+}
+
+function exactExtractNovelIds(html, limit) {
+  const positions = new Map();
+  const patterns = [
+    /(?:https?:\/\/(?:www\.)?novelpia\.com)?\/novel\/(\d{2,9})/gi,
+    /(?:novel_no|novelNo)["']?\s*[:=]\s*["']?(\d{2,9})/gi,
+    /_(\d{2,9})_(?:ori|thumb|cover)\b/gi,
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(html))) {
+      const id = match[1];
+      const prior = positions.get(id);
+      if (prior == null || match.index < prior) positions.set(id, match.index);
+      if (positions.size >= limit * 4) break;
+    }
+  }
+  return [...positions.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([id]) => id)
+    .slice(0, limit);
 }
 
 function meta(html, property) {
@@ -37,53 +59,47 @@ async function get(url) {
   return { response, text };
 }
 
-for (const [name, url] of sources) {
+for (const [name, url, limit] of sources) {
   console.log(`\n=== ${name} ===`);
   try {
     const { response, text } = await get(url);
     console.log(JSON.stringify({ status: response.status, final_url: response.url, content_type: response.headers.get('content-type'), bytes: text.length }));
 
     const pathIds = collect(text, /(?:https?:\/\/(?:www\.)?novelpia\.com)?\/novel\/(\d{2,9})/gi);
-    const fieldIds = collect(text, /(?:novel_no|novelNo)["']?\s*[:=]\s*["']?(\d{2,9})/gi);
     const coverIds = collect(text, /_(\d{2,9})_(?:ori|thumb|cover)\b/gi);
-    const onclickIds = collect(text, /(?:novel_view|goNovel|novelView|location\.href)[^\n]{0,180}?(\d{2,9})/gi);
+    const exact = exactExtractNovelIds(text.slice(0, 3_000_000), limit);
+    const strongSet = new Set(pathIds);
+    const exactStrong = exact.filter(id => strongSet.has(id));
+    const exactCoverOnly = exact.filter(id => !strongSet.has(id) && coverIds.includes(id));
 
     console.log(JSON.stringify({
       path_count: pathIds.length,
-      field_count: fieldIds.length,
-      onclick_count: onclickIds.length,
       cover_count: coverIds.length,
-      path_first: pathIds.slice(0, 12),
-      field_first: fieldIds.slice(0, 12),
-      onclick_first: onclickIds.slice(0, 12),
-      cover_first: coverIds.slice(0, 12),
+      exact_count: exact.length,
+      exact_strong_count: exactStrong.length,
+      exact_cover_only_count: exactCoverOnly.length,
+      exact_first_24: exact.slice(0, 24),
+      exact_cover_only_first: exactCoverOnly.slice(0, 12),
     }, null, 2));
 
-    const candidates = [...new Set([...pathIds, ...fieldIds, ...onclickIds])].slice(0, 5);
-    if (!candidates.length) {
-      console.log('NO STRONG IDS; probing first two cover ids to prove whether cover ids are novel ids');
-      candidates.push(...coverIds.slice(0, 2));
-    }
-
-    for (const id of candidates) {
+    let validDetail = 0;
+    let invalidDetail = 0;
+    for (const id of exact.slice(0, 24)) {
       try {
         const detail = await get(`https://novelpia.com/novel/${id}`);
-        const body = detail.text.replace(/\s+/g, ' ');
-        const chapter = /([\d,]{1,8})\s*회차/u.exec(body)?.[1] ?? null;
-        console.log(JSON.stringify({
-          id,
-          detail_status: detail.response.status,
-          detail_final_url: detail.response.url,
-          detail_bytes: detail.text.length,
-          og_url: meta(detail.text, 'og:url'),
-          og_title: meta(detail.text, 'og:title'),
-          chapter,
-          has_login_redirect_copy: /로그인|login/i.test(body.slice(0, 12000)),
-        }));
+        const ogUrl = meta(detail.text, 'og:url');
+        const ogTitle = meta(detail.text, 'og:title');
+        const canonicalId = /novelpia\.com\/novel\/(\d{2,9})/i.exec(ogUrl || '')?.[1] || id;
+        const titleOk = Boolean(ogTitle && !/^novelpia\s*#?\d+$/i.test(ogTitle));
+        const ok = detail.response.status === 200 && canonicalId === id && titleOk;
+        if (ok) validDetail += 1; else invalidDetail += 1;
+        console.log(JSON.stringify({ id, strong: strongSet.has(id), detail_status: detail.response.status, canonicalId, ogTitle, valid_for_current_parser: ok }));
       } catch (error) {
-        console.log(JSON.stringify({ id, detail_error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }));
+        invalidDetail += 1;
+        console.log(JSON.stringify({ id, strong: strongSet.has(id), detail_error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }));
       }
     }
+    console.log(JSON.stringify({ exact_first_24_valid_detail: validDetail, exact_first_24_invalid_detail: invalidDetail }));
   } catch (error) {
     console.log(JSON.stringify({ source_error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }));
   }
