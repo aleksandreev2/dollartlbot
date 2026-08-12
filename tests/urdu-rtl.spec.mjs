@@ -126,7 +126,7 @@ test('Urdu is exposed in the language picker with the Pakistan flag', async ({ p
 
   await page.locator('#sheetRoot').evaluate(root => {
     root.innerHTML = '<button class="language-picker-option" data-lang="ur"><span class="language-picker-name">اردو</span></button>';
+    document.dispatchEvent(new CustomEvent('dtl:sheetopen', { detail:{ root } }));
   });
-  await page.evaluate(() => window.DTL_RUNTIME.schedule());
   await expect(page.locator('[data-lang="ur"] > .language-picker-circle-flag')).toHaveAttribute('src', '/app/flags/pk.svg');
 });
