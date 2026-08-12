@@ -5,9 +5,13 @@ const INGEST_PROVIDER = 'novelpia_source_watch';
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_HTML_BYTES = 3_000_000;
 const MAX_REDIRECTS = 3;
-const WATCH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const ACTIVE_WATCH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const COMPLETED_WATCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const ERROR_RETRY_MS = 60 * 60 * 1000;
 const DEFAULT_LIMIT = 8;
+const MAX_RUN_LIMIT = 16;
+
+type RemotePublicationStatus = 'ongoing' | 'completed' | 'paused' | 'discontinued';
 
 type WatchRow = {
   submission_id: number;
@@ -34,7 +38,7 @@ type ObservedNovel = {
   externalId: string;
   title: string;
   chapterCount: number | null;
-  publicationStatus: 'ongoing' | 'completed';
+  publicationStatus: RemotePublicationStatus;
   sourceUrl: string;
 };
 
@@ -73,7 +77,7 @@ export async function handleSourceWatchRequest(request: Request, env: Env): Prom
         return miniAppJsonError('not_watchable', 'This request does not have a canonical NovelPia source to watch.', 409);
       }
     }
-    const limit = boundedInt(body.limit, submissionId ? 1 : 20, 1, 30);
+    const limit = boundedInt(body.limit, submissionId ? 1 : DEFAULT_LIMIT, 1, MAX_RUN_LIMIT);
     const result = await runSubmissionSourceWatch(env, new Date(), limit);
     return miniAppJson({ ok: true, result, ...(await sourceWatchSnapshot(env, submissionId)) });
   }
@@ -90,7 +94,7 @@ export async function runSubmissionSourceWatch(
   scheduledAt = new Date(),
   limit = DEFAULT_LIMIT,
 ): Promise<{ watched: number; checked: number; changed: number; attention: number; errors: number }> {
-  const safeLimit = Math.max(1, Math.min(30, Math.trunc(limit)));
+  const safeLimit = Math.max(1, Math.min(MAX_RUN_LIMIT, Math.trunc(limit)));
   const now = scheduledAt.toISOString();
   await writeIngestState(env, { attempt: now, success: null, error: null, count: null });
 
@@ -140,6 +144,14 @@ export async function runSubmissionSourceWatch(
 
 async function ensureWatchRows(env: Env, nowDate: Date): Promise<number> {
   const now = nowDate.toISOString();
+  await env.DB.prepare(`
+    DELETE FROM submission_source_watch
+    WHERE submission_id IN (
+      SELECT id FROM submissions
+      WHERE status<>'accepted' OR queue_status IS NULL OR queue_status NOT IN ('queued','in_progress','completed')
+    )
+  `).run();
+
   const rows = await env.DB.prepare(`
     SELECT s.id,s.source_url,
       (SELECT ti.identity_value FROM title_identities ti
@@ -150,11 +162,7 @@ async function ensureWatchRows(env: Env, nowDate: Date): Promise<number> {
        WHERE es.submission_id=s.id AND es.provider IN ('novelpia','raw_fucknovelpia') AND es.external_id IS NOT NULL
        ORDER BY CASE WHEN es.provider='novelpia' THEN 0 ELSE 1 END LIMIT 1) AS source_external_id
     FROM submissions s
-    WHERE s.status='accepted'
-      AND (
-        s.queue_status IN ('queued','in_progress')
-        OR (s.queue_status='completed' AND s.publication_status='ongoing')
-      )
+    WHERE s.status='accepted' AND s.queue_status IN ('queued','in_progress','completed')
     ORDER BY s.id ASC
     LIMIT 500
   `).all<{ id: number; source_url: string | null; identity_external_id: string | null; source_external_id: string | null }>();
@@ -190,11 +198,7 @@ async function loadDueRows(env: Env, now: string, limit: number): Promise<DueRow
            s.title,s.chapter_count,s.publication_status,s.queue_status
     FROM submission_source_watch w
     JOIN submissions s ON s.id=w.submission_id
-    WHERE s.status='accepted'
-      AND (
-        s.queue_status IN ('queued','in_progress')
-        OR (s.queue_status='completed' AND s.publication_status='ongoing')
-      )
+    WHERE s.status='accepted' AND s.queue_status IN ('queued','in_progress','completed')
       AND (w.next_check_at IS NULL OR w.next_check_at<=?)
     ORDER BY CASE WHEN w.next_check_at IS NULL THEN 0 ELSE 1 END,
              COALESCE(w.next_check_at,'') ASC,w.failure_count ASC,w.submission_id ASC
@@ -210,7 +214,8 @@ async function applyObservation(
   checkedAt: Date,
 ): Promise<{ changed: number; attention: number }> {
   const now = checkedAt.toISOString();
-  const nextCheck = new Date(checkedAt.getTime() + WATCH_INTERVAL_MS).toISOString();
+  const interval = watch.queue_status === 'completed' ? COMPLETED_WATCH_INTERVAL_MS : ACTIVE_WATCH_INTERVAL_MS;
+  const nextCheck = new Date(checkedAt.getTime() + interval).toISOString();
   const events: SourceEventInput[] = [];
   let nextChapterCount = watch.chapter_count;
   let nextPublicationStatus = watch.publication_status;
@@ -257,16 +262,18 @@ async function applyObservation(
       action: 'auto_applied',
     });
   } else if (
-    watch.publication_status === 'completed'
-    && observed.publicationStatus === 'ongoing'
+    observed.publicationStatus !== watch.publication_status
     && watch.last_remote_publication_status !== observed.publicationStatus
   ) {
     events.push({
       field: 'publication_status',
       oldValue: watch.publication_status,
-      newValue: 'ongoing',
+      newValue: observed.publicationStatus,
       action: 'review_required',
-      metadata: { reason: 'remote_status_reversed', auto_reverse: false },
+      metadata: {
+        reason: observed.publicationStatus === 'ongoing' ? 'remote_status_reversed' : 'remote_status_requires_review',
+        auto_reverse: false,
+      },
     });
   }
 
@@ -330,6 +337,7 @@ async function applyObservation(
     watch.submission_id,
   ));
 
+  const catalogStatus = nextPublicationStatus === 'completed' ? 'completed' : 'ongoing';
   statements.push(env.DB.prepare(`
     INSERT OR IGNORE INTO discovery_catalog (
       provider,external_id,title,original_title,author,original_language,chapter_count,publication_status,
@@ -343,13 +351,13 @@ async function applyObservation(
     observed.title || null,
     null,
     observed.chapterCount,
-    observed.publicationStatus,
+    catalogStatus,
     observed.sourceUrl,
     watch.submission_id,
     now,
     now,
     now,
-    JSON.stringify({ source: 'official_novelpia_source_watch' }),
+    JSON.stringify({ source: 'official_novelpia_source_watch', remote_publication_status: observed.publicationStatus }),
     now,
     now,
   ));
@@ -370,15 +378,15 @@ async function applyObservation(
     observed.chapterCount,
     observed.chapterCount,
     observed.chapterCount,
-    observed.publicationStatus,
-    observed.publicationStatus,
+    catalogStatus,
+    catalogStatus,
     observed.title || null,
     observed.sourceUrl,
     watch.submission_id,
     watch.submission_id,
     now,
     now,
-    JSON.stringify({ source: 'official_novelpia_source_watch' }),
+    JSON.stringify({ source: 'official_novelpia_source_watch', remote_publication_status: observed.publicationStatus }),
     now,
     observed.externalId,
   ));
@@ -407,14 +415,8 @@ async function sourceWatchSnapshot(env: Env, submissionId: number | null) {
         COUNT(*) AS watched,
         SUM(CASE WHEN w.next_check_at IS NULL OR w.next_check_at<=? THEN 1 ELSE 0 END) AS due,
         SUM(CASE WHEN w.last_error IS NOT NULL THEN 1 ELSE 0 END) AS errors,
-        SUM(CASE
-          WHEN w.last_remote_chapter_count IS NOT NULL AND (
-            w.last_remote_chapter_count<s.chapter_count
-            OR (s.queue_status='completed' AND w.last_remote_chapter_count>s.chapter_count)
-          ) THEN 1 ELSE 0 END) AS chapter_mismatches,
         MAX(w.last_success_at) AS last_success_at
       FROM submission_source_watch w
-      JOIN submissions s ON s.id=w.submission_id
       ${where}
     `).bind(now, ...binds).first<Record<string, unknown>>(),
     env.DB.prepare(`
@@ -429,8 +431,8 @@ async function sourceWatchSnapshot(env: Env, submissionId: number | null) {
       LIMIT 100
     `).bind(...binds).all<Record<string, unknown>>(),
     env.DB.prepare(`
-      SELECT e.id,e.submission_id,e.provider,e.field_name,e.old_value,e.new_value,e.action,e.metadata_json,e.created_at,
-             s.title
+      SELECT e.id,e.submission_id,e.provider,e.field_name,e.old_value,e.new_value,e.action,
+             e.metadata_json,e.reviewed_at,e.reviewed_by,e.created_at,s.title
       FROM submission_source_events e
       JOIN submissions s ON s.id=e.submission_id
       ${submissionId ? 'WHERE e.submission_id=?' : ''}
@@ -448,7 +450,6 @@ async function sourceWatchSnapshot(env: Env, submissionId: number | null) {
       watched: number(summary?.watched),
       due: number(summary?.due),
       errors: number(summary?.errors),
-      chapter_mismatches: number(summary?.chapter_mismatches),
       last_success_at: summary?.last_success_at ?? null,
     },
     watches: rows.results,
@@ -460,8 +461,11 @@ async function sourceWatchSnapshot(env: Env, submissionId: number | null) {
 async function inspectNovelpiaNovel(externalId: string): Promise<ObservedNovel> {
   const url = new URL(`/novel/${externalId}`, NOVELPIA_ORIGIN);
   const html = await fetchOfficialHtml(url);
+  return parseNovelpiaSourceDetail(html, externalId);
+}
+
+export function parseNovelpiaSourceDetail(html: string, externalId: string): ObservedNovel {
   const text = collapse(stripHtml(html));
-  const hero = text.slice(0, 8000);
   const canonical = extractNovelpiaId(extractMeta(html, 'og:url')) || externalId;
   if (canonical !== externalId) throw new Error('novelpia_identity_mismatch');
 
@@ -472,9 +476,9 @@ async function inspectNovelpiaNovel(externalId: string): Promise<ObservedNovel> 
   );
   if (!title || /^novelpia\s*#?\d+$/i.test(title)) throw new Error('novelpia_title_missing');
 
-  const chapterRaw = /([\d,]{1,8})\s*회차/u.exec(hero)?.[1] || null;
-  const chapterCount = chapterRaw ? parseInteger(chapterRaw) : null;
-  const publicationStatus: 'ongoing' | 'completed' = /(?:^|\s)완결(?:\s|$)/u.test(hero) ? 'completed' : 'ongoing';
+  const chapterMatch = /([\d,]{1,8})\s*회차/u.exec(text);
+  const chapterCount = chapterMatch?.[1] ? parseInteger(chapterMatch[1]) : null;
+  const publicationStatus = parseRemotePublicationStatus(text, title, chapterMatch?.index ?? null);
   return {
     externalId,
     title,
@@ -482,6 +486,24 @@ async function inspectNovelpiaNovel(externalId: string): Promise<ObservedNovel> 
     publicationStatus,
     sourceUrl: `${NOVELPIA_ORIGIN}/novel/${externalId}`,
   };
+}
+
+function parseRemotePublicationStatus(
+  text: string,
+  title: string,
+  chapterIndex: number | null,
+): RemotePublicationStatus {
+  const end = chapterIndex == null ? Math.min(text.length, 12_000) : chapterIndex;
+  const start = Math.max(0, end - 3_000);
+  let metadata = text.slice(start, end);
+  const titleAt = metadata.lastIndexOf(title);
+  if (titleAt >= 0) metadata = metadata.slice(titleAt + title.length);
+  metadata = collapse(metadata);
+
+  if (/연재중단/u.test(metadata)) return 'discontinued';
+  if (/연재\s*휴재|휴재/u.test(metadata)) return 'paused';
+  if (/(?:^|\s)완결(?:\s|$)/u.test(metadata)) return 'completed';
+  return 'ongoing';
 }
 
 async function fetchOfficialHtml(initial: URL): Promise<string> {
@@ -655,8 +677,8 @@ function stringifyValue(value: unknown): string | null {
 }
 
 function boundedInt(value: unknown, fallback: number, min: number, max: number): number {
-  const number = Number(value);
-  return Number.isInteger(number) ? Math.max(min, Math.min(max, number)) : fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
 }
 
 function positiveId(value: unknown): number | null {
