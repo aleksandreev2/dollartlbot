@@ -12,7 +12,7 @@ async function boot(page) {
       <input id="pubChapterEnd" value="10">
       <button id="pubPublish">Publish</button>
     </section>
-    <section class="publishing-center-preflight"></section>
+    <section class="publishing-center-preflight"><span id="pcPreflightState" class="ready">Готово</span></section>
   `);
   await page.evaluate(() => {
     window.__guard = { route:'section:publishing', patcher:null, middleware:null, checks:0, ready:true, nextCalls:0 };
@@ -22,7 +22,12 @@ async function boot(page) {
     };
     window.DTL_ADMIN = { activeRoute(){ return window.__guard.route; } };
     window.DTL_PUBLISHING_CENTER = {
-      async runPreflight(){ window.__guard.checks += 1; },
+      async runPreflight(){
+        window.__guard.checks += 1;
+        const node = document.getElementById('pcPreflightState');
+        node.className = window.__guard.ready ? 'ready' : 'blocked';
+        node.textContent = window.__guard.ready ? 'Готово' : 'Есть блокирующие проблемы';
+      },
       state(){ return { lastPreflight:{ ready:window.__guard.ready } }; },
     };
     window.DTL_PUBLICATION_RELEASE_RANGE = { parsedRange(){ return { ok:true, chapter_start:1, chapter_end:10 }; } };
