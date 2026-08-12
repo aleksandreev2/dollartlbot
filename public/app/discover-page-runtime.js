@@ -72,9 +72,13 @@
         link.style.textDecoration='none';
         host.appendChild(link);
       }
+      const label=copy('verifiedRaw');
+      const stamp=`${raw.url}|${label}`;
+      if(link.dataset.discoverRawStamp===stamp)return;
+      link.dataset.discoverRawStamp=stamp;
       link.href=raw.url;
-      link.setAttribute('aria-label',copy('verifiedRaw'));
-      link.innerHTML=`<i data-lucide="archive-check" aria-hidden="true"></i><span>${copy('verifiedRaw')}</span>`;
+      link.setAttribute('aria-label',label);
+      link.innerHTML=`<i data-lucide="archive-check" aria-hidden="true"></i><span>${label}</span>`;
     });
     try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}
   }
@@ -116,8 +120,10 @@
     empty.classList.add('discover-source-empty');
     const strong=empty.querySelector('strong');
     const detail=empty.querySelector('span');
-    if(strong)strong.textContent=copy(title);
-    if(detail)detail.textContent=copy(sub);
+    const titleText=copy(title);
+    const detailText=copy(sub);
+    if(strong&&strong.textContent!==titleText)strong.textContent=titleText;
+    if(detail&&detail.textContent!==detailText)detail.textContent=detailText;
   }
 
   function refreshAttemptFinished(state,requestedAt){
@@ -230,7 +236,7 @@
   });
   document.addEventListener('dtl:discover',()=>{attach();queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});});
   document.addEventListener('dtl:viewchange',()=>queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
-  document.addEventListener('dtl:viewrender',()=>queueMicrotask(()=>{attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
+  document.addEventListener('dtl:viewrender',event=>queueMicrotask(()=>{if(event?.detail?.source!=='discover-content')attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
   document.addEventListener('dtl:localechange',()=>queueMicrotask(()=>{attach();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
   queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});
 })();
