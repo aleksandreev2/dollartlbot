@@ -26,6 +26,7 @@ export const PRODUCT_EVENT_NAMES = [
   'suggest_started',
   'suggest_step',
   'suggest_abandoned',
+  'request_submitted',
 ] as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
