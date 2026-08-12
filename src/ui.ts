@@ -12,7 +12,7 @@ import {
 
 const LOCALE_TAGS: Record<Locale, string> = {
   en: 'en-US', es: 'es-ES', fil: 'fil-PH', hi: 'hi-IN', pt: 'pt-BR',
-  id: 'id-ID', vi: 'vi-VN', fr: 'fr-FR', de: 'de-DE', ru: 'ru-RU',
+  id: 'id-ID', vi: 'vi-VN', fr: 'fr-FR', de: 'de-DE', ru: 'ru-RU', ur: 'ur-PK',
 };
 
 const MINI_APP_BUTTON_LABEL: Record<Locale, string> = {
@@ -26,6 +26,7 @@ const MINI_APP_BUTTON_LABEL: Record<Locale, string> = {
   fr: '📱 Ouvrir Dollar TL',
   de: '📱 Dollar TL öffnen',
   ru: '📱 Открыть Dollar TL',
+  ur: '📱 Dollar TL کھولیں',
 };
 
 function miniAppRow(locale: Locale, telegram: TelegramClient): InlineKeyboardMarkup['inline_keyboard'][number] | null {
