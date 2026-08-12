@@ -293,7 +293,13 @@ async function replaceOwnRaw(
       INSERT INTO submission_raw_history (
         submission_id,old_file_id,old_file_name,old_file_mime,
         new_file_id,new_file_name,new_file_mime,replaced_by_user_id,created_at
-      ) VALUES (?,?,?,?,?,?,?,?,?)
+      )
+      SELECT ?,?,?,?,?,?,?,?,?
+      WHERE EXISTS (
+        SELECT 1 FROM submissions
+        WHERE id=? AND user_id=? AND status='pending' AND withdrawn_at IS NULL
+          AND raw_file_id=?
+      )
     `).bind(
       id,
       before.raw_file_id,
@@ -304,10 +310,17 @@ async function replaceOwnRaw(
       file.type || null,
       userId,
       now,
+      id,
+      userId,
+      fileId,
     ),
   ]);
   if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
     return miniAppJsonError('stale_request', 'The request changed while the replacement was uploading. Contact support before retrying.', 409);
+  }
+  if (Number(results[1]?.meta?.changes ?? 0) !== 1) {
+    console.error(JSON.stringify({ event: 'request_raw_history_guard_failed', submission_id: id, user_id: userId }));
+    return miniAppJsonError('temporary_error', 'The RAW was updated but its history could not be recorded. Contact support before retrying.', 500);
   }
   await addConversation(env, id, 'system', userId, 'raw_replaced', `RAW file replaced with ${file.name || 'new file'}.`, now);
 
