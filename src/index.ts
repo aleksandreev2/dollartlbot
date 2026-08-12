@@ -25,6 +25,7 @@ import { handleMiniAppCoreRequest } from './miniapp-core';
 import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-enhanced';
 import { handleNotificationApiRequest, runNotificationMaintenance } from './notifications';
 import { runNovelpiaDiscoveryIngestion } from './novelpia-discovery';
+import { runNovelpiaHomepageFreshIngestion } from './novelpia-homepage-fresh';
 import { handleOnboardingRequest } from './onboarding';
 import { handleProgressLedgerRequest, syncPublishedReleaseProgress } from './progress-ledger';
 import { handlePublicationLinksRequest } from './publication-links';
@@ -242,6 +243,7 @@ export default {
     }
 
     if (scheduledAt.getUTCMinutes() % 20 === 0) {
+      await runScheduledTask('novelpia_homepage_fresh', () => runNovelpiaHomepageFreshIngestion(env, scheduledAt));
       await runScheduledTask('novelpia_discovery_ingest', () => runNovelpiaDiscoveryIngestion(env, scheduledAt));
       await runScheduledTask('raw_fucknovelpia_enrichment', () => runRawCatalogEnrichment(env, scheduledAt));
     }
