@@ -1,4 +1,5 @@
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
+import { syncPublishedReleaseProgress } from './progress-ledger';
 
 type RangePayload = {
   chapter_start?: unknown;
@@ -72,7 +73,11 @@ export async function handlePublicationReleaseRangeRequest(
       SET chapter_start = ?, chapter_end = ?, updated_at = ?
       WHERE id = ?
     `).bind(parsed.chapter_start, parsed.chapter_end, new Date().toISOString(), id).run();
-    return miniAppJson({ ok: true, publication_id: id, ...parsed });
+
+    const progressSync = publication.status === 'published' && parsed.chapter_end
+      ? await syncPublishedReleaseProgress(env, id)
+      : null;
+    return miniAppJson({ ok: true, publication_id: id, ...parsed, progress_sync: progressSync });
   }
 
   return miniAppJsonError('not_found', 'Release range route not found.', 404);

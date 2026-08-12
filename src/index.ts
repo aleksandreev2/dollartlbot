@@ -26,6 +26,7 @@ import { enhanceMiniAppResponse, handleEnhancedMiniAppRequest } from './miniapp-
 import { handleNotificationApiRequest, runNotificationMaintenance } from './notifications';
 import { runNovelpiaDiscoveryIngestion } from './novelpia-discovery';
 import { handleOnboardingRequest } from './onboarding';
+import { handleProgressLedgerRequest, syncPublishedReleaseProgress } from './progress-ledger';
 import { handlePublicationLinksRequest } from './publication-links';
 import { handlePublicationReleaseRangeRequest } from './publication-release-range';
 import { runPublicationDeliveryMaintenance, handlePublicationDeliveryAdminRequest } from './publication-delivery';
@@ -46,6 +47,8 @@ import {
 } from './request-self-service-finalize';
 import { enhanceRequestSelfServiceRead } from './request-self-service-read';
 import { handleRequestSelfService } from './request-self-service';
+import { handleSourceWatchReviewRequest } from './source-watch-review';
+import { handleSourceWatchRequest, runSubmissionSourceWatch } from './source-watch';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { handleTitleFollowingRequest, runTitleFollowingMaintenance } from './title-following';
@@ -81,6 +84,12 @@ export default {
     if (discoveryResponse) return discoveryResponse;
     const followingResponse = await handleTitleFollowingRequest(request, env);
     if (followingResponse) return followingResponse;
+    const progressLedgerResponse = await handleProgressLedgerRequest(request, env);
+    if (progressLedgerResponse) return progressLedgerResponse;
+    const sourceWatchReviewResponse = await handleSourceWatchReviewRequest(request, env);
+    if (sourceWatchReviewResponse) return sourceWatchReviewResponse;
+    const sourceWatchResponse = await handleSourceWatchRequest(request, env);
+    if (sourceWatchResponse) return sourceWatchResponse;
 
     const requestMutationGuard = await prepareRequestSelfServiceMutation(request, env);
     if (requestMutationGuard instanceof Response) return requestMutationGuard;
@@ -127,7 +136,24 @@ export default {
     const publishingCommentsV3Response = await handlePublishingCommentsV3Request(request, env, apiTelegram, ctx);
     if (publishingCommentsV3Response) return publishingCommentsV3Response;
     const publishingV2Response = await handlePublishingV2Request(request, env, apiTelegram, ctx);
-    if (publishingV2Response) return publishingV2Response;
+    if (publishingV2Response) {
+      const publishMatch = request.method === 'POST'
+        ? /^\/api\/app\/admin\/publications\/(\d+)\/publish$/.exec(url.pathname)
+        : null;
+      if (publishingV2Response.ok && publishMatch) {
+        const publicationId = Number(publishMatch[1]);
+        ctx.waitUntil(
+          syncPublishedReleaseProgress(env, publicationId).catch((error) => {
+            console.error(JSON.stringify({
+              event: 'publication_progress_sync_failed',
+              publication_id: publicationId,
+              error: errorText(error),
+            }));
+          }),
+        );
+      }
+      return publishingV2Response;
+    }
     const publishingGuardResponse = await guardPublishingRequest(request, env);
     if (publishingGuardResponse) return publishingGuardResponse;
     const publishingResponse = await handlePublishingRequest(request, env, apiTelegram, ctx);
@@ -210,6 +236,10 @@ export default {
     await runScheduledTask('title_following_maintenance', () => runTitleFollowingMaintenance(env, telegram));
     await runScheduledTask('broadcast_maintenance', () => runBroadcastMaintenanceWithLease(env, telegram, 2));
     await runScheduledTask('publication_delivery', () => runPublicationDeliveryMaintenance(env, telegram, 8));
+
+    if (scheduledAt.getUTCMinutes() === 0) {
+      await runScheduledTask('novelpia_source_watch', () => runSubmissionSourceWatch(env, scheduledAt));
+    }
 
     if (scheduledAt.getUTCMinutes() % 20 === 0) {
       await runScheduledTask('novelpia_discovery_ingest', () => runNovelpiaDiscoveryIngestion(env, scheduledAt));

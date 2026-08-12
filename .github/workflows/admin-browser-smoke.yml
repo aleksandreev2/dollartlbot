@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'public/app/admin-*.js'
+      - 'public/app/admin-*.css'
       - 'public/app/app.css'
       - 'public/app/ui-polish.css'
       - 'public/app/card-upgrade.css'
@@ -54,6 +55,7 @@ on:
       - 'tests/raw-discovery-ui.spec.mjs'
       - 'tests/request-identity-following.spec.mjs'
       - 'tests/request-self-service.spec.mjs'
+      - 'tests/source-watch-progress-ledger.spec.mjs'
       - 'tests/public-title-deeplink.spec.mjs'
       - 'tests/public-title-live-detail.spec.mjs'
       - 'playwright.config.mjs'
@@ -64,6 +66,7 @@ on:
       - main
     paths:
       - 'public/app/admin-*.js'
+      - 'public/app/admin-*.css'
       - 'public/app/app.css'
       - 'public/app/ui-polish.css'
       - 'public/app/card-upgrade.css'
@@ -114,6 +117,7 @@ on:
       - 'tests/raw-discovery-ui.spec.mjs'
       - 'tests/request-identity-following.spec.mjs'
       - 'tests/request-self-service.spec.mjs'
+      - 'tests/source-watch-progress-ledger.spec.mjs'
       - 'tests/public-title-deeplink.spec.mjs'
       - 'tests/public-title-live-detail.spec.mjs'
       - 'playwright.config.mjs'
