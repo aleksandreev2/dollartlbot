@@ -134,6 +134,8 @@ const LATE_MONTH_COPY: Record<string, LocaleMessage> = {
 };
 
 const STAGES: readonly ReminderStage[] = [
+  // Windows make the automation catch up after a temporary deploy/cron outage.
+  // The broadcast dedupe key still guarantees at most one send per stage/month.
   { key: 'midmonth', windowStart: 10, windowEnd: 16, localizations: MIDMONTH_COPY },
   { key: 'late_month', windowStart: 24, windowEnd: 31, localizations: LATE_MONTH_COPY },
 ];
@@ -155,7 +157,7 @@ export async function runBroadcastAutomations(env: Env, now = new Date()): Promi
   const day = now.getUTCDate();
   const stage = STAGES.find(item => day >= item.windowStart && day <= item.windowEnd);
   if (!stage) return 0;
-  return enqueueUnusedQuotaReminder(env, stage, now) ? 1 : 0;
+  return (await enqueueUnusedQuotaReminder(env, stage, now)) ? 1 : 0;
 }
 
 export async function handleAdminBroadcastAutomationRequest(
@@ -181,26 +183,38 @@ export async function handleAdminBroadcastAutomationRequest(
     if (typeof body.enabled !== 'boolean') {
       return miniAppJsonError('invalid_enabled', 'enabled must be boolean.', 400);
     }
+
     const now = new Date().toISOString();
     await env.DB.prepare(`
       INSERT INTO broadcast_automations (automation_key, enabled, updated_by, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(automation_key) DO UPDATE SET
-        enabled=excluded.enabled,
-        updated_by=excluded.updated_by,
-        updated_at=excluded.updated_at
+        enabled = excluded.enabled,
+        updated_by = excluded.updated_by,
+        updated_at = excluded.updated_at
     `).bind(key, body.enabled ? 1 : 0, auth.telegramUser.id, now).run();
+
     await env.DB.prepare(`
       INSERT INTO admin_audit_log (admin_user_id, action, target_type, target_id, details, created_at)
       VALUES (?, 'broadcast_automation_update', 'broadcast_automation', ?, ?, ?)
-    `).bind(auth.telegramUser.id, key, JSON.stringify({ enabled: body.enabled }), now).run().catch(() => undefined);
+    `).bind(
+      auth.telegramUser.id,
+      key,
+      JSON.stringify({ enabled: body.enabled }),
+      now,
+    ).run().catch(() => undefined);
+
     return miniAppJson({ ok: true, automation: await automationStatus(env, new Date()) });
   }
 
   return miniAppJsonError('not_found', 'Broadcast automation route not found.', 404);
 }
 
-async function enqueueUnusedQuotaReminder(env: Env, stage: ReminderStage, now: Date): Promise<boolean> {
+async function enqueueUnusedQuotaReminder(
+  env: Env,
+  stage: ReminderStage,
+  now: Date,
+): Promise<boolean> {
   const monthKey = currentMonthKey(now);
   const dedupeKey = `automation:${AUTOMATION_KEY}:${monthKey}:${stage.key}`;
   const templateKey = `auto:${AUTOMATION_KEY}:${stage.key}`;
@@ -211,8 +225,10 @@ async function enqueueUnusedQuotaReminder(env: Env, stage: ReminderStage, now: D
     INSERT OR IGNORE INTO broadcasts (
       publication_id, kind, status, title, body, created_at, dedupe_key,
       audience, preference_key, action_url, template_key, created_by
-    ) VALUES (NULL, 'announcement', 'queued', ?, ?, ?, ?,
-              'unused_quota', 'notify_announcements', ?, ?, NULL)
+    ) VALUES (
+      NULL, 'announcement', 'queued', ?, ?, ?, ?,
+      'unused_quota', 'notify_announcements', ?, ?, NULL
+    )
   `).bind(
     english.title,
     english.body,
@@ -222,17 +238,25 @@ async function enqueueUnusedQuotaReminder(env: Env, stage: ReminderStage, now: D
     templateKey,
   ).run();
 
-  if (Number(inserted.meta.changes ?? 0) === 0) return false;
-  const broadcastId = Number(inserted.meta.last_row_id);
-  if (!Number.isSafeInteger(broadcastId) || broadcastId <= 0) return false;
+  // Always heal localization rows if a previous invocation was interrupted after
+  // creating the broadcast row. Dedupe still decides whether this is a new job.
+  const broadcast = await env.DB.prepare(`
+    SELECT id FROM broadcasts WHERE dedupe_key = ? LIMIT 1
+  `).bind(dedupeKey).first<{ id: number }>();
+  if (!broadcast?.id) throw new Error(`Automation broadcast ${dedupeKey} was not created.`);
 
-  const localizations = Object.entries(stage.localizations).map(([locale, copy]) =>
+  const localizationStatements = Object.entries(stage.localizations).map(([locale, copy]) =>
     env.DB.prepare(`
-      INSERT OR IGNORE INTO broadcast_localizations (
+      INSERT INTO broadcast_localizations (
         broadcast_id, locale, title, body, action_label, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(broadcast_id, locale) DO UPDATE SET
+        title = excluded.title,
+        body = excluded.body,
+        action_label = excluded.action_label,
+        updated_at = excluded.updated_at
     `).bind(
-      broadcastId,
+      broadcast.id,
       locale,
       copy.title,
       copy.body,
@@ -241,8 +265,9 @@ async function enqueueUnusedQuotaReminder(env: Env, stage: ReminderStage, now: D
       createdAt,
     )
   );
-  if (localizations.length) await env.DB.batch(localizations);
-  return true;
+  if (localizationStatements.length) await env.DB.batch(localizationStatements);
+
+  return Number(inserted.meta.changes ?? 0) === 1;
 }
 
 async function automationStatus(env: Env, now: Date): Promise<BroadcastAutomationStatus> {
@@ -255,6 +280,7 @@ async function automationStatus(env: Env, now: Date): Promise<BroadcastAutomatio
     ORDER BY id DESC
     LIMIT 1
   `).first<{ created_at: string }>();
+
   return {
     key: AUTOMATION_KEY,
     label: 'Неиспользованный request',
@@ -277,6 +303,7 @@ async function automationEnabled(env: Env, key: string): Promise<boolean> {
 
 async function countUnusedQuotaAudience(env: Env, now: Date): Promise<number> {
   const monthKey = currentMonthKey(now);
+  const nowIso = now.toISOString();
   const row = await env.DB.prepare(`
     SELECT COUNT(*) AS n
     FROM users u
@@ -297,7 +324,7 @@ async function countUnusedQuotaAudience(env: Env, now: Date): Promise<number> {
           AND sr.state = 'reserved'
           AND sr.expires_at > ?
       )
-  `).bind(monthKey, monthKey, now.toISOString()).first<{ n: number }>();
+  `).bind(monthKey, monthKey, nowIso).first<{ n: number }>();
   return Number(row?.n ?? 0);
 }
 
@@ -311,5 +338,9 @@ function nextDueAt(now: Date): string {
 }
 
 async function readJson<T>(request: Request): Promise<T> {
-  try { return await request.json() as T; } catch { return {} as T; }
+  try {
+    return await request.json() as T;
+  } catch {
+    return {} as T;
+  }
 }
