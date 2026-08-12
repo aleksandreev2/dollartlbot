@@ -27,7 +27,10 @@
     if (!center?.runPreflight) return false;
     checkPromise = (async () => {
       await center.runPreflight();
-      return Boolean(center.state?.().lastPreflight?.ready);
+      const resultReady = Boolean(center.state?.().lastPreflight?.ready);
+      const stateNode = document.getElementById('pcPreflightState');
+      const uiReady = Boolean(stateNode?.classList.contains('ready'));
+      return resultReady && uiReady;
     })();
     try {
       return await checkPromise;
