@@ -1,0 +1,60 @@
+name: Product Analytics
+
+on:
+  pull_request:
+    paths:
+      - 'src/product-analytics.ts'
+      - 'src/admin-analytics.ts'
+      - 'migrations/0031_product_analytics.sql'
+      - 'public/app/product-analytics.js'
+      - 'public/app/admin-product-analytics.js'
+      - 'public/app/product-analytics.css'
+      - 'public/app/index.html'
+      - 'scripts/audit-product-analytics.mjs'
+      - 'tests/product-analytics.spec.mjs'
+      - 'package.json'
+      - '.github/workflows/product-analytics.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/product-analytics.ts'
+      - 'src/admin-analytics.ts'
+      - 'migrations/0031_product_analytics.sql'
+      - 'public/app/product-analytics.js'
+      - 'public/app/admin-product-analytics.js'
+      - 'public/app/product-analytics.css'
+      - 'public/app/index.html'
+      - 'scripts/audit-product-analytics.mjs'
+      - 'tests/product-analytics.spec.mjs'
+      - 'package.json'
+      - '.github/workflows/product-analytics.yml'
+
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run prepare:vendor
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Product analytics safety audit
+        run: node scripts/audit-product-analytics.mjs
+      - name: Validate full D1 migration chain
+        run: npx wrangler d1 migrations apply DB --local
+      - name: Check analytics JS syntax
+        run: |
+          node --check public/app/product-analytics.js
+          node --check public/app/admin-product-analytics.js
+      - name: Verify analytics files
+        run: |
+          test -f migrations/0031_product_analytics.sql
+          test -f src/product-analytics.ts
+          test -f public/app/product-analytics.js
+          test -f public/app/admin-product-analytics.js
+          test -f public/app/product-analytics.css
+          grep -q '/app/product-analytics.js?v=20260812-analytics1' public/app/index.html
+          grep -q '/app/admin-product-analytics.js?v=20260812-analytics1' public/app/index.html

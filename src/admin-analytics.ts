@@ -1,6 +1,10 @@
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
+import { handleProductAnalyticsEventRequest } from './product-analytics';
 
 export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promise<Response|null>{
+  const productEventResponse=await handleProductAnalyticsEventRequest(request,env);
+  if(productEventResponse)return productEventResponse;
+
   const url=new URL(request.url);
   if(request.method!=='GET'||url.pathname!=='/api/app/admin/analytics')return null;
   const auth=await authenticateMiniAppRequest(request,env);
@@ -12,7 +16,10 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
   const since=new Date(Date.now()-(days-1)*86400000);since.setUTCHours(0,0,0,0);
   const sinceIso=since.toISOString();
 
-  const [summary,daily,languages,referrals,publishing,topUsers]=await Promise.all([
+  const [
+    summary,daily,languages,referrals,publishing,topUsers,
+    productEvents,productFunnel,zeroResults,suggestSteps,trackingStart,
+  ]=await Promise.all([
     env.DB.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users_total,
       (SELECT COUNT(*) FROM users WHERE created_at>=?) AS users_new,
@@ -41,7 +48,41 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
       (SELECT COUNT(*) FROM publication_assets WHERE delivery_status='failed') AS files_failed
       FROM publications WHERE created_at>=?`).bind(sinceIso).first<Record<string,number>>(),
     env.DB.prepare(`SELECT u.telegram_id,u.username,u.first_name,COUNT(s.id) AS requests FROM users u JOIN submissions s ON s.user_id=u.telegram_id WHERE s.created_at>=? GROUP BY u.telegram_id,u.username,u.first_name ORDER BY requests DESC LIMIT 8`).bind(sinceIso).all<Record<string,unknown>>(),
+    env.DB.prepare(`SELECT event_name,COUNT(*) AS events,COUNT(DISTINCT user_id) AS users
+      FROM product_events WHERE created_at>=?
+      GROUP BY event_name ORDER BY events DESC,event_name ASC`).bind(sinceIso).all<Record<string,unknown>>(),
+    env.DB.prepare(`SELECT
+      (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name='discover_search' AND created_at>=?) AS search_users,
+      (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name IN ('title_open','catalog_open') AND created_at>=?) AS open_users,
+      (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name IN ('interest_add','follow_add') AND created_at>=?) AS intent_users,
+      (SELECT COUNT(DISTINCT user_id) FROM product_events WHERE event_name='request_submitted' AND created_at>=?) AS request_users,
+      (SELECT COUNT(*) FROM submissions WHERE created_at>=?) AS requests,
+      (SELECT COUNT(*) FROM discovery_interests WHERE created_at>=?) +
+        (SELECT COUNT(*) FROM discovery_catalog_interests WHERE created_at>=?) AS demand_adds,
+      (SELECT COUNT(*) FROM title_follows WHERE created_at>=?) AS follow_adds
+    `).bind(
+      sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,sinceIso,
+    ).first<Record<string,number>>(),
+    env.DB.prepare(`SELECT query_text,COUNT(*) AS count,COUNT(DISTINCT user_id) AS users,MAX(created_at) AS last_seen
+      FROM product_events
+      WHERE event_name='discover_zero_result' AND created_at>=? AND query_text IS NOT NULL AND query_text<>''
+      GROUP BY query_text ORDER BY count DESC,last_seen DESC LIMIT 20`).bind(sinceIso).all<Record<string,unknown>>(),
+    env.DB.prepare(`SELECT event_value AS step,COUNT(*) AS events,COUNT(DISTINCT user_id) AS users
+      FROM product_events
+      WHERE event_name='suggest_step' AND created_at>=? AND event_value IS NOT NULL
+      GROUP BY event_value ORDER BY CASE event_value WHEN 'upload' THEN 1 WHEN 'details' THEN 2 WHEN 'content' THEN 3 WHEN 'review' THEN 4 ELSE 9 END,events DESC`).bind(sinceIso).all<Record<string,unknown>>(),
+    env.DB.prepare(`SELECT MIN(created_at) AS tracking_since FROM product_events`).first<{tracking_since:string|null}>(),
   ]);
+
+  const eventMap=Object.fromEntries(productEvents.results.map(row=>[
+    String(row.event_name||''),
+    {events:Number(row.events||0),users:Number(row.users||0)},
+  ]));
+  const searches=Number(eventMap.discover_search?.events||0);
+  const zeroResultEvents=Number(eventMap.discover_zero_result?.events||0);
+  const suggestStarted=Number(eventMap.suggest_started?.users||0);
+  const suggestAbandoned=Number(eventMap.suggest_abandoned?.users||0);
+  const suggestSubmitted=Number(eventMap.request_submitted?.users||0);
 
   return miniAppJson({
     days,
@@ -52,6 +93,32 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
     referrals:mapNumbers(referrals),
     publishing:mapNumbers(publishing),
     top_users:topUsers.results,
+    product:{
+      tracking_since:trackingStart?.tracking_since||null,
+      events_total:productEvents.results.reduce((sum,row)=>sum+Number(row.events||0),0),
+      events_by_name:productEvents.results,
+      searches,
+      search_users:Number(eventMap.discover_search?.users||0),
+      zero_results:zeroResultEvents,
+      zero_result_rate:searches?Math.round((zeroResultEvents/searches)*1000)/10:0,
+      title_opens:Number(eventMap.title_open?.events||0)+Number(eventMap.catalog_open?.events||0),
+      raw_opens:Number(eventMap.raw_open?.events||0),
+      interest_adds:Number(eventMap.interest_add?.events||0),
+      follow_adds:Number(eventMap.follow_add?.events||0),
+      duplicates_intercepted:Number(eventMap.duplicate_intercepted?.events||0),
+      shares:Number(eventMap.share_title?.events||0),
+      release_opens:Number(eventMap.release_open?.events||0),
+      boosty_clicks:Number(eventMap.boosty_click?.events||0),
+      funnel:mapNumbers(productFunnel),
+      zero_result_queries:zeroResults.results,
+      suggest:{
+        started_users:suggestStarted,
+        abandoned_users:suggestAbandoned,
+        submitted_users:suggestSubmitted,
+        completion_rate:suggestStarted?Math.round((Math.min(suggestStarted,suggestSubmitted)/suggestStarted)*1000)/10:0,
+        steps:suggestSteps.results,
+      },
+    },
   });
 }
 
