@@ -17,8 +17,24 @@ function nameText(name){
   if(ts.isStringLiteral(name)||ts.isNumericLiteral(name)||ts.isNoSubstitutionTemplateLiteral(name))return name.text;
   return null;
 }
+function unwrapExpression(node){
+  let current=node;
+  while(current){
+    if(ts.isParenthesizedExpression(current)||ts.isAsExpression(current)||ts.isTypeAssertionExpression(current)||ts.isSatisfiesExpression(current)){
+      current=current.expression;
+      continue;
+    }
+    return current;
+  }
+  return current;
+}
+function objectLiteral(node){
+  const value=unwrapExpression(node);
+  return value&&ts.isObjectLiteralExpression(value)?value:null;
+}
 function objectKeys(node){
-  if(!node||!ts.isObjectLiteralExpression(node))return [];
+  node=objectLiteral(node);
+  if(!node)return [];
   return node.properties.flatMap(prop=>{
     if(ts.isSpreadAssignment(prop))return [];
     const name=nameText(prop.name);
@@ -26,7 +42,8 @@ function objectKeys(node){
   });
 }
 function objectProperty(node,key){
-  if(!node||!ts.isObjectLiteralExpression(node))return null;
+  node=objectLiteral(node);
+  if(!node)return null;
   for(const prop of node.properties){
     if(ts.isPropertyAssignment(prop)||ts.isShorthandPropertyAssignment(prop)||ts.isMethodDeclaration(prop)){
       if(nameText(prop.name)===key)return ts.isPropertyAssignment(prop)?prop.initializer:prop;
@@ -39,7 +56,10 @@ function variableObject(path,name){
   let found=null;
   const visit=node=>{
     if(found)return;
-    if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text===name&&node.initializer&&ts.isObjectLiteralExpression(node.initializer))found=node.initializer;
+    if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text===name&&node.initializer){
+      const value=objectLiteral(node.initializer);
+      if(value)found=value;
+    }
     ts.forEachChild(node,visit);
   };
   visit(file);
@@ -51,7 +71,10 @@ function exportedObject(path,name){
   let found=null;
   const visit=node=>{
     if(found)return;
-    if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text===name&&node.initializer&&ts.isObjectLiteralExpression(node.initializer))found=node.initializer;
+    if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text===name&&node.initializer){
+      const value=objectLiteral(node.initializer);
+      if(value)found=value;
+    }
     ts.forEachChild(node,visit);
   };
   visit(file);
@@ -62,8 +85,8 @@ function localeObjects(path,name){
   const root=variableObject(path,name);
   const out={};
   for(const locale of objectKeys(root)){
-    const value=objectProperty(root,locale);
-    if(value&&ts.isObjectLiteralExpression(value))out[locale]=value;
+    const value=objectLiteral(objectProperty(root,locale));
+    if(value)out[locale]=value;
   }
   return out;
 }
@@ -81,8 +104,8 @@ function assertSameKeys(map,label,reference='en'){
   }
 }
 function childObject(root,key,label){
-  const value=objectProperty(root,key);
-  if(!value||!ts.isObjectLiteralExpression(value))throw new Error(`${label}: object ${key} not found`);
+  const value=objectLiteral(objectProperty(root,key));
+  if(!value)throw new Error(`${label}: object ${key} not found`);
   return value;
 }
 function explicitKeys(path,name){return new Set(objectKeys(exportedObject(path,name)));}
@@ -127,7 +150,7 @@ for(const [path,name] of [
   const root=exportedObject(path,name);
   const en=childObject(root,'en',`${path}/${name}`);
   for(const key of objectKeys(en))englishKeys.add(key);
-  const locales=objectKeys(root).filter(key=>{const value=objectProperty(root,key);return value&&ts.isObjectLiteralExpression(value);});
+  const locales=objectKeys(root).filter(key=>Boolean(objectLiteral(objectProperty(root,key))));
   const missing=legacyLocales.filter(locale=>!locales.includes(locale));
   if(missing.length)throw new Error(`${path}/${name}: legacy locales missing ${missing.join(',')}`);
 }
