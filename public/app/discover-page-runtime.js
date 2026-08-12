@@ -225,9 +225,12 @@
   }
 
   wrapDiscoveryApi();
+  document.addEventListener('click',event=>{
+    if(event.target?.closest?.('[data-discover-mode]'))queueMicrotask(()=>{attach();patchFreshEmptyState();patchVerifiedRawLinks();});
+  });
   document.addEventListener('dtl:discover',()=>{attach();queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});});
   document.addEventListener('dtl:viewchange',()=>queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
-  document.addEventListener('dtl:viewrender',()=>queueMicrotask(()=>{patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
-  document.addEventListener('dtl:localechange',()=>queueMicrotask(()=>{patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
-  queueMicrotask(()=>{wrapDiscoveryApi();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});
+  document.addEventListener('dtl:viewrender',()=>queueMicrotask(()=>{attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
+  document.addEventListener('dtl:localechange',()=>queueMicrotask(()=>{attach();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();}));
+  queueMicrotask(()=>{wrapDiscoveryApi();attach();patchNavIcon();patchAdminRefresh();patchVerifiedRawLinks();patchFreshEmptyState();});
 })();
