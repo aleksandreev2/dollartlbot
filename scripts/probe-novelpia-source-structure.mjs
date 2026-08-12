@@ -1,37 +1,24 @@
 const ORIGIN='https://novelpia.com';
-const headers={accept:'text/html,application/xhtml+xml','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'DollarTL-Discovery/2.0'};
+const headers={accept:'application/json,text/plain,*/*','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'DollarTL-Discovery/2.0',referer:`${ORIGIN}/`};
+const expected=[
+  ['얀데레 히로인은 나한테 집착하지 않는다','연꽃낙타'],
+  ['일진녀에게 찍혀버렸다','TIGRIS'],
+  ['오픈채팅방의 캠퍼스 여신','작은문'],
+  ['평행세계갤러리 주딱입니다','몽상공상'],
+  ['999,999,999,999분의 1 귀환권 뽑기','두발벌레'],
+  ['무언가 나를 계속 회귀시킨다','초신성잔해'],
+  ['연기천재는 망겜 인방이 하고 싶다','과일바구니'],
+];
 
-const homeResponse=await fetch(`${ORIGIN}/`,{headers});
-const homeHtml=await homeResponse.text();
-console.log(JSON.stringify({homeStatus:homeResponse.status,homeLength:homeHtml.length},null,2));
-
-for(const needle of ['new_novel_curation','basic-curation','basic_curation','main_group','basic-curation']){
-  let from=0,shown=0;
-  while(shown<12){
-    const at=homeHtml.indexOf(needle,from);
-    if(at<0)break;
-    console.log('HOME CONTEXT',needle,JSON.stringify(homeHtml.slice(Math.max(0,at-500),Math.min(homeHtml.length,at+800)).replace(/\s+/g,' ')));
-    from=at+needle.length;
-    shown++;
-  }
-}
-
-const groups=new Set();
-for(const m of homeHtml.matchAll(/(?:main[_-]group|mainGroup)["':=\s]+(?:Number\()?['"]?(\d{1,5})/gi))groups.add(m[1]);
-console.log('candidate groups',JSON.stringify([...groups]));
-
-for(const group of [...groups,'1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20']){
+for(const category of ['entry','complete']){
   const url=new URL('/proc/main_v2',ORIGIN);
   url.searchParams.set('cmd','new_novel_curation');
-  url.searchParams.set('main_group',group);
-  url.searchParams.set('novel_category','entry');
-  try{
-    const r=await fetch(url,{headers:{...headers,accept:'application/json,text/plain,*/*',referer:`${ORIGIN}/`}});
-    const text=await r.text();
-    let parsed=null; try{parsed=JSON.parse(text);}catch{}
-    const list=Array.isArray(parsed?.list)?parsed.list:[];
-    if(list.length||parsed?.status==200){
-      console.log('API',group,'status',r.status,'bodyStatus',parsed?.status,'conf',JSON.stringify(parsed?.conf||null),'count',list.length,'sample',JSON.stringify(list.slice(0,8).map(x=>({novel_no:x.novel_no,link_url:x.link_url,novel_name:x.novel_name,writer_nick:x.writer_nick,novel_thumb:x.novel_thumb})),null,2));
-    }
-  }catch(e){console.log('API fail',group,String(e));}
+  url.searchParams.set('novel_category',category);
+  const r=await fetch(url,{headers});
+  const text=await r.text();
+  let parsed=null;try{parsed=JSON.parse(text)}catch{}
+  const list=Array.isArray(parsed?.list)?parsed.list:[];
+  const simplified=list.map(x=>({novel_no:String(x.novel_no||''),link_url:x.link_url,novel_name:x.novel_name,writer_nick:x.writer_nick,novel_thumb:x.novel_thumb}));
+  const matches=expected.filter(([title,author])=>simplified.some(x=>x.novel_name===title&&x.writer_nick===author));
+  console.log(JSON.stringify({category,httpStatus:r.status,bodyStatus:parsed?.status,count:list.length,matches:matches.length,exactExpectedOrder:expected.every(([t,a],i)=>simplified[i]?.novel_name===t&&simplified[i]?.writer_nick===a),list:simplified},null,2));
 }
