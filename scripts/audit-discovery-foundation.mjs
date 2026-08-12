@@ -95,7 +95,6 @@ for(const token of [
   "const PLUS_NEW_SIGNAL = 'novelpia_plus_new'",
   'const FETCH_TIMEOUT_MS = 8_000',
   'const API_MAX_BYTES = 1_000_000',
-  'const DETAIL_MAX_BYTES = 3_000_000',
   'const MAX_REDIRECTS = 3',
   'const MAX_ITEMS = 12',
   'runNovelpiaHomepageFreshIngestion',
@@ -111,30 +110,42 @@ for(const token of [
   'idFromField && idFromLink && idFromField !== idFromLink',
   "return /^\\/novel\\/(\\d{2,9})\\/?$/.exec(value)?.[1] ?? null",
   "linkUrl: `/novel/${externalId}`",
+  'parseApiGenres(row.novel_genre ?? row.genre ?? row.genres)',
+  'const synopsis = cleanText(row.novel_story, 1200) || null',
+  "const publicationStatus = numberValue(row.is_complete) === 1 ? 'completed' : 'ongoing'",
+  'viewsCount: nonNegativeInteger(row.count_view)',
+  'favoritesCount: nonNegativeInteger(row.count_book)',
+  'recommendationsCount: nonNegativeInteger(row.count_good)',
+  "raw.startsWith('[')",
+  'JSON.parse(raw)',
   "source_tier='plus'",
   "source: 'novelpia_main_v2_new_novel_curation'",
   "source: 'homepage_new_novel_curation'",
-  'await upsertCatalogNovel(env, item, detail, now)',
-  'detail ? now : null',
+  'await upsertCatalogNovel(env, item, now)',
   "redirect: 'manual'",
   'fetchJsonLimited',
   'validateApiUrl',
   'readTextLimited',
   "url.protocol !== 'https:' || host !== 'novelpia.com' || url.pathname !== HOMEPAGE_CURATION_PATH",
 ])requireText(homepageFresh,token,'NovelPia homepage curation API source');
-if(homepageFresh.includes('parseHomepageFreshCards')||homepageFresh.includes('resolveHomepageCardsFromListHtml')){
-  throw new Error('Discovery audit failed: homepage Fresh must consume NovelPia main_v2 JSON directly, not resolve IDs from rendered HTML');
+if(
+  homepageFresh.includes('parseHomepageFreshCards')
+  || homepageFresh.includes('resolveHomepageCardsFromListHtml')
+  || homepageFresh.includes('fetchNovelDetailHtml')
+  || homepageFresh.includes('parseNovelDetail')
+){
+  throw new Error('Discovery audit failed: homepage Fresh must be one direct main_v2 JSON request without rendered-HTML or detail-page resolution');
 }
-if(/_ori|coverId|imageId|assetId/.test(homepageFresh)){
+if(/coverId|imageId|assetId/.test(homepageFresh)){
   throw new Error('Discovery audit failed: homepage Fresh identity must never depend on image asset IDs');
 }
 const identityAt=homepageFresh.indexOf('const idFromField = cleanExternalId(row.novel_no)');
-const upsertAt=homepageFresh.indexOf('await upsertCatalogNovel(env, item, detail, now)');
+const upsertAt=homepageFresh.indexOf('await upsertCatalogNovel(env, item, now)');
 if(identityAt<0||upsertAt<identityAt){
   throw new Error('Discovery audit failed: canonical API identity validation must happen before catalog upsert');
 }
-if(!homepageFresh.includes("detailErrors.push(`${item.externalId}:${errorMessage(error)}`)")){
-  throw new Error('Discovery audit failed: optional detail enrichment failures must be isolated from the homepage card list');
+if((homepageFresh.match(/fetch\(/g)||[]).length!==1){
+  throw new Error('Discovery audit failed: homepage Fresh pass must use one external fetch only');
 }
 
 for(const token of [
