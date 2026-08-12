@@ -18,14 +18,16 @@ for (const token of [
   'DTL_PUBLICATION_RELEASE_RANGE',
   'await checkNow()',
   'lastPreflight?.ready',
-  "classList.contains('ready')",
   'preflight_blocked',
+  'releasePublishButton',
+  'publishButtonBusy',
+  'MutationObserver',
+  'latestBlockingMessage',
 ]) need(guard, token, 'publishing preflight guard');
-forbid(guard, 'MutationObserver', 'publishing preflight guard');
 forbid(guard, 'window.fetch =', 'publishing preflight guard');
 new Function(guard);
 
-need(html, '/app/publishing-preflight-guard.js?v=20260812-preflight1', 'Mini App publishing guard asset');
+need(html, '/app/publishing-preflight-guard.js?v=20260812-preflight2', 'Mini App publishing guard asset');
 if (html.indexOf('/app/publishing-preflight-guard.js') < html.indexOf('/app/admin-publishing-center.js')) {
   throw new Error('Publishing preflight guard must load after Publishing Center.');
 }
