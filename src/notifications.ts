@@ -66,10 +66,10 @@ type RequestCopy = {
 };
 
 const OPEN_LABEL: Record<string, string> = {
-  en:'Open Dollar TL', es:'Abrir Dollar TL', fil:'Buksan ang Dollar TL', hi:'Dollar TL खोलें', pt:'Abrir Dollar TL', id:'Buka Dollar TL', vi:'Mở Dollar TL', fr:'Ouvrir Dollar TL', de:'Dollar TL öffnen', ru:'Открыть Dollar TL',
+  en:'Open Dollar TL', es:'Abrir Dollar TL', fil:'Buksan ang Dollar TL', hi:'Dollar TL खोलें', pt:'Abrir Dollar TL', id:'Buka Dollar TL', vi:'Mở Dollar TL', fr:'Ouvrir Dollar TL', de:'Dollar TL öffnen', ru:'Открыть Dollar TL', ur:'Dollar TL کھولیں',
 };
 const RELEASE_TITLE: Record<string, string> = {
-  en:'New translation release', es:'Nueva publicación de traducción', fil:'Bagong salin', hi:'नया अनुवाद जारी', pt:'Nova tradução publicada', id:'Rilis terjemahan baru', vi:'Bản dịch mới', fr:'Nouvelle traduction', de:'Neue Übersetzung', ru:'Новый перевод',
+  en:'New translation release', es:'Nueva publicación de traducción', fil:'Bagong salin', hi:'नया अनुवाद जारी', pt:'Nova tradução publicada', id:'Rilis terjemahan baru', vi:'Bản dịch mới', fr:'Nouvelle traduction', de:'Neue Übersetzung', ru:'Новый перевод', ur:'نیا ترجمہ شائع ہوا',
 };
 const REQUEST_COPY: Record<string, RequestCopy> = {
   en:{
@@ -111,6 +111,10 @@ const REQUEST_COPY: Record<string, RequestCopy> = {
   de:{
     titles:{accepted:'Anfrage angenommen',rejected:'Anfrage abgelehnt',rejected_returned:'Abgelehnt · Kontingent zurückgegeben',started:'Übersetzung gestartet',completed:'Übersetzung abgeschlossen',progress:'Übersetzungsfortschritt aktualisiert'},
     queuePosition:'Warteschlangenposition', started:'Die Übersetzung wird jetzt in deinem Fortschritt angezeigt.', progress:'Fortschritt', sinceLast:'Seit der letzten Benachrichtigung',
+  },
+  ur:{
+    titles:{accepted:'درخواست قبول کر لی گئی',rejected:'درخواست مسترد کر دی گئی',rejected_returned:'درخواست مسترد · slot واپس',started:'ترجمہ شروع ہو گیا',completed:'ترجمہ مکمل ہو گیا',progress:'ترجمے کی پیش رفت اپ ڈیٹ ہوئی'},
+    queuePosition:'قطار میں پوزیشن', started:'ترجمہ اب آپ کی progress میں نظر آ رہا ہے۔', progress:'پیش رفت', sinceLast:'پچھلی اطلاع سے',
   },
 };
 
