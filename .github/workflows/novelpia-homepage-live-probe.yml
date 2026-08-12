@@ -1,0 +1,105 @@
+name: NovelPia Homepage Live Probe
+
+on:
+  pull_request:
+    paths:
+      - 'src/novelpia-homepage-fresh.ts'
+      - '.github/workflows/novelpia-homepage-live-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve live homepage Fresh cards
+        shell: bash
+        run: |
+          node <<'NODE'
+          const origin='https://novelpia.com';
+          const sources=[
+            ['plus_new',`${origin}/plus/entry/date?main_genre=`,'plus'],
+            ['free_new',`${origin}/freestory/new/date/1?main_genre=`,'free'],
+            ['new_rank',`${origin}/top100/plus/today/view/all/all?main_genre=`,'plus'],
+          ];
+          const headers={accept:'text/html,application/xhtml+xml','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'DollarTL-LiveProbe/1.0'};
+          const fetchHtml=async url=>{
+            const r=await fetch(url,{headers,redirect:'follow'});
+            if(!r.ok)throw new Error(`${url} -> ${r.status}`);
+            const body=await r.text();
+            console.log('FETCH',url,r.status,body.length);
+            return body;
+          };
+          const strip=s=>String(s||'').replace(/<script\b[\s\S]*?<\/script>/gi,' ').replace(/<style\b[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/\s+/g,' ').trim();
+          const norm=s=>strip(s).normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
+          const cleanTitle=s=>{
+            let t=strip(s);const marker='웹소설로 꿈꾸는 세상!';
+            if(t.includes(marker))t=t.slice(t.indexOf(marker)+marker.length).replace(/^\s*[-|:]\s*/,'');
+            return t.replace(/\s*[-|]\s*노벨피아(?:\s*[-|].*)?$/u,'').trim();
+          };
+          const parseCards=html=>{
+            const start=html.indexOf('따끈따끈 신규 작품');
+            const end=start<0?-1:html.indexOf('</section>',start);
+            if(start<0||end<0) return [];
+            const scope=html.slice(start,end);
+            if(!scope.includes('신규 PLUS 작품')) return [];
+            const re=/<p\b[^>]*class\s*=\s*(?:"[^"]*\bnov-tit\b[^"]*"|'[^']*\bnov-tit\b[^']*'|[^\s>]*\bnov-tit\b[^\s>]*)[^>]*>([\s\S]*?)<\/p>\s*<p\b[^>]*class\s*=\s*(?:"[^"]*\bnov-writer\b[^"]*"|'[^']*\bnov-writer\b[^']*'|[^\s>]*\bnov-writer\b[^\s>]*)[^>]*>([\s\S]*?)<\/p>/gi;
+            const out=[];let m;
+            while((m=re.exec(scope))&&out.length<12){const title=strip(m[1]),author=strip(m[2]);if(title)out.push({rank:out.length+1,title,author});}
+            return out;
+          };
+          const idPositions=html=>{
+            const out=[];for(const re of [/(?:https?:\/\/(?:www\.)?novelpia\.com)?\/novel\/(\d{2,9})/gi,/(?:novel_no|novelNo)["']?\s*[:=]\s*["']?(\d{2,9})/gi]){let m;while((m=re.exec(html)))out.push({id:m[1],i:m.index});}
+            return out.sort((a,b)=>a.i-b.i);
+          };
+          const direct=(card,page)=>{
+            const ids=idPositions(page.html);const byId=new Map();let at=0;
+            while((at=page.html.indexOf(card.title,at))>=0){
+              const win=page.html.slice(Math.max(0,at-1400),Math.min(page.html.length,at+1800));
+              if(card.author&&!win.includes(card.author)){at+=card.title.length;continue;}
+              for(const x of ids){const d=Math.abs(x.i-at);if(d<=2600&&(byId.get(x.id)??Infinity)>d)byId.set(x.id,d);}
+              at+=card.title.length;
+            }
+            const ranked=[...byId].sort((a,b)=>a[1]-b[1]);
+            if(!ranked.length||ranked[0][1]>2600)return null;
+            if(ranked[1]&&ranked[1][1]-ranked[0][1]<80)return null;
+            return ranked[0][0];
+          };
+          const parseDetail=(id,html)=>{
+            const og=/<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i.exec(html)?.[1]||/<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]||'';
+            return {id,title:cleanTitle(og),text:strip(html)};
+          };
+          const homepage=await fetchHtml(`${origin}/`);
+          const pages=await Promise.all(sources.map(async ([name,url,tier])=>({name,url,tier,html:await fetchHtml(url)})));
+          const cards=parseCards(homepage);
+          console.log('HOMEPAGE_CARDS',cards.length,cards);
+          if(cards.length<1)throw new Error('No homepage Fresh cards parsed');
+          const pool=[];const seen=new Set();
+          for(const page of pages)for(const x of idPositions(page.html)){if(!seen.has(x.id)){seen.add(x.id);pool.push({id:x.id,page});}}
+          const resolved=[];
+          for(const card of cards){
+            const directMatches=[];
+            for(const page of pages){const id=direct(card,page);if(id)directMatches.push({id,page});}
+            const unique=[...new Map(directMatches.map(x=>[x.id,x])).values()];
+            let candidates=unique.length===1?unique:[];
+            if(!candidates.length)candidates=pool.slice(0,40);
+            let hit=null;
+            for(let i=0;i<candidates.length&&!hit;i+=4){
+              const batch=candidates.slice(i,i+4);
+              const ds=await Promise.all(batch.map(async c=>{try{return {c,d:parseDetail(c.id,await fetchHtml(`${origin}/novel/${c.id}`))};}catch{return null;}}));
+              for(const item of ds.filter(Boolean)){
+                if(norm(item.d.title)===norm(card.title)&&(!card.author||item.d.text.includes(card.author))){hit=item;break;}
+              }
+            }
+            console.log('RESOLVE',card.rank,card.title,'/',card.author,'=>',hit?`${hit.c.id} via ${hit.c.page.name}`:'UNRESOLVED');
+            if(hit)resolved.push({card,id:hit.c.id,source:hit.c.page.name});
+          }
+          console.log('SUMMARY',JSON.stringify({cards:cards.length,resolved:resolved.length}));
+          if(resolved.length!==cards.length)throw new Error(`Only ${resolved.length}/${cards.length} homepage Fresh cards resolved`);
+          NODE
