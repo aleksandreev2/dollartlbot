@@ -11,7 +11,7 @@ const templates=[
 function createMarkup(route){
   const nav=`<nav class="admin-side-nav"><button data-admin-section="publishing"><span>Публикации</span></button><button data-admin-tools="publications"><span>Управление постами</span></button><button data-admin-section="broadcasts"><span>Рассылки</span></button></nav>`;
   const head='<header class="admin-work-head"><h1></h1><p></p></header>';
-  if(route==='section:publishing')return `<section class="admin-v2">${nav}<div class="admin-workspace">${head}<main class="admin-content"><div class="publisher-layout"><section class="publisher-editor admin-panel"><div class="admin-panel-head"><div><h2>Новая публикация</h2></div></div><label><input id="pubTitle"></label><label><textarea id="pubBody"></textarea></label><input id="pubFooter" type="checkbox" checked><input id="pubDonate" type="checkbox" checked><input id="pubBotComment" type="checkbox" checked><input id="pubNotify" type="checkbox"><select id="pubSubmissionId"><option value=""></option><option value="12">#12</option></select><input id="pubImage" type="file"><input id="pubFiles" type="file" multiple><button id="pubPublish">Publish</button></section><aside class="publisher-preview"><div class="tg-preview"><div class="tg-preview-body"></div><div class="tg-preview-footer"></div><div class="tg-preview-buttons"><span></span><span></span></div></div></aside></div></main></div></section>`;
+  if(route==='section:publishing')return `<section class="admin-v2">${nav}<div class="admin-workspace">${head}<main class="admin-content"><div class="publisher-layout"><section class="publisher-editor admin-panel"><div class="admin-panel-head"><div><h2>Новая публикация</h2></div></div><label><input id="pubTitle"></label><label><textarea id="pubBody"></textarea></label><input id="pubFooter" type="checkbox" checked><input id="pubDonate" type="checkbox" checked><input id="pubBotComment" type="checkbox" checked><input id="pubNotify" type="checkbox"><select id="pubSubmissionId"><option value=""></option><option value="12">#12</option></select><input id="pubImage" type="file"><input id="pubFiles" type="file" multiple><button id="pubPublish">Publish</button></section><aside class="publisher-preview"><div class="tg-preview"><div class="tg-preview-body"></div><div class="tg-preview-footer"></div><div class="tg-preview-buttons"><span></span><span></span></div></div></aside></div><section class="admin-publication-history"><div class="publication-row"><div class="publication-actions"><button data-pub-test="44"></button><button data-pub-send="44"></button><button data-pub-del="44"></button></div></div></section></main></div></section>`;
   return `<section class="admin-v2">${nav}<div class="admin-workspace">${head}<main class="admin-content"><section class="admin-publications-v3"><article class="admin-publication-card"><div class="admin-publication-main"><div class="admin-publication-actions"><button data-check-pub="9">Check</button></div></div></article></section></main></div></section>`;
 }
 
@@ -35,7 +35,7 @@ async function boot(page,route='section:publishing'){
         if(path==='/api/app/admin/publishing-center'&&method==='GET')return{draft:{admin_user_id:1,internal_title:'Restored draft',body_html:'Restored body',add_footer:1,add_donate:0,add_bot_comment:1,notify_users:1,submission_id:12,source_publication_id:null,updated_at:'2026-08-11T10:00:00.000Z'},templates:window.__pc.templates,limits:{}};
         if(path==='/api/app/admin/publishing-center/draft'&&method==='POST'){const body=JSON.parse(options.body||'{}');return{ok:true,draft:{...body,updated_at:'2026-08-11T10:01:00.000Z'}};}
         if(path==='/api/app/admin/publishing-center/draft'&&method==='DELETE')return{ok:true};
-        if(path==='/api/app/admin/publishing-center/preflight'){const body=JSON.parse(options.body||'{}'),ready=Boolean(body.internal_title&&body.body_html);return{ready,checks:[{id:'content',label:'Контент',status:ready?'ok':'error',message:ready?'Готово':'Заполните поля'}]};}
+        if(path==='/api/app/admin/publishing-center/preflight'){const body=JSON.parse(options.body||'{}'),ready=Boolean((body.internal_title||body.title)&&(body.body_html||body.body));return{ready,checks:[{id:'content',label:'Контент',status:ready?'ok':'error',message:ready?'Готово':'Заполните поля'}]};}
         if(path.startsWith('/api/app/admin/publishing-center/from-publication/'))return{ok:true,draft:{}};
         if(path==='/api/app/admin/publishing-center/templates'&&method==='POST')return{ok:true,id:8};
         if(/^\/api\/app\/admin\/publishing-center\/templates\/\d+$/.test(path)&&method==='DELETE')return{ok:true};
@@ -64,6 +64,15 @@ test('unifies navigation, restores server draft, autosaves and preflights before
   await expect.poll(()=>page.locator('#pcPreflightState').textContent()).toContain('Готово');
   await expect(page.locator('#pubPublish')).toBeEnabled();
 
+  const initialPreflight=await page.evaluate(()=>{
+    const call=[...window.__pc.calls].reverse().find(c=>c.path==='/api/app/admin/publishing-center/preflight');
+    return JSON.parse(call?.body||'{}');
+  });
+  expect(initialPreflight.internal_title).toBe('Restored draft');
+  expect(initialPreflight.body_html).toBe('Restored body');
+  expect(initialPreflight.title).toBe('Restored draft');
+  expect(initialPreflight.body).toBe('Restored body');
+
   await page.locator('#pubBody').fill('Edited autosaved body');
   await expect(page.locator('#pubPublish')).toBeDisabled();
   await page.locator('#pubBody').blur();
@@ -75,6 +84,29 @@ test('unifies navigation, restores server draft, autosaves and preflights before
   await page.locator('#pcApplyTemplate').click();
   await expect(page.locator('#pubBody')).toHaveValue('New chapters are now available.');
   await expect(page.locator('#pubNotify')).toBeChecked();
+
+  await expect(page.locator('[data-pub-test="44"]')).toContainText('Тест');
+  await expect(page.locator('[data-pub-send="44"]')).toContainText('Опубликовать');
+  await expect(page.locator('[data-pub-del="44"]')).toContainText('Удалить');
+});
+
+test('creating or testing a publication does not clear the working editor draft',async({page})=>{
+  await boot(page);
+  const invoke=path=>page.evaluate(async path=>{
+    const next=async()=>new Response('{}',{status:200,headers:{'content-type':'application/json'}});
+    await window.__pc.middleware(path,{method:'POST'},next);
+  },path);
+
+  await invoke('/api/app/admin/publications');
+  await page.waitForTimeout(0);
+  expect(await page.evaluate(()=>window.__pc.calls.filter(c=>c.path==='/api/app/admin/publishing-center/draft'&&c.method==='DELETE').length)).toBe(0);
+
+  await invoke('/api/app/admin/publications/44/test');
+  await page.waitForTimeout(0);
+  expect(await page.evaluate(()=>window.__pc.calls.filter(c=>c.path==='/api/app/admin/publishing-center/draft'&&c.method==='DELETE').length)).toBe(0);
+
+  await invoke('/api/app/admin/publications/44/publish');
+  await expect.poll(()=>page.evaluate(()=>window.__pc.calls.filter(c=>c.path==='/api/app/admin/publishing-center/draft'&&c.method==='DELETE').length)).toBe(1);
 });
 
 test('published post can be copied into the unified create tab',async({page})=>{
