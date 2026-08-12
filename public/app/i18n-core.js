@@ -21,8 +21,22 @@
     return normalize(window.__DTL_LOCALE__ || document.documentElement.lang) || 'en';
   }
 
+  function mergeLocaleExtensions(next) {
+    const extension = window.DTL_LOCALE_EXTENSIONS;
+    if (!extension || typeof extension !== 'object') return next;
+    const merged = { ...next };
+    for (const [tableName, additions] of Object.entries(extension)) {
+      if (!additions || typeof additions !== 'object') continue;
+      const current = next?.[tableName];
+      merged[tableName] = current && typeof current === 'object'
+        ? { ...current, ...additions }
+        : { ...additions };
+    }
+    return merged;
+  }
+
   function setCatalog(next) {
-    catalog = next && typeof next === 'object' ? next : null;
+    catalog = next && typeof next === 'object' ? mergeLocaleExtensions(next) : null;
     schedule();
   }
 
@@ -176,7 +190,6 @@
   window.DTL_RUNTIME = runtimeApi;
   window.DTL_I18N = runtimeApi;
 
-  // Local storage is only a first-paint hint. Authenticated bootstrap remains authoritative.
   apply(fromStorage() || fromTelegram() || 'en', 'initial');
 
   const nativeFetch = window.fetch.bind(window);
@@ -228,7 +241,6 @@
     return response;
   };
 
-  // Preview mode does not call the language API, so switch immediately on click.
   document.addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-lang]');
     if (!button || window.Telegram?.WebApp?.initData) return;
