@@ -3,116 +3,64 @@
   const admin=window.DTL_ADMIN;
   if(!runtime?.registerResponseHandler||!runtime?.registerPatcher||!admin?.activeRoute)return;
 
+  const COPY={
+    en:{title:'Behavior & conversion',desc:'Search → open → intent → request. Behavioral telemetry starts from {date}; real requests and active demand/follows come from business tables.',unknown:'the first event',period:n=>`${n} days`,searches:'Searches',zero:'Zero-result',intent:'Intent actions',requests:'Real requests',funnel:'Main funnel',funnelSub:'Unique users captured by telemetry in the selected period.',search:'Search',opened:'Opened title',intentStep:'Demand / Follow',submitted:'Submitted request',fromPrev:'from previous step',telemetry:'telemetry',activeDemand:'Active demand',activeFollows:'Active follows',duplicate:'Duplicate intercept',suggest:'Suggest drop-off',suggestSub:'Where users stop filling the request.',started:'Started',sent:'Submitted',left:'Left',completion:'Completion',upload:'1 · File',details:'2 · Details',content:'3 · Content',review:'4 · Review',missing:'What people search for and cannot find',missingSub:'Best candidates for the catalog and manual demand review.',missingEmpty:'No zero-result searches yet.',users:'users',last:'last',actions:'Next actions',actionsSub:'What users do after opening content.',raw:'RAW opens',shares:'Shares',releases:'Release opens',boosty:'Boosty clicks',events:'Telemetry events',justNow:'just now',min:n=>`${n} min ago`,hour:n=>`${n} h ago`},
+    ru:{title:'Поведение и конверсия',desc:'Поиск → открытие → интерес → заявка. Поведенческая телеметрия собирается с {date}; реальные заявки и активные demand/follows считаются из основных таблиц.',unknown:'первого события',period:n=>`${n} дней`,searches:'Поисков',zero:'Zero-result',intent:'Intent actions',requests:'Реальных заявок',funnel:'Основная воронка',funnelSub:'Уникальные пользователи за выбранный период.',search:'Поиск',opened:'Открыли тайтл',intentStep:'Demand / Follow',submitted:'Отправили заявку',fromPrev:'от предыдущего шага',telemetry:'телеметрия',activeDemand:'Active demand',activeFollows:'Active follows',duplicate:'Duplicate intercept',suggest:'Suggest drop-off',suggestSub:'Где пользователь прекращает заполнение.',started:'Начали',sent:'Отправили',left:'Ушли',completion:'Completion',upload:'1 · Файл',details:'2 · Данные',content:'3 · Контент',review:'4 · Проверка',missing:'Что ищут и не находят',missingSub:'Лучшие кандидаты для каталога и ручной проверки спроса.',missingEmpty:'Zero-result запросов пока нет.',users:'польз.',last:'последний',actions:'Дальнейшие действия',actionsSub:'Что люди делают после открытия контента.',raw:'RAW opens',shares:'Shares',releases:'Release opens',boosty:'Boosty clicks',events:'Telemetry events',justNow:'только что',min:n=>`${n} мин назад`,hour:n=>`${n} ч назад`},
+    es:{title:'Comportamiento y conversión',desc:'Búsqueda → apertura → interés → solicitud. La telemetría se recopila desde {date}; las solicitudes reales y el interés activo vienen de las tablas principales.',unknown:'el primer evento',period:n=>`${n} días`,searches:'Búsquedas',zero:'Sin resultados',intent:'Acciones de interés',requests:'Solicitudes reales',funnel:'Embudo principal',funnelSub:'Usuarios únicos registrados en el período seleccionado.',search:'Búsqueda',opened:'Abrieron título',intentStep:'Interés / Follow',submitted:'Enviaron solicitud',fromPrev:'del paso anterior',telemetry:'telemetría',activeDemand:'Interés activo',activeFollows:'Follows activos',duplicate:'Duplicados bloqueados',suggest:'Abandono de Suggest',suggestSub:'Dónde dejan de completar la solicitud.',started:'Empezaron',sent:'Enviaron',left:'Salieron',completion:'Finalización',upload:'1 · Archivo',details:'2 · Datos',content:'3 · Contenido',review:'4 · Revisión',missing:'Qué buscan y no encuentran',missingSub:'Candidatos para el catálogo y revisión manual de demanda.',missingEmpty:'Aún no hay búsquedas sin resultados.',users:'usuarios',last:'último',actions:'Acciones posteriores',actionsSub:'Qué hacen después de abrir contenido.',raw:'Aperturas RAW',shares:'Compartidos',releases:'Aperturas de releases',boosty:'Clics en Boosty',events:'Eventos de telemetría',justNow:'ahora',min:n=>`hace ${n} min`,hour:n=>`hace ${n} h`},
+    fil:{title:'Behavior at conversion',desc:'Search → open → interest → request. Kinokolekta ang telemetry mula {date}; ang tunay na requests at active demand/follows ay mula sa main data.',unknown:'unang event',period:n=>`${n} araw`,searches:'Searches',zero:'Walang resulta',intent:'Interest actions',requests:'Tunay na requests',funnel:'Main funnel',funnelSub:'Unique users sa napiling period.',search:'Search',opened:'Nagbukas ng title',intentStep:'Demand / Follow',submitted:'Nag-submit',fromPrev:'mula sa nakaraang step',telemetry:'telemetry',activeDemand:'Active demand',activeFollows:'Active follows',duplicate:'Duplicate intercept',suggest:'Suggest drop-off',suggestSub:'Kung saan humihinto ang user.',started:'Nagsimula',sent:'Na-submit',left:'Umalis',completion:'Completion',upload:'1 · File',details:'2 · Details',content:'3 · Content',review:'4 · Review',missing:'Hinahanap pero hindi makita',missingSub:'Mga candidate para sa catalog at manual demand review.',missingEmpty:'Wala pang zero-result searches.',users:'users',last:'huli',actions:'Susunod na actions',actionsSub:'Ginagawa ng users pagkatapos magbukas ng content.',raw:'RAW opens',shares:'Shares',releases:'Release opens',boosty:'Boosty clicks',events:'Telemetry events',justNow:'ngayon lang',min:n=>`${n} min ang nakalipas`,hour:n=>`${n} oras ang nakalipas`},
+    hi:{title:'व्यवहार और कन्वर्ज़न',desc:'खोज → खोलना → रुचि → अनुरोध। व्यवहारिक telemetry {date} से इकट्ठी होती है; वास्तविक अनुरोध और active demand/follows मुख्य डेटा से आते हैं।',unknown:'पहले event',period:n=>`${n} दिन`,searches:'खोजें',zero:'बिना परिणाम',intent:'रुचि actions',requests:'वास्तविक अनुरोध',funnel:'मुख्य funnel',funnelSub:'चुनी अवधि में telemetry से दर्ज unique users।',search:'खोज',opened:'शीर्षक खोला',intentStep:'Demand / Follow',submitted:'अनुरोध भेजा',fromPrev:'पिछले चरण से',telemetry:'telemetry',activeDemand:'Active demand',activeFollows:'Active follows',duplicate:'Duplicate intercept',suggest:'Suggest drop-off',suggestSub:'जहाँ user अनुरोध भरना छोड़ता है।',started:'शुरू किया',sent:'भेजा',left:'छोड़ा',completion:'Completion',upload:'1 · फ़ाइल',details:'2 · जानकारी',content:'3 · कंटेंट',review:'4 · समीक्षा',missing:'क्या खोजते हैं लेकिन मिलता नहीं',missingSub:'Catalog और manual demand review के लिए अच्छे candidates।',missingEmpty:'अभी कोई zero-result search नहीं है।',users:'users',last:'अंतिम',actions:'अगले actions',actionsSub:'Content खोलने के बाद users क्या करते हैं।',raw:'RAW opens',shares:'Shares',releases:'Release opens',boosty:'Boosty clicks',events:'Telemetry events',justNow:'अभी',min:n=>`${n} मिनट पहले`,hour:n=>`${n} घंटे पहले`},
+    pt:{title:'Comportamento e conversão',desc:'Pesquisa → abertura → interesse → pedido. A telemetria começa em {date}; pedidos reais e demand/follows ativos vêm das tabelas principais.',unknown:'o primeiro evento',period:n=>`${n} dias`,searches:'Pesquisas',zero:'Sem resultado',intent:'Ações de interesse',requests:'Pedidos reais',funnel:'Funil principal',funnelSub:'Usuários únicos no período selecionado.',search:'Pesquisa',opened:'Abriram título',intentStep:'Demand / Follow',submitted:'Enviaram pedido',fromPrev:'da etapa anterior',telemetry:'telemetria',activeDemand:'Demand ativo',activeFollows:'Follows ativos',duplicate:'Duplicados bloqueados',suggest:'Abandono no Suggest',suggestSub:'Onde o usuário para de preencher.',started:'Começaram',sent:'Enviaram',left:'Saíram',completion:'Conclusão',upload:'1 · Arquivo',details:'2 · Dados',content:'3 · Conteúdo',review:'4 · Revisão',missing:'O que procuram e não encontram',missingSub:'Candidatos para catálogo e revisão manual da demanda.',missingEmpty:'Ainda não há pesquisas sem resultado.',users:'usuários',last:'último',actions:'Ações seguintes',actionsSub:'O que fazem após abrir o conteúdo.',raw:'Aberturas RAW',shares:'Compartilhamentos',releases:'Aberturas de releases',boosty:'Cliques no Boosty',events:'Eventos de telemetria',justNow:'agora',min:n=>`há ${n} min`,hour:n=>`há ${n} h`},
+    id:{title:'Perilaku & konversi',desc:'Pencarian → buka → minat → permintaan. Telemetri dimulai {date}; permintaan nyata dan demand/follow aktif berasal dari data utama.',unknown:'event pertama',period:n=>`${n} hari`,searches:'Pencarian',zero:'Tanpa hasil',intent:'Aksi minat',requests:'Permintaan nyata',funnel:'Funnel utama',funnelSub:'Pengguna unik pada periode terpilih.',search:'Pencarian',opened:'Membuka judul',intentStep:'Demand / Follow',submitted:'Mengirim permintaan',fromPrev:'dari langkah sebelumnya',telemetry:'telemetri',activeDemand:'Demand aktif',activeFollows:'Follow aktif',duplicate:'Duplikat dicegah',suggest:'Suggest drop-off',suggestSub:'Di mana pengguna berhenti mengisi.',started:'Mulai',sent:'Terkirim',left:'Keluar',completion:'Completion',upload:'1 · File',details:'2 · Detail',content:'3 · Konten',review:'4 · Review',missing:'Yang dicari tapi tidak ditemukan',missingSub:'Kandidat terbaik untuk katalog dan review demand.',missingEmpty:'Belum ada pencarian tanpa hasil.',users:'pengguna',last:'terakhir',actions:'Aksi berikutnya',actionsSub:'Yang dilakukan setelah membuka konten.',raw:'RAW dibuka',shares:'Dibagikan',releases:'Release dibuka',boosty:'Klik Boosty',events:'Event telemetri',justNow:'baru saja',min:n=>`${n} mnt lalu`,hour:n=>`${n} jam lalu`},
+    vi:{title:'Hành vi & chuyển đổi',desc:'Tìm kiếm → mở → quan tâm → gửi yêu cầu. Telemetry bắt đầu từ {date}; yêu cầu thật và demand/follow đang hoạt động lấy từ dữ liệu chính.',unknown:'sự kiện đầu tiên',period:n=>`${n} ngày`,searches:'Tìm kiếm',zero:'Không có kết quả',intent:'Hành động quan tâm',requests:'Yêu cầu thật',funnel:'Phễu chính',funnelSub:'Người dùng duy nhất trong giai đoạn đã chọn.',search:'Tìm kiếm',opened:'Mở tác phẩm',intentStep:'Demand / Follow',submitted:'Gửi yêu cầu',fromPrev:'từ bước trước',telemetry:'telemetry',activeDemand:'Demand đang hoạt động',activeFollows:'Follow đang hoạt động',duplicate:'Chặn trùng lặp',suggest:'Suggest drop-off',suggestSub:'Nơi người dùng ngừng điền.',started:'Bắt đầu',sent:'Đã gửi',left:'Rời đi',completion:'Hoàn tất',upload:'1 · Tệp',details:'2 · Thông tin',content:'3 · Nội dung',review:'4 · Kiểm tra',missing:'Tìm gì nhưng không thấy',missingSub:'Ứng viên tốt cho catalog và kiểm tra nhu cầu.',missingEmpty:'Chưa có tìm kiếm không kết quả.',users:'người dùng',last:'gần nhất',actions:'Hành động tiếp theo',actionsSub:'Người dùng làm gì sau khi mở nội dung.',raw:'Mở RAW',shares:'Chia sẻ',releases:'Mở release',boosty:'Nhấp Boosty',events:'Sự kiện telemetry',justNow:'vừa xong',min:n=>`${n} phút trước`,hour:n=>`${n} giờ trước`},
+    fr:{title:'Comportement et conversion',desc:'Recherche → ouverture → intérêt → demande. La télémétrie commence à {date}; les demandes réelles et demand/follows actifs viennent des données principales.',unknown:'le premier événement',period:n=>`${n} jours`,searches:'Recherches',zero:'Sans résultat',intent:'Actions d’intérêt',requests:'Demandes réelles',funnel:'Entonnoir principal',funnelSub:'Utilisateurs uniques sur la période sélectionnée.',search:'Recherche',opened:'Titre ouvert',intentStep:'Demand / Follow',submitted:'Demande envoyée',fromPrev:'depuis l’étape précédente',telemetry:'télémétrie',activeDemand:'Demand actif',activeFollows:'Follows actifs',duplicate:'Doublons interceptés',suggest:'Abandon Suggest',suggestSub:'Où les utilisateurs arrêtent de remplir.',started:'Commencé',sent:'Envoyé',left:'Quitté',completion:'Complétion',upload:'1 · Fichier',details:'2 · Détails',content:'3 · Contenu',review:'4 · Vérification',missing:'Ce qui est recherché sans être trouvé',missingSub:'Bons candidats pour le catalogue et la revue de demande.',missingEmpty:'Aucune recherche sans résultat pour le moment.',users:'utilisateurs',last:'dernier',actions:'Actions suivantes',actionsSub:'Ce qui est fait après ouverture du contenu.',raw:'Ouvertures RAW',shares:'Partages',releases:'Ouvertures release',boosty:'Clics Boosty',events:'Événements de télémétrie',justNow:'à l’instant',min:n=>`il y a ${n} min`,hour:n=>`il y a ${n} h`},
+    de:{title:'Verhalten & Conversion',desc:'Suche → Öffnen → Interesse → Anfrage. Telemetrie läuft ab {date}; echte Anfragen und aktive Demand/Follows kommen aus den Hauptdaten.',unknown:'dem ersten Ereignis',period:n=>`${n} Tage`,searches:'Suchen',zero:'Ohne Ergebnis',intent:'Interesse-Aktionen',requests:'Echte Anfragen',funnel:'Haupt-Funnel',funnelSub:'Eindeutige Nutzer im gewählten Zeitraum.',search:'Suche',opened:'Titel geöffnet',intentStep:'Demand / Follow',submitted:'Anfrage gesendet',fromPrev:'vom vorherigen Schritt',telemetry:'Telemetrie',activeDemand:'Aktive Demand',activeFollows:'Aktive Follows',duplicate:'Duplikate abgefangen',suggest:'Suggest-Abbruch',suggestSub:'Wo Nutzer das Ausfüllen beenden.',started:'Gestartet',sent:'Gesendet',left:'Verlassen',completion:'Abschluss',upload:'1 · Datei',details:'2 · Details',content:'3 · Inhalt',review:'4 · Prüfung',missing:'Gesucht, aber nicht gefunden',missingSub:'Gute Kandidaten für Katalog und Demand-Prüfung.',missingEmpty:'Noch keine Suchen ohne Ergebnis.',users:'Nutzer',last:'zuletzt',actions:'Weitere Aktionen',actionsSub:'Was nach dem Öffnen von Inhalten passiert.',raw:'RAW geöffnet',shares:'Shares',releases:'Release geöffnet',boosty:'Boosty-Klicks',events:'Telemetrie-Events',justNow:'gerade eben',min:n=>`vor ${n} Min.`,hour:n=>`vor ${n} Std.`},
+    ur:{title:'رویّہ اور کنورژن',desc:'تلاش → کھولنا → دلچسپی → درخواست۔ Behavioral telemetry {date} سے جمع ہوتی ہے؛ حقیقی درخواستیں اور active demand/follows بنیادی data سے آتے ہیں۔',unknown:'پہلے event',period:n=>`${n} دن`,searches:'تلاشیں',zero:'بغیر نتیجہ',intent:'دلچسپی actions',requests:'حقیقی درخواستیں',funnel:'مرکزی funnel',funnelSub:'منتخب مدت میں telemetry سے درج unique users۔',search:'تلاش',opened:'عنوان کھولا',intentStep:'Demand / Follow',submitted:'درخواست بھیجی',fromPrev:'پچھلے مرحلے سے',telemetry:'telemetry',activeDemand:'Active demand',activeFollows:'Active follows',duplicate:'Duplicate intercept',suggest:'Suggest drop-off',suggestSub:'جہاں user درخواست بھرنا چھوڑتا ہے۔',started:'شروع کیا',sent:'بھیجی',left:'چھوڑ دیا',completion:'Completion',upload:'1 · فائل',details:'2 · معلومات',content:'3 · مواد',review:'4 · جائزہ',missing:'جو تلاش کرتے ہیں مگر نہیں ملتا',missingSub:'Catalog اور manual demand review کے لیے بہترین candidates۔',missingEmpty:'ابھی کوئی zero-result search نہیں۔',users:'users',last:'آخری',actions:'اگلے actions',actionsSub:'Content کھولنے کے بعد users کیا کرتے ہیں۔',raw:'RAW opens',shares:'Shares',releases:'Release opens',boosty:'Boosty clicks',events:'Telemetry events',justNow:'ابھی',min:n=>`${n} منٹ پہلے`,hour:n=>`${n} گھنٹے پہلے`}
+  };
+  const LOCALES={en:'en-US',ru:'ru-RU',es:'es-ES',fil:'fil-PH',hi:'hi-IN',pt:'pt-BR',id:'id-ID',vi:'vi-VN',fr:'fr-FR',de:'de-DE',ur:'ur-PK'};
+
   let product=null;
   let days=30;
   let stamp='';
 
   runtime.registerResponseHandler(async(response,context)=>{
     if(response.ok&&context.pathname==='/api/app/admin/analytics'){
-      try{
-        const payload=await response.clone().json();
-        product=payload?.product||null;
-        days=Number(payload?.days||30);
-        stamp=JSON.stringify(product||{}).slice(0,20000);
-        queueMicrotask(patch);
-      }catch{}
+      try{const payload=await response.clone().json();product=payload?.product||null;days=Number(payload?.days||30);stamp=JSON.stringify(product||{}).slice(0,20000);queueMicrotask(patch);}catch{}
     }
     return response;
   });
-
   runtime.registerPatcher(patch);
   document.addEventListener('dtl:adminrender',()=>queueMicrotask(patch));
   document.addEventListener('dtl:adminroutechange',()=>queueMicrotask(patch));
+  document.addEventListener('dtl:localechange',()=>{stamp='';queueMicrotask(patch);});
 
+  function locale(){const code=runtime.locale?.()||'en';return COPY[code]?code:'en';}
+  function tr(){return COPY[locale()]||COPY.en;}
   function patch(){
     if(admin.activeRoute()!=='tools:analytics'||!product)return;
-    const root=document.querySelector('.admin-analytics');
-    if(!root)return;
-    let host=root.querySelector('[data-product-analytics]');
-    if(host?.dataset.productStamp===stamp)return;
+    const root=document.querySelector('.admin-analytics');if(!root)return;
+    const localizedStamp=`${locale()}:${stamp}`;
+    let host=root.querySelector('[data-product-analytics]');if(host?.dataset.productStamp===localizedStamp)return;
     if(!host){host=document.createElement('section');host.dataset.productAnalytics='1';root.prepend(host);}
-    host.dataset.productStamp=stamp;
-    host.className='product-analytics-v2';
-    host.innerHTML=render(product);
+    host.dataset.productStamp=localizedStamp;host.className='product-analytics-v2';host.innerHTML=render(product);
     try{window.lucide?.createIcons?.({attrs:{'stroke-width':1.8,'aria-hidden':'true'}});}catch{}
   }
 
   function render(p){
-    const funnel=p.funnel||{};
-    const suggest=p.suggest||{};
-    const tracking=p.tracking_since?formatDate(p.tracking_since):'после первого события';
-    return `
-      <div class="product-analytics-head">
-        <div><span class="product-analytics-eyebrow">PRODUCT ANALYTICS</span><h2>Поведение и конверсия</h2><p>Поиск → открытие → интерес → заявка. Поведенческая воронка собирается с ${esc(tracking)}; реальные заявки и текущее состояние demand/follows считаются из основных таблиц.</p></div>
-        <span class="product-analytics-period">${days} дней</span>
-      </div>
-      <div class="product-analytics-kpis">
-        ${kpi('search',fmt(p.searches),'Поисков')}
-        ${kpi('circle-off',`${fmt(p.zero_result_rate)}%`,'Zero-result')}
-        ${kpi('heart',fmt(Number(p.interest_adds||0)+Number(p.follow_adds||0)),'Intent actions')}
-        ${kpi('send',fmt(funnel.requests),'Реальных заявок')}
-      </div>
-      <div class="product-analytics-grid">
-        <article class="product-analytics-card product-funnel-card">
-          <div class="product-card-head"><div><h3>Основная воронка</h3><p>Уникальные пользователи, зафиксированные телеметрией за выбранный период.</p></div><i data-lucide="route" aria-hidden="true"></i></div>
-          <div class="product-funnel">
-            ${funnelRow('Поиск',funnel.search_users,null)}
-            ${funnelRow('Открыли тайтл',funnel.open_users,funnel.search_users)}
-            ${funnelRow('Demand / Follow',funnel.intent_users,funnel.open_users)}
-            ${funnelRow('Отправили заявку',funnel.request_users,funnel.intent_users)}
-          </div>
-          <div class="product-hard-split"><span>Active demand +${fmt(funnel.demand_adds)}</span><span>Active follows +${fmt(funnel.follow_adds)}</span><span>Duplicate intercept ${fmt(p.duplicates_intercepted)}</span></div>
-        </article>
-        <article class="product-analytics-card product-suggest-card">
-          <div class="product-card-head"><div><h3>Suggest drop-off</h3><p>Где пользователь прекращает заполнение.</p></div><i data-lucide="list-checks" aria-hidden="true"></i></div>
-          <div class="suggest-flow-stats"><div><strong>${fmt(suggest.started_users)}</strong><span>Начали</span></div><div><strong>${fmt(suggest.submitted_users)}</strong><span>Отправили</span></div><div><strong>${fmt(suggest.abandoned_users)}</strong><span>Ушли</span></div><div><strong>${fmt(suggest.completion_rate)}%</strong><span>Completion</span></div></div>
-          <div class="suggest-step-list">${renderSuggestSteps(suggest.steps)}</div>
-        </article>
-      </div>
-      <div class="product-analytics-grid lower">
-        <article class="product-analytics-card product-zero-card">
-          <div class="product-card-head"><div><h3>Что ищут и не находят</h3><p>Лучшие кандидаты для каталога и ручной проверки спроса.</p></div><span class="product-count">${fmt(p.zero_results)}</span></div>
-          ${renderZeroResults(p.zero_result_queries)}
-        </article>
-        <article class="product-analytics-card product-interactions-card">
-          <div class="product-card-head"><div><h3>Дальнейшие действия</h3><p>Что люди делают после открытия контента.</p></div><i data-lucide="mouse-pointer-click" aria-hidden="true"></i></div>
-          <div class="product-action-list">
-            ${actionRow('file-down','RAW opens',p.raw_opens)}
-            ${actionRow('share-2','Shares',p.shares)}
-            ${actionRow('send','Release opens',p.release_opens)}
-            ${actionRow('gem','Boosty clicks',p.boosty_clicks)}
-            ${actionRow('layers-2','Telemetry events',p.events_total)}
-          </div>
-        </article>
-      </div>`;
+    const c=tr(),funnel=p.funnel||{},suggest=p.suggest||{};
+    const tracking=p.tracking_since?formatDate(p.tracking_since):c.unknown;
+    return `<div class="product-analytics-head"><div><span class="product-analytics-eyebrow">PRODUCT ANALYTICS</span><h2>${esc(c.title)}</h2><p>${esc(c.desc.replace('{date}',tracking))}</p></div><span class="product-analytics-period">${esc(c.period(days))}</span></div>
+      <div class="product-analytics-kpis">${kpi('search',fmt(p.searches),c.searches)}${kpi('circle-off',`${fmt(p.zero_result_rate)}%`,c.zero)}${kpi('heart',fmt(Number(p.interest_adds||0)+Number(p.follow_adds||0)),c.intent)}${kpi('send',fmt(funnel.requests),c.requests)}</div>
+      <div class="product-analytics-grid"><article class="product-analytics-card product-funnel-card"><div class="product-card-head"><div><h3>${esc(c.funnel)}</h3><p>${esc(c.funnelSub)}</p></div><i data-lucide="route" aria-hidden="true"></i></div><div class="product-funnel">${funnelRow(c.search,funnel.search_users,null)}${funnelRow(c.opened,funnel.open_users,funnel.search_users)}${funnelRow(c.intentStep,funnel.intent_users,funnel.open_users)}${funnelRow(c.submitted,funnel.request_users,funnel.intent_users)}</div><div class="product-hard-split"><span>${esc(c.activeDemand)} +${fmt(funnel.demand_adds)}</span><span>${esc(c.activeFollows)} +${fmt(funnel.follow_adds)}</span><span>${esc(c.duplicate)} ${fmt(p.duplicates_intercepted)}</span></div></article>
+      <article class="product-analytics-card product-suggest-card"><div class="product-card-head"><div><h3>${esc(c.suggest)}</h3><p>${esc(c.suggestSub)}</p></div><i data-lucide="list-checks" aria-hidden="true"></i></div><div class="suggest-flow-stats"><div><strong>${fmt(suggest.started_users)}</strong><span>${esc(c.started)}</span></div><div><strong>${fmt(suggest.submitted_users)}</strong><span>${esc(c.sent)}</span></div><div><strong>${fmt(suggest.abandoned_users)}</strong><span>${esc(c.left)}</span></div><div><strong>${fmt(suggest.completion_rate)}%</strong><span>${esc(c.completion)}</span></div></div><div class="suggest-step-list">${renderSuggestSteps(suggest.steps)}</div></article></div>
+      <div class="product-analytics-grid lower"><article class="product-analytics-card product-zero-card"><div class="product-card-head"><div><h3>${esc(c.missing)}</h3><p>${esc(c.missingSub)}</p></div><span class="product-count">${fmt(p.zero_results)}</span></div>${renderZeroResults(p.zero_result_queries)}</article><article class="product-analytics-card product-interactions-card"><div class="product-card-head"><div><h3>${esc(c.actions)}</h3><p>${esc(c.actionsSub)}</p></div><i data-lucide="mouse-pointer-click" aria-hidden="true"></i></div><div class="product-action-list">${actionRow('file-down',c.raw,p.raw_opens)}${actionRow('share-2',c.shares,p.shares)}${actionRow('send',c.releases,p.release_opens)}${actionRow('gem',c.boosty,p.boosty_clicks)}${actionRow('layers-2',c.events,p.events_total)}</div></article></div>`;
   }
-
-  function funnelRow(label,value,previous){
-    const n=Number(value||0),prev=Number(previous||0);
-    const conversion=prev>0&&n<=prev?`${Math.round((n/prev)*1000)/10}%`:'—';
-    return `<div class="product-funnel-row"><div><strong>${esc(label)}</strong><span>${prev?`${conversion} от предыдущего шага`:'telemetry'}</span></div><b>${fmt(n)}</b></div>`;
-  }
-
-  function renderSuggestSteps(rows){
-    const labels={upload:'1 · Файл',details:'2 · Данные',content:'3 · Контент',review:'4 · Проверка'};
-    const map=new Map((Array.isArray(rows)?rows:[]).map(row=>[String(row.step||''),Number(row.users||0)]));
-    const max=Math.max(1,...map.values());
-    return ['upload','details','content','review'].map(step=>{
-      const value=map.get(step)||0;
-      return `<div class="suggest-step-row"><span>${esc(labels[step])}</span><div><i style="--product-progress:${Math.round(value/max*100)}%"></i></div><strong>${fmt(value)}</strong></div>`;
-    }).join('');
-  }
-
-  function renderZeroResults(rows){
-    const list=Array.isArray(rows)?rows:[];
-    if(!list.length)return '<div class="product-empty"><i data-lucide="search-check" aria-hidden="true"></i><span>Zero-result запросов пока нет.</span></div>';
-    return `<div class="product-zero-list">${list.slice(0,12).map((row,index)=>`<div class="product-zero-row"><span>${index+1}</span><div><strong title="${esc(row.query_text||'')}">${esc(row.query_text||'—')}</strong><small>${fmt(row.users)} польз. · последний ${esc(relative(row.last_seen))}</small></div><b>${fmt(row.count)}</b></div>`).join('')}</div>`;
-  }
-
+  function funnelRow(label,value,previous){const c=tr(),n=Number(value||0),prev=Number(previous||0),conversion=prev>0&&n<=prev?`${Math.round((n/prev)*1000)/10}%`:'—';return `<div class="product-funnel-row"><div><strong>${esc(label)}</strong><span>${prev?`${conversion} ${esc(c.fromPrev)}`:esc(c.telemetry)}</span></div><b>${fmt(n)}</b></div>`;}
+  function renderSuggestSteps(rows){const c=tr(),labels={upload:c.upload,details:c.details,content:c.content,review:c.review},map=new Map((Array.isArray(rows)?rows:[]).map(row=>[String(row.step||''),Number(row.users||0)])),max=Math.max(1,...map.values());return ['upload','details','content','review'].map(step=>{const value=map.get(step)||0;return `<div class="suggest-step-row"><span>${esc(labels[step])}</span><div><i style="--product-progress:${Math.round(value/max*100)}%"></i></div><strong>${fmt(value)}</strong></div>`;}).join('');}
+  function renderZeroResults(rows){const c=tr(),list=Array.isArray(rows)?rows:[];if(!list.length)return `<div class="product-empty"><i data-lucide="search-check" aria-hidden="true"></i><span>${esc(c.missingEmpty)}</span></div>`;return `<div class="product-zero-list">${list.slice(0,12).map((row,index)=>`<div class="product-zero-row"><span>${index+1}</span><div><strong title="${esc(row.query_text||'')}">${esc(row.query_text||'—')}</strong><small>${fmt(row.users)} ${esc(c.users)} · ${esc(c.last)} ${esc(relative(row.last_seen))}</small></div><b>${fmt(row.count)}</b></div>`).join('')}</div>`;}
   function kpi(icon,value,label){return `<div class="product-kpi"><i data-lucide="${icon}" aria-hidden="true"></i><div><strong>${esc(value)}</strong><span>${esc(label)}</span></div></div>`;}
   function actionRow(icon,label,value){return `<div><i data-lucide="${icon}" aria-hidden="true"></i><span>${esc(label)}</span><strong>${fmt(value)}</strong></div>`;}
-  function fmt(value){const n=Number(value||0);return Number.isFinite(n)?new Intl.NumberFormat('ru-RU',{maximumFractionDigits:1}).format(n):'0';}
-  function formatDate(value){try{return new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value));}catch{return String(value||'');}}
-  function relative(value){if(!value)return '—';const t=Date.parse(value);if(!Number.isFinite(t))return String(value);const d=Date.now()-t;if(d<60000)return'только что';if(d<3600000)return`${Math.max(1,Math.round(d/60000))} мин назад`;if(d<86400000)return`${Math.max(1,Math.round(d/3600000))} ч назад`;return formatDate(value);}
+  function fmt(value){const n=Number(value||0);return Number.isFinite(n)?new Intl.NumberFormat(LOCALES[locale()]||'en-US',{maximumFractionDigits:1}).format(n):'0';}
+  function formatDate(value){try{return new Intl.DateTimeFormat(LOCALES[locale()]||'en-US',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value));}catch{return String(value||'');}}
+  function relative(value){const c=tr();if(!value)return'—';const t=Date.parse(value);if(!Number.isFinite(t))return String(value);const d=Date.now()-t;if(d<60000)return c.justNow;if(d<3600000)return c.min(Math.max(1,Math.round(d/60000)));if(d<86400000)return c.hour(Math.max(1,Math.round(d/3600000)));return formatDate(value);}
   function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 })();
