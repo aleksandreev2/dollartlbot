@@ -111,7 +111,7 @@ test('Admin Analytics renders product funnel and zero-result demand without mobi
     const handlers=[];const patchers=[];
     window.__adminAnalyticsTest={handlers,patchers};
     window.lucide={createIcons(){}};
-    window.DTL_RUNTIME={registerResponseHandler(fn){handlers.push(fn);return()=>{};},registerPatcher(fn){patchers.push(fn);return()=>{};}};
+    window.DTL_RUNTIME={registerResponseHandler(fn){handlers.push(fn);return()=>{};},registerPatcher(fn){patchers.push(fn);return()=>{};},locale(){return'en';}};
     window.DTL_ADMIN={activeRoute:()=> 'tools:analytics'};
   });
   await page.addScriptTag({content:adminSource});
@@ -131,7 +131,7 @@ test('Admin Analytics renders product funnel and zero-result demand without mobi
 
   const panel=page.locator('[data-product-analytics]');
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText('Основная воронка');
+  await expect(panel).toContainText('Main funnel');
   await expect(panel).toContainText('Suggest drop-off');
   await expect(panel).toContainText('academy necromancer');
   await expect(panel).toContainText('빙의 악녀');

@@ -9,6 +9,7 @@ import { vi } from './vi';
 import { fr } from './fr';
 import { de } from './de';
 import { ru } from './ru';
+import { ur } from './ur';
 import { featureTranslations } from './features';
 import { policyTranslations } from './policy';
 import { policyOverrideTranslations } from './policy_override';
@@ -32,6 +33,7 @@ const dictionaries = {
   fr: { ...fr, ...featureTranslations.fr, ...policyTranslations.fr, ...policyOverrideTranslations.fr, ...statusOverrideTranslations.fr, ...qualityOverrideTranslations.fr, ...rulesQualityOverrideTranslations.fr, ...interfacePolishTranslations.fr, ...localeCleanupTranslations.fr, ...accessGateTranslations.fr },
   de: { ...de, ...featureTranslations.de, ...policyTranslations.de, ...policyOverrideTranslations.de, ...statusOverrideTranslations.de, ...qualityOverrideTranslations.de, ...rulesQualityOverrideTranslations.de, ...interfacePolishTranslations.de, ...localeCleanupTranslations.de, ...accessGateTranslations.de },
   ru: { ...ru, ...featureTranslations.ru, ...policyTranslations.ru, ...policyOverrideTranslations.ru, ...statusOverrideTranslations.ru, ...qualityOverrideTranslations.ru, ...rulesQualityOverrideTranslations.ru, ...interfacePolishTranslations.ru, ...localeCleanupTranslations.ru, ...accessGateTranslations.ru },
+  ur: { ...ur },
 } as const;
 
 export type TranslationKey = keyof typeof dictionaries.en;

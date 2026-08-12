@@ -47,6 +47,7 @@ const NOTIFY: Record<Locale, { earned: string; cap: string }> = {
   fr: { earned: '🎁 Parrainage validé ! Vous gagnez +1 demande de roman supplémentaire.', cap: '✅ Parrainage validé. Vous avez déjà atteint le maximum de +3 demandes bonus.' },
   de: { earned: '🎁 Empfehlung abgeschlossen! Du erhältst +1 zusätzliche Roman-Anfrage.', cap: '✅ Empfehlung abgeschlossen. Du hast bereits das Maximum von +3 Bonus-Anfragen erreicht.' },
   ru: { earned: '🎁 Реферал засчитан! Вы получили +1 дополнительную заявку на новеллу.', cap: '✅ Реферал засчитан. У вас уже достигнут максимум: +3 реферальных слота.' },
+  ur: { earned: '🎁 ریفرل مکمل! آپ کو ناول کی +1 اضافی درخواست ملی۔', cap: '✅ ریفرل مکمل۔ آپ کا ریفرل بونس پہلے ہی زیادہ سے زیادہ +3 ہے۔' },
 };
 
 const REFERRAL_NOTIFY_TITLE: Record<Locale, string> = {
@@ -60,6 +61,7 @@ const REFERRAL_NOTIFY_TITLE: Record<Locale, string> = {
   fr:'Bonus de parrainage mis à jour',
   de:'Empfehlungsbonus aktualisiert',
   ru:'Реферальный бонус обновлён',
+  ur:'ریفرل بونس اپ ڈیٹ ہو گیا',
 };
 
 const REFERRAL_START: Record<Locale, { title: string; body: string; join: string; app: string }> = {
@@ -122,6 +124,12 @@ const REFERRAL_START: Record<Locale, { title: string; body: string; join: string
     body: 'Вступите в наш канал по кнопке ниже и оставайтесь подписчиком не менее 7 дней. После этого пригласивший вас пользователь получит +1 дополнительную заявку на новеллу. Mini App Dollar TL можно открыть сразу.',
     join: 'Вступить в канал Dollar TL',
     app: 'Открыть Dollar TL',
+  },
+  ur: {
+    title: '🎁 آپ کو Dollar TL میں مدعو کیا گیا ہے',
+    body: 'نیچے والے بٹن سے ہمارے channel میں شامل ہوں اور کم از کم 7 دن subscribed رہیں۔ اس کے بعد جس شخص نے آپ کو مدعو کیا اسے ناول کی +1 اضافی درخواست ملے گی۔ آپ Dollar TL Mini App ابھی بھی کھول سکتے ہیں۔',
+    join: 'Dollar TL channel join کریں',
+    app: 'Dollar TL کھولیں',
   },
 };
 

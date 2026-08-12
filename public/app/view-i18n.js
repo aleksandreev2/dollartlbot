@@ -4,7 +4,7 @@
   if(!app?.state||!runtime?.copy||!runtime?.table)throw new Error('DTL app core and i18n runtime must load before view-i18n.js');
 
   const baseTr=app.tr.bind(app);
-  const requestWords={en:'Request',ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage'};
+  const requestWords={en:'Request',ru:'Заявка',es:'Solicitud',fil:'Kahilingan',hi:'अनुरोध',pt:'Pedido',id:'Permintaan',vi:'Yêu cầu',fr:'Demande',de:'Anfrage',ur:'درخواست'};
 
   function tr(key){
     const candidate=baseTr(key);
