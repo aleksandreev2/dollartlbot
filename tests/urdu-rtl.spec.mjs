@@ -159,5 +159,5 @@ test('Urdu is exposed in the language picker with a real Pakistan flag asset', a
     document.dispatchEvent(new CustomEvent('dtl:sheetopen', { detail:{ root } }));
     return root.querySelector('[data-lang="ur"] > .language-picker-circle-flag')?.getAttribute('src') || null;
   });
-  expect(flagSrc).toBe('/app/flags/pk.svg');
+  expect(flagSrc).toBe('/app/flags/pk.svg?v=20260812a');
 });
