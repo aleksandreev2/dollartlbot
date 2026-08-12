@@ -47,6 +47,7 @@ import {
 } from './request-self-service-finalize';
 import { enhanceRequestSelfServiceRead } from './request-self-service-read';
 import { handleRequestSelfService } from './request-self-service';
+import { handleSourceWatchReviewRequest } from './source-watch-review';
 import { handleSourceWatchRequest, runSubmissionSourceWatch } from './source-watch';
 import { retryPendingAdminDeliveries } from './submissions';
 import { TelegramClient, type TelegramUpdate } from './telegram';
@@ -85,6 +86,8 @@ export default {
     if (followingResponse) return followingResponse;
     const progressLedgerResponse = await handleProgressLedgerRequest(request, env);
     if (progressLedgerResponse) return progressLedgerResponse;
+    const sourceWatchReviewResponse = await handleSourceWatchReviewRequest(request, env);
+    if (sourceWatchReviewResponse) return sourceWatchReviewResponse;
     const sourceWatchResponse = await handleSourceWatchRequest(request, env);
     if (sourceWatchResponse) return sourceWatchResponse;
 
