@@ -24,9 +24,8 @@ const completeEnglish = {
 
 /**
  * Urdu is kept as one consolidated dictionary rather than copied through every
- * historical override layer. The `satisfies` contract means a new English key
- * cannot be added without also being represented here (directly or via the
- * temporary English spread while a translation is being added).
+ * historical override layer. The final localization audit checks it against the
+ * merged English key set, so this file remains the single Urdu source of truth.
  */
 export const ur = {
   ...completeEnglish,
@@ -72,8 +71,8 @@ export const ur = {
   noSession: 'کوئی فعال درخواست موجود نہیں۔ نئی درخواست شروع کرنے کے لیے مینو استعمال کریں۔',
   cancelled: 'درخواست منسوخ کر دی گئی۔',
   statusAccepted: '✅ آپ کی درخواست قبول کر لی گئی ہے۔',
-  statusRejected: '❌ آپ کی درخواست مسترد کر دی گئی ہے۔',
-  statusRejectedReturned: '❌ آپ کی درخواست مسترد کر دی گئی ہے، لیکن ماہانہ slot واپس کر دیا گیا ہے۔',
+  statusRejected: 'مسترد',
+  statusRejectedReturned: 'مسترد · slot واپس',
   adminMessagePrefix: '💬 <b>Dollar TL کی طرف سے پیغام:</b>\n\n',
   unknownAction: 'یہ کارروائی اب دستیاب نہیں۔',
   privateOnly: 'براہِ کرم اس bot کو نجی chat میں استعمال کریں۔',
@@ -107,8 +106,6 @@ export const ur = {
   statusQueued: 'قطار میں',
   statusInProgress: 'ترجمہ جاری',
   statusCompleted: 'مکمل',
-  statusRejected: 'مسترد',
-  statusRejectedReturned: 'مسترد · slot واپس',
   positionLabel: 'پوزیشن',
   pageLabel: 'صفحہ',
   acceptedToQueue: '✅ آپ کی درخواست قبول کر کے translation queue میں شامل کر دی گئی ہے۔',
