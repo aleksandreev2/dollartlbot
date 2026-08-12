@@ -7,15 +7,18 @@
   const MAX_QUEUE=48;
   const FLUSH_BATCH=12;
   const FLUSH_DELAY=2200;
+  const SEARCH_SETTLE_MS=650;
   const STEP_NAMES={1:'upload',2:'details',3:'content',4:'review'};
   const ALLOWED=new Set([
-    'discover_search','discover_zero_result','catalog_open','raw_open','duplicate_intercepted',
-    'title_open','share_title','release_open','boosty_click','suggest_started','suggest_step',
-    'suggest_abandoned','request_submitted',
+    'discover_search','discover_zero_result','catalog_open','raw_open','interest_add','follow_add',
+    'duplicate_intercepted','title_open','share_title','release_open','boosty_click','suggest_started',
+    'suggest_step','suggest_abandoned','request_submitted',
   ]);
   const queue=[];
   const seen=new Map();
   let flushTimer=0;
+  let searchTimer=0;
+  let pendingSearch=null;
   let sequence=0;
   let suggestActive=false;
   let suggestResolved=false;
@@ -115,6 +118,21 @@
     return true;
   }
 
+  function scheduleSearch(query,total,provider){
+    pendingSearch={query,total,provider};
+    if(searchTimer)clearTimeout(searchTimer);
+    searchTimer=setTimeout(()=>{
+      searchTimer=0;
+      const item=pendingSearch;
+      pendingSearch=null;
+      if(!item||item.query.length<2)return;
+      const key=`search:${item.query.toLowerCase()}:${item.total}`;
+      if(!dedupe(key,3000))return;
+      track('discover_search',{surface:'discover',query:item.query,metadata:{result_count:item.total,provider:item.provider||''}});
+      if(item.total===0)track('discover_zero_result',{surface:'discover',query:item.query,metadata:{result_count:0,provider:item.provider||''}});
+    },SEARCH_SETTLE_MS);
+  }
+
   runtime.registerResponseHandler(async(response,context)=>{
     const path=context.pathname||'';
     if(path===ENDPOINT)return response;
@@ -123,16 +141,9 @@
       try{
         const data=await response.clone().json();
         const query=clean(data?.query||queryFromInput(context.input),300);
-        if(query.length>=2){
-          const local=Array.isArray(data?.local)?data.local.length:0;
-          const external=Array.isArray(data?.external)?data.external.length:0;
-          const total=local+external;
-          const key=`search:${query.toLowerCase()}:${total}`;
-          if(dedupe(key,1200)){
-            track('discover_search',{surface:'discover',query,metadata:{result_count:total,provider:data?.provider_source||data?.provider_status||''}});
-            if(total===0)track('discover_zero_result',{surface:'discover',query,metadata:{result_count:0,provider:data?.provider_status||''}});
-          }
-        }
+        const local=Array.isArray(data?.local)?data.local.length:0;
+        const external=Array.isArray(data?.external)?data.external.length:0;
+        scheduleSearch(query,local+external,data?.provider_source||data?.provider_status||'');
       }catch{}
     }
 
@@ -162,6 +173,26 @@
         if(dedupe(`submitted:${id||sessionId}`,120000))track('request_submitted',{surface:'suggest',submission_id:id});
         suggestResolved=true;
       }catch{}
+    }
+
+    if(response.ok&&(path==='/api/app/discovery/interest'||path==='/api/app/discovery/catalog/interest')){
+      const body=requestBody(context.init);
+      if(body?.interested===true){
+        const submissionId=positive(body.submission_id);
+        const catalogId=positive(body.catalog_id);
+        const key=`interest:${submissionId||catalogId||'unknown'}`;
+        if(dedupe(key,5000))track('interest_add',{surface:'discover',submission_id:submissionId,catalog_id:catalogId});
+      }
+    }
+
+    if(response.ok&&(path==='/api/app/following/submission'||path==='/api/app/following/catalog')){
+      const body=requestBody(context.init);
+      if(body&&body.following!==false){
+        const submissionId=positive(body.submission_id);
+        const catalogId=positive(body.catalog_id);
+        const key=`follow:${submissionId||catalogId||'unknown'}`;
+        if(dedupe(key,5000))track('follow_add',{surface:currentSurface(),submission_id:submissionId,catalog_id:catalogId});
+      }
     }
     return response;
   });
@@ -225,6 +256,9 @@
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')void flush();});
   window.addEventListener('pagehide',()=>{void flush();});
 
+  function requestBody(init){
+    try{return typeof init?.body==='string'?JSON.parse(init.body):null;}catch{return null;}
+  }
   function queryFromInput(input){
     try{const raw=typeof input==='string'?input:input instanceof Request?input.url:String(input||'');return new URL(raw,location.href).searchParams.get('q')||'';}catch{return'';}
   }
