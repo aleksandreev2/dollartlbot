@@ -1,20 +1,36 @@
 const NOVELPIA_ORIGIN = 'https://novelpia.com';
 const HOMEPAGE_URL = `${NOVELPIA_ORIGIN}/`;
-const PLUS_NEW_URL = `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`;
 const INGEST_PROVIDER = 'novelpia_homepage_fresh';
 const HOMEPAGE_SIGNAL = 'novelpia_home_plus_new';
 const PLUS_NEW_SIGNAL = 'novelpia_plus_new';
+const FREE_NEW_SIGNAL = 'novelpia_free_new';
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_HTML_BYTES = 3_000_000;
 const MAX_REDIRECTS = 3;
 const MAX_HOMEPAGE_CARDS = 12;
 const MAX_SOURCE_IDS = 80;
-const MAX_FALLBACK_DETAIL_FETCHES = 20;
+const MAX_FALLBACK_DETAIL_FETCHES = 28;
+
+type SourceTier = 'free' | 'plus';
+
+type ResolutionSource = {
+  name: 'plus_new' | 'free_new' | 'new_rank';
+  url: string;
+  tier: SourceTier;
+};
+
+type SourcePage = ResolutionSource & { html: string };
 
 type HomepageFreshCard = {
   rank: number;
   title: string;
   author: string | null;
+};
+
+type Resolution = {
+  externalId: string;
+  tier: SourceTier;
+  source: ResolutionSource['name'];
 };
 
 type ParsedDetail = {
@@ -41,6 +57,24 @@ type CatalogRow = {
 
 type IdPosition = { id: string; index: number };
 
+const RESOLUTION_SOURCES: ResolutionSource[] = [
+  {
+    name: 'plus_new',
+    url: `${NOVELPIA_ORIGIN}/plus/entry/date?main_genre=`,
+    tier: 'plus',
+  },
+  {
+    name: 'free_new',
+    url: `${NOVELPIA_ORIGIN}/freestory/new/date/1?main_genre=`,
+    tier: 'free',
+  },
+  {
+    name: 'new_rank',
+    url: `${NOVELPIA_ORIGIN}/top100/plus/today/view/all/all?main_genre=`,
+    tier: 'plus',
+  },
+];
+
 export type HomepageFreshIngestResult = {
   cards: number;
   resolved: number;
@@ -57,49 +91,58 @@ export async function runNovelpiaHomepageFreshIngestion(
   await writeIngestState(env, { attempt: now, success: null, error: null, count: null });
 
   try {
-    const [homepageHtml, plusHtml] = await Promise.all([
+    const fetched = await Promise.all([
       fetchNovelpiaHtml(HOMEPAGE_URL),
-      fetchNovelpiaHtml(PLUS_NEW_URL),
+      ...RESOLUTION_SOURCES.map(async (source) => ({ ...source, html: await fetchNovelpiaHtml(source.url) })),
     ]);
+    const homepageHtml = fetched[0] as string;
+    const sourcePages = fetched.slice(1) as SourcePage[];
 
     const cards = parseHomepageFreshCards(homepageHtml, MAX_HOMEPAGE_CARDS);
     if (!cards.length) throw new Error('novelpia_homepage_fresh_cards_missing');
 
-    const resolved = resolveHomepageCardsFromListHtml(cards, plusHtml);
+    const resolved = resolveHomepageCardsAcrossLists(cards, sourcePages);
     const detailCache = new Map<string, ParsedDetail>();
-    const usedIds = new Set<string>(resolved.values());
+    const usedIds = new Set<string>([...resolved.values()].map((item) => item.externalId));
 
     let pending = cards.filter((card) => !resolved.has(card.rank));
     if (pending.length) {
-      const sourceIds = extractExplicitNovelIds(plusHtml, MAX_SOURCE_IDS)
-        .filter((externalId) => !usedIds.has(externalId));
-      let fetched = 0;
+      const sourceCandidates = collectResolutionCandidates(sourcePages)
+        .filter((candidate) => !usedIds.has(candidate.externalId));
+      let fetchedDetails = 0;
 
-      for (let offset = 0; offset < sourceIds.length && pending.length && fetched < MAX_FALLBACK_DETAIL_FETCHES; offset += 4) {
-        const batchIds = sourceIds.slice(offset, offset + Math.min(4, MAX_FALLBACK_DETAIL_FETCHES - fetched));
-        fetched += batchIds.length;
-        const details = await Promise.all(batchIds.map(async (externalId) => {
+      for (
+        let offset = 0;
+        offset < sourceCandidates.length && pending.length && fetchedDetails < MAX_FALLBACK_DETAIL_FETCHES;
+        offset += 4
+      ) {
+        const batch = sourceCandidates.slice(
+          offset,
+          offset + Math.min(4, MAX_FALLBACK_DETAIL_FETCHES - fetchedDetails),
+        );
+        fetchedDetails += batch.length;
+        const details = await Promise.all(batch.map(async (candidate) => {
           try {
-            const html = await fetchNovelpiaHtml(`${NOVELPIA_ORIGIN}/novel/${externalId}`);
-            return parseNovelDetail(externalId, html);
+            const html = await fetchNovelpiaHtml(`${NOVELPIA_ORIGIN}/novel/${candidate.externalId}`);
+            return { candidate, detail: parseNovelDetail(candidate.externalId, html) };
           } catch (error) {
             console.warn(JSON.stringify({
               event: 'novelpia_homepage_detail_probe_failed',
-              external_id: externalId,
+              external_id: candidate.externalId,
+              source: candidate.source,
               error: errorMessage(error),
             }));
-            return null;
+            return { candidate, detail: null };
           }
         }));
 
-        for (const detail of details) {
+        for (const { candidate, detail } of details) {
           if (!detail) continue;
           detailCache.set(detail.externalId, detail);
           const matches = pending.filter((card) => detailMatchesCard(detail, card));
-          if (matches.length !== 1) continue;
+          if (matches.length !== 1 || usedIds.has(detail.externalId)) continue;
           const card = matches[0];
-          if (usedIds.has(detail.externalId)) continue;
-          resolved.set(card.rank, detail.externalId);
+          resolved.set(card.rank, candidate);
           usedIds.add(detail.externalId);
           pending = pending.filter((item) => item.rank !== card.rank);
         }
@@ -112,11 +155,12 @@ export async function runNovelpiaHomepageFreshIngestion(
     const unresolvedTitles: string[] = [];
 
     for (const card of cards) {
-      const externalId = resolved.get(card.rank);
-      if (!externalId) {
+      const resolution = resolved.get(card.rank);
+      if (!resolution) {
         unresolvedTitles.push(card.title);
         continue;
       }
+      const externalId = resolution.externalId;
 
       let row = await loadCatalogRow(env, externalId);
       const rowMatches = row ? catalogMatchesCard(row, card) : false;
@@ -132,6 +176,7 @@ export async function runNovelpiaHomepageFreshIngestion(
               event: 'novelpia_homepage_detail_failed',
               external_id: externalId,
               title: card.title,
+              source: resolution.source,
               error: errorMessage(error),
             }));
             detail = null;
@@ -141,11 +186,11 @@ export async function runNovelpiaHomepageFreshIngestion(
           unresolvedTitles.push(card.title);
           continue;
         }
-        await upsertCatalogNovel(env, detail, now);
+        await upsertCatalogNovel(env, detail, resolution.tier, now);
         enriched += 1;
         row = await loadCatalogRow(env, externalId);
       } else {
-        await touchCatalogNovel(env, row.id, now);
+        await touchCatalogNovel(env, row.id, resolution.tier, now);
       }
 
       if (!row) {
@@ -153,7 +198,7 @@ export async function runNovelpiaHomepageFreshIngestion(
         continue;
       }
 
-      await upsertHomepageSignals(env, row.id, card.rank, now);
+      await upsertHomepageSignals(env, row.id, card.rank, resolution, now);
       applied += 1;
 
       if (row.linked_submission_id == null) {
@@ -233,6 +278,32 @@ export function parseHomepageFreshCards(html: string, limit = MAX_HOMEPAGE_CARDS
   return cards;
 }
 
+function resolveHomepageCardsAcrossLists(cards: HomepageFreshCard[], pages: SourcePage[]): Map<number, Resolution> {
+  const byRank = new Map<number, Map<string, Resolution>>();
+
+  for (const page of pages) {
+    const local = resolveHomepageCardsFromListHtml(cards, page.html);
+    for (const [rank, externalId] of local.entries()) {
+      const matches = byRank.get(rank) ?? new Map<string, Resolution>();
+      const prior = matches.get(externalId);
+      matches.set(externalId, {
+        externalId,
+        tier: prior?.tier === 'plus' || page.tier === 'plus' ? 'plus' : 'free',
+        source: prior?.source ?? page.name,
+      });
+      byRank.set(rank, matches);
+    }
+  }
+
+  const resolved = new Map<number, Resolution>();
+  for (const card of cards) {
+    const matches = byRank.get(card.rank);
+    if (!matches || matches.size !== 1) continue;
+    resolved.set(card.rank, [...matches.values()][0]);
+  }
+  return resolved;
+}
+
 function resolveHomepageCardsFromListHtml(cards: HomepageFreshCard[], html: string): Map<number, string> {
   const resolved = new Map<number, string>();
   const ids = collectExplicitNovelIdPositions(html);
@@ -265,6 +336,21 @@ function resolveHomepageCardsFromListHtml(cards: HomepageFreshCard[], html: stri
   }
 
   return resolved;
+}
+
+function collectResolutionCandidates(pages: SourcePage[]): Resolution[] {
+  const byId = new Map<string, Resolution>();
+  for (const page of pages) {
+    for (const externalId of extractExplicitNovelIds(page.html, MAX_SOURCE_IDS)) {
+      const prior = byId.get(externalId);
+      if (!prior) {
+        byId.set(externalId, { externalId, tier: page.tier, source: page.name });
+      } else if (prior.tier === 'free' && page.tier === 'plus') {
+        byId.set(externalId, { externalId, tier: 'plus', source: page.name });
+      }
+    }
+  }
+  return [...byId.values()];
 }
 
 function collectExplicitNovelIdPositions(html: string): IdPosition[] {
@@ -316,17 +402,23 @@ async function loadCatalogRow(env: Env, externalId: string): Promise<CatalogRow 
 
 function catalogMatchesCard(row: CatalogRow, card: HomepageFreshCard): boolean {
   if (normalizeIdentityText(row.title) !== normalizeIdentityText(card.title)) return false;
-  if (card.author && row.author && normalizeIdentityText(row.author) !== normalizeIdentityText(card.author)) return false;
+  if (card.author) {
+    if (!row.author) return false;
+    if (normalizeIdentityText(row.author) !== normalizeIdentityText(card.author)) return false;
+  }
   return true;
 }
 
 function detailMatchesCard(detail: ParsedDetail, card: HomepageFreshCard): boolean {
   if (normalizeIdentityText(detail.title) !== normalizeIdentityText(card.title)) return false;
-  if (card.author && detail.author && normalizeIdentityText(detail.author) !== normalizeIdentityText(card.author)) return false;
+  if (card.author) {
+    if (!detail.author) return false;
+    if (normalizeIdentityText(detail.author) !== normalizeIdentityText(card.author)) return false;
+  }
   return true;
 }
 
-async function upsertCatalogNovel(env: Env, novel: ParsedDetail, now: string): Promise<void> {
+async function upsertCatalogNovel(env: Env, novel: ParsedDetail, tier: SourceTier, now: string): Promise<void> {
   await env.DB.prepare(`
     INSERT INTO discovery_catalog (
       provider,external_id,title,original_title,author,original_language,
@@ -334,7 +426,7 @@ async function upsertCatalogNovel(env: Env, novel: ParsedDetail, now: string): P
       source_tier,age_rating,views_count,favorites_count,recommendations_count,
       raw_available,first_seen_at,last_seen_at,last_enriched_at,metadata_json,created_at,updated_at
     ) VALUES (
-      'novelpia',?,?,?,?, 'Korean',?,?,?,?,?,?, 'plus',?,?,?, ?,0,?,?,?,?,?,?
+      'novelpia',?,?,?,?, 'Korean',?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?
     )
     ON CONFLICT(provider,external_id) DO UPDATE SET
       title=excluded.title,
@@ -346,7 +438,10 @@ async function upsertCatalogNovel(env: Env, novel: ParsedDetail, now: string): P
       synopsis=COALESCE(excluded.synopsis,discovery_catalog.synopsis),
       source_url=excluded.source_url,
       cover_url=COALESCE(excluded.cover_url,discovery_catalog.cover_url),
-      source_tier='plus',
+      source_tier=CASE
+        WHEN excluded.source_tier='plus' THEN 'plus'
+        ELSE COALESCE(discovery_catalog.source_tier,excluded.source_tier)
+      END,
       age_rating=COALESCE(excluded.age_rating,discovery_catalog.age_rating),
       views_count=excluded.views_count,
       favorites_count=excluded.favorites_count,
@@ -366,6 +461,7 @@ async function upsertCatalogNovel(env: Env, novel: ParsedDetail, now: string): P
     novel.synopsis,
     `${NOVELPIA_ORIGIN}/novel/${novel.externalId}`,
     novel.coverUrl,
+    tier,
     novel.ageRating,
     novel.viewsCount,
     novel.favoritesCount,
@@ -373,22 +469,36 @@ async function upsertCatalogNovel(env: Env, novel: ParsedDetail, now: string): P
     now,
     now,
     now,
-    JSON.stringify({ source: 'official_novelpia_homepage_fresh' }),
+    JSON.stringify({ source: 'official_novelpia_homepage_fresh', resolved_tier: tier }),
     now,
     now,
   ).run();
 }
 
-async function touchCatalogNovel(env: Env, catalogId: number, now: string): Promise<void> {
+async function touchCatalogNovel(env: Env, catalogId: number, tier: SourceTier, now: string): Promise<void> {
   await env.DB.prepare(`
     UPDATE discovery_catalog
-    SET last_seen_at=?,source_tier='plus',updated_at=?
+    SET last_seen_at=?,
+        source_tier=CASE WHEN ?='plus' THEN 'plus' ELSE COALESCE(source_tier,?) END,
+        updated_at=?
     WHERE id=?
-  `).bind(now, now, catalogId).run();
+  `).bind(now, tier, tier, now, catalogId).run();
 }
 
-async function upsertHomepageSignals(env: Env, catalogId: number, rank: number, now: string): Promise<void> {
-  const metadata = JSON.stringify({ tier: 'plus', source: 'homepage_hot_new', homepage_rank: rank });
+async function upsertHomepageSignals(
+  env: Env,
+  catalogId: number,
+  rank: number,
+  resolution: Resolution,
+  now: string,
+): Promise<void> {
+  const normalSignal = resolution.tier === 'plus' ? PLUS_NEW_SIGNAL : FREE_NEW_SIGNAL;
+  const metadata = JSON.stringify({
+    tier: resolution.tier,
+    source: 'homepage_hot_new',
+    resolver_source: resolution.source,
+    homepage_rank: rank,
+  });
   await env.DB.batch([
     env.DB.prepare(`
       INSERT INTO discovery_catalog_signals (
@@ -404,7 +514,7 @@ async function upsertHomepageSignals(env: Env, catalogId: number, rank: number, 
       ON CONFLICT(catalog_id,signal) DO UPDATE SET
         rank_position=MIN(discovery_catalog_signals.rank_position,excluded.rank_position),
         metadata_json=excluded.metadata_json,last_seen_at=excluded.last_seen_at
-    `).bind(catalogId, PLUS_NEW_SIGNAL, rank, metadata, now, now),
+    `).bind(catalogId, normalSignal, rank, metadata, now, now),
   ]);
 }
 
@@ -494,7 +604,7 @@ async function fetchNovelpiaHtml(initialUrl: string): Promise<string> {
         headers: {
           accept: 'text/html,application/xhtml+xml',
           'accept-language': 'ko-KR,ko;q=0.9,en;q=0.6',
-          'user-agent': 'DollarTL-HomepageFresh/1.0',
+          'user-agent': 'DollarTL-HomepageFresh/2.0',
         },
       });
     } catch (error) {
@@ -526,7 +636,10 @@ async function fetchNovelpiaHtml(initialUrl: string): Promise<string> {
 function validateNovelpiaUrl(url: URL): void {
   const host = url.hostname.toLowerCase().replace(/^www\./, '');
   if (url.protocol !== 'https:' || host !== 'novelpia.com') throw new Error('novelpia_homepage_invalid_host');
-  if (url.pathname === '/' || url.pathname === '/plus/entry/date') return;
+  if (url.pathname === '/') return;
+  if (url.pathname === '/plus/entry/date') return;
+  if (url.pathname === '/freestory/new/date/1') return;
+  if (url.pathname === '/top100/plus/today/view/all/all') return;
   if (/^\/novel\/\d{2,9}\/?$/.test(url.pathname)) return;
   throw new Error('novelpia_homepage_invalid_path');
 }
