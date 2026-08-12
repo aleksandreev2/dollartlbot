@@ -18,6 +18,8 @@ export const PRODUCT_EVENT_NAMES = [
   'discover_zero_result',
   'catalog_open',
   'raw_open',
+  'interest_add',
+  'follow_add',
   'duplicate_intercepted',
   'title_open',
   'share_title',
