@@ -17,29 +17,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Inspect homepage curation API arguments
+      - name: Probe main_v2 curation variants
         shell: bash
         run: |
           node <<'NODE'
           const origin='https://novelpia.com';
-          const headers={accept:'text/html,application/xhtml+xml,*/*;q=0.8','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'Mozilla/5.0 DollarTL-LiveProbe/3.0'};
-          const r=await fetch(`${origin}/`,{headers,redirect:'follow'});
-          const html=await r.text();
-          console.log('HOMEPAGE',r.status,html.length);
-          for(const needle of ['new_novel_curation','basic-v2-curation','basic_v2_curation','main_group','main-group']){
-            let from=0,count=0;
-            while(count<10){
-              const at=html.indexOf(needle,from);if(at<0)break;
-              console.log('HOME_HIT',needle,at,html.slice(Math.max(0,at-700),Math.min(html.length,at+1400)).replace(/\s+/g,' '));
-              from=at+needle.length;count++;
+          const headers={accept:'application/json,text/plain,*/*','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'Mozilla/5.0 DollarTL-LiveProbe/4.0','x-requested-with':'XMLHttpRequest'};
+          const variants=[];
+          for(const cmd of ['basic_curation','new_novel_curation']){
+            for(const main_group of ['', '68','70']){
+              for(const novel_category of ['entry','complete'])variants.push({cmd,main_group,novel_category});
             }
           }
-          const componentUrl=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']*basic_v2_curation\.js[^"']*)["']/gi)].map(m=>new URL(m[1],origin).toString())[0];
-          console.log('COMPONENT_URL',componentUrl);
-          if(componentUrl){
-            const cr=await fetch(componentUrl,{headers:{...headers,accept:'*/*'}});const js=await cr.text();
-            for(const needle of ['main_group','new_novel_curation','/proc/main_v2']){
-              const at=js.indexOf(needle);console.log('COMPONENT_HIT',needle,at,at>=0?js.slice(Math.max(0,at-900),Math.min(js.length,at+1800)).replace(/\s+/g,' '):'');
-            }
+          for(const v of variants){
+            const u=new URL('/proc/main_v2',origin);
+            u.searchParams.set('cmd',v.cmd);
+            if(v.main_group)u.searchParams.set('main_group',v.main_group);
+            u.searchParams.set('novel_category',v.novel_category);
+            try{
+              const r=await fetch(u,{headers,redirect:'follow'});const raw=await r.text();
+              let data=null;try{data=JSON.parse(raw);}catch{}
+              const conf=data?.conf||{};const list=Array.isArray(data?.list)?data.list:[];
+              console.log('VARIANT',JSON.stringify(v),'HTTP',r.status,'API_STATUS',data?.status,'SUB',conf.sub_title,'TITLE',conf.title,'IDX',conf.idx,'LIST',list.length,'FIRST',list.slice(0,3).map(x=>({novel_no:x.novel_no,novel_name:x.novel_name,writer_nick:x.writer_nick,link_url:x.link_url})),'RAW_HEAD',data?undefined:raw.slice(0,240));
+            }catch(e){console.log('ERROR',JSON.stringify(v),String(e));}
           }
           NODE
