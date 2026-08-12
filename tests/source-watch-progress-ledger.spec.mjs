@@ -37,7 +37,7 @@ async function boot(page, route = 'section:queue') {
         },
         {
           submission_id:32,external_id:'401202',last_success_at:'2026-08-12T05:54:00.000Z',last_error:null,
-          last_remote_chapter_count:42,last_remote_publication_status:'completed',title:'Next Novel',chapter_count:42,
+          last_remote_chapter_count:42,last_remote_publication_status:'discontinued',title:'Next Novel',chapter_count:42,
           queue_status:'queued',attention_count:0,
         },
       ],
@@ -96,6 +96,7 @@ test('Queue shows unresolved NovelPia source changes and Reviewed clears the war
 
   const queued = page.locator('[data-qw-row="32"] [data-source-watch-row]');
   await expect(queued).toContainText('42 глав');
+  await expect(queued).toContainText('прекращён');
 
   await working.locator('[data-source-watch-ack="31"]').click();
   await expect.poll(() => page.evaluate(() => window.__sourceWatchTest.acknowledged)).toBe(1);
