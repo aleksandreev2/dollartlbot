@@ -8,6 +8,32 @@ const API_MAX_BYTES = 1_000_000;
 const MAX_REDIRECTS = 3;
 const MAX_ITEMS = 12;
 
+const REQUEST_HEADER_PROFILES: Array<{ name: string; headers: Record<string, string> }> = [
+  {
+    name: 'browser_xhr',
+    headers: {
+      accept: 'application/json,text/plain,*/*',
+      'accept-language': 'ko-KR,ko;q=0.9,en;q=0.6',
+      referer: `${NOVELPIA_ORIGIN}/`,
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+      'x-requested-with': 'XMLHttpRequest',
+      'sec-fetch-site': 'same-origin',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-dest': 'empty',
+    },
+  },
+  {
+    name: 'minimal_xhr',
+    headers: {
+      accept: 'application/json,text/plain,*/*',
+      'accept-language': 'ko-KR,ko;q=0.9,en;q=0.6',
+      referer: `${NOVELPIA_ORIGIN}/`,
+      'user-agent': 'DollarTL-HomepageFresh/5.0',
+      'x-requested-with': 'XMLHttpRequest',
+    },
+  },
+];
+
 type ApiNovel = {
   externalId: string;
   title: string;
@@ -53,7 +79,7 @@ export async function runNovelpiaHomepageFreshIngestion(
     for (const item of parsed.items) {
       await upsertCatalogNovel(env, item, now);
       const row = await loadCatalogRow(env, item.externalId);
-      if (!row) continue;
+      if (!row) throw new Error(`novelpia_homepage_catalog_missing_${item.externalId}`);
       await upsertHomepageSignals(env, row.id, item.rank, now);
 
       if (row.linked_submission_id == null) {
@@ -63,6 +89,11 @@ export async function runNovelpiaHomepageFreshIngestion(
           linked += 1;
         }
       }
+    }
+
+    const persisted = await countHomepageSignalsForAttempt(env, now);
+    if (persisted < parsed.items.length) {
+      throw new Error(`novelpia_homepage_persist_mismatch_${persisted}_of_${parsed.items.length}`);
     }
 
     await writeIngestState(env, {
@@ -91,18 +122,35 @@ export async function runNovelpiaHomepageFreshIngestion(
 }
 
 export async function getHomepageFreshIngestState(env: Env) {
-  return env.DB.prepare(`
-    SELECT provider,last_attempt_at,last_success_at,last_error,last_item_count,updated_at
-    FROM discovery_ingest_state
-    WHERE provider=?
-  `).bind(INGEST_PROVIDER).first<{
-    provider: string;
-    last_attempt_at: string | null;
-    last_success_at: string | null;
-    last_error: string | null;
-    last_item_count: number;
-    updated_at: string;
-  }>();
+  const [state, stats] = await Promise.all([
+    env.DB.prepare(`
+      SELECT provider,last_attempt_at,last_success_at,last_error,last_item_count,updated_at
+      FROM discovery_ingest_state
+      WHERE provider=?
+    `).bind(INGEST_PROVIDER).first<{
+      provider: string;
+      last_attempt_at: string | null;
+      last_success_at: string | null;
+      last_error: string | null;
+      last_item_count: number;
+      updated_at: string;
+    }>(),
+    env.DB.prepare(`
+      SELECT
+        COUNT(DISTINCT s.catalog_id) AS active_count,
+        COUNT(DISTINCT CASE WHEN c.linked_submission_id IS NULL THEN s.catalog_id END) AS unlinked_count
+      FROM discovery_catalog_signals s
+      JOIN discovery_catalog c ON c.id=s.catalog_id
+      WHERE c.provider='novelpia' AND s.signal=?
+        AND s.last_seen_at >= datetime('now','-16 days')
+    `).bind(HOMEPAGE_SIGNAL).first<{ active_count: number; unlinked_count: number }>(),
+  ]);
+  if (!state) return null;
+  return {
+    ...state,
+    active_count: Number(stats?.active_count ?? 0),
+    unlinked_count: Number(stats?.unlinked_count ?? 0),
+  };
 }
 
 export function parseHomepageFreshPayload(payload: unknown): {
@@ -181,13 +229,25 @@ export function parseHomepageFreshPayload(payload: unknown): {
 }
 
 async function fetchHomepageFreshPayload(): Promise<unknown> {
-  const url = new URL(HOMEPAGE_CURATION_PATH, NOVELPIA_ORIGIN);
-  url.searchParams.set('cmd', 'new_novel_curation');
-  url.searchParams.set('novel_category', 'entry');
-  return fetchJsonLimited(url, API_MAX_BYTES);
+  const failures: string[] = [];
+  for (const profile of REQUEST_HEADER_PROFILES) {
+    const url = new URL(HOMEPAGE_CURATION_PATH, NOVELPIA_ORIGIN);
+    url.searchParams.set('cmd', 'new_novel_curation');
+    url.searchParams.set('novel_category', 'entry');
+    try {
+      return await fetchJsonLimited(url, API_MAX_BYTES, profile.headers);
+    } catch (error) {
+      failures.push(`${profile.name}:${errorMessage(error)}`);
+    }
+  }
+  throw new Error(`novelpia_homepage_fetch_failed:${failures.join('|').slice(0, 900)}`);
 }
 
-async function fetchJsonLimited(initial: URL, maxBytes: number): Promise<unknown> {
+async function fetchJsonLimited(
+  initial: URL,
+  maxBytes: number,
+  headers: Record<string, string>,
+): Promise<unknown> {
   let current = initial;
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
     validateApiUrl(current);
@@ -198,12 +258,7 @@ async function fetchJsonLimited(initial: URL, maxBytes: number): Promise<unknown
       response = await fetch(current.toString(), {
         redirect: 'manual',
         signal: controller.signal,
-        headers: {
-          accept: 'application/json,text/plain,*/*',
-          'accept-language': 'ko-KR,ko;q=0.9,en;q=0.6',
-          'user-agent': 'DollarTL-HomepageFresh/4.0',
-          'x-requested-with': 'XMLHttpRequest',
-        },
+        headers,
       });
     } catch (error) {
       clearTimeout(timer);
@@ -326,6 +381,15 @@ async function loadCatalogRow(env: Env, externalId: string): Promise<CatalogRow 
     FROM discovery_catalog
     WHERE provider='novelpia' AND external_id=?
   `).bind(externalId).first<CatalogRow>();
+}
+
+async function countHomepageSignalsForAttempt(env: Env, now: string): Promise<number> {
+  const row = await env.DB.prepare(`
+    SELECT COUNT(DISTINCT catalog_id) AS count
+    FROM discovery_catalog_signals
+    WHERE signal=? AND last_seen_at=?
+  `).bind(HOMEPAGE_SIGNAL, now).first<{ count: number }>();
+  return Number(row?.count ?? 0);
 }
 
 async function upsertHomepageSignals(env: Env, catalogId: number, rank: number, now: string): Promise<void> {

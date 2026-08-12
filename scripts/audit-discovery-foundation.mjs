@@ -116,12 +116,20 @@ need(files.homepage,[
   'const API_MAX_BYTES = 1_000_000',
   'const MAX_REDIRECTS = 3',
   'const MAX_ITEMS = 12',
+  'const REQUEST_HEADER_PROFILES',
+  "name: 'browser_xhr'",
+  "name: 'minimal_xhr'",
+  "referer: `${NOVELPIA_ORIGIN}/`",
+  "'sec-fetch-site': 'same-origin'",
+  "'x-requested-with': 'XMLHttpRequest'",
+  'for (const profile of REQUEST_HEADER_PROFILES)',
+  'failures.push(`${profile.name}:${errorMessage(error)}`)',
+  'novelpia_homepage_fetch_failed:',
   'runNovelpiaHomepageFreshIngestion',
   'getHomepageFreshIngestState',
   'parseHomepageFreshPayload',
   "url.searchParams.set('cmd', 'new_novel_curation')",
   "url.searchParams.set('novel_category', 'entry')",
-  "'x-requested-with': 'XMLHttpRequest'",
   'Number(data.status)',
   'if (!Array.isArray(data.list))',
   'cleanExternalId(row.novel_no)',
@@ -144,6 +152,11 @@ need(files.homepage,[
   'validateApiUrl',
   'readTextLimited',
   "url.protocol !== 'https:' || host !== 'novelpia.com' || url.pathname !== HOMEPAGE_CURATION_PATH",
+  'countHomepageSignalsForAttempt(env, now)',
+  'novelpia_homepage_persist_mismatch_',
+  "s.signal=?",
+  'active_count',
+  'unlinked_count',
 ],'homepage curation provider');
 if(
   files.homepage.includes('parseHomepageFreshCards')
@@ -157,7 +170,11 @@ if(/coverId|imageId|assetId/.test(files.homepage)){
   throw new Error('Discovery audit failed: homepage Fresh identity must not depend on image asset IDs');
 }
 if((files.homepage.match(/fetch\(/g)||[]).length!==1){
-  throw new Error('Discovery audit failed: homepage Fresh pass must use exactly one external fetch');
+  throw new Error('Discovery audit failed: homepage Fresh must keep one bounded fetch call site');
+}
+const profileNames=files.homepage.match(/name: '(?:browser_xhr|minimal_xhr)'/g)||[];
+if(profileNames.length!==2){
+  throw new Error('Discovery audit failed: homepage Fresh request fallback must stay bounded to two profiles');
 }
 const parseFn=files.homepage.slice(
   files.homepage.indexOf('export function parseHomepageFreshPayload'),
@@ -179,6 +196,8 @@ ordered(ingestFn,[
   'const parsed = parseHomepageFreshPayload(payload)',
   'await upsertCatalogNovel(env, item, now)',
   'await upsertHomepageSignals(env, row.id, item.rank, now)',
+  'const persisted = await countHomepageSignalsForAttempt(env, now)',
+  'await writeIngestState(env, {',
 ],'homepage ingestion execution order');
 
 need(files.rawProvider,[
@@ -282,13 +301,18 @@ need(files.discoverRuntime,[
   'patchFreshEmptyState',
   'waitForRefreshCompletion',
   "'/api/app/discovery/catalog/health'",
+  'refreshStagesFinished',
+  'refreshAttemptFailed',
+  'health?.homepage_state',
+  "copy('homepageFailed')",
+  'homepage_state?.unlinked_count',
   "'dtl:discover-refresh-ready'",
 ],'Discover source recovery runtime');
 need(files.discoverCss,['.discover-catalog-row'],'Fresh Discover CSS');
 need(files.html,[
   '/app/discover-page.css?v=20260811-discover2',
   '/app/view-discover.js?v=20260811-discover2',
-  '/app/discover-page-runtime.js?v=20260812-discover4',
+  '/app/discover-page-runtime.js?v=20260812-discover5',
 ],'Discover assets');
 if(files.html.indexOf('/app/discovery-ui.js?v=20260811-discovery1')>files.html.indexOf('/app/view-suggest.js?v=20260810-app4&discover=20260811a')){
   throw new Error('Discovery audit failed: discovery UI must load before Suggest view');
@@ -296,4 +320,4 @@ if(files.html.indexOf('/app/discovery-ui.js?v=20260811-discovery1')>files.html.i
 
 new Function(files.discoverView);
 new Function(files.discoverRuntime);
-console.log('Discovery foundation + NovelPia homepage curation + NovelPia lists + RAW provider v2 audit passed.');
+console.log('Discovery foundation + truthful NovelPia homepage health + NovelPia lists + RAW provider v2 audit passed.');
