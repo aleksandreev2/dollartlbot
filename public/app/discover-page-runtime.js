@@ -20,8 +20,8 @@
   };
 
   const SOURCE_COPY={
-    en:{freshNever:'Fresh from NovelPia has not been synced yet.',freshNeverSub:'The local Discover feed still works. An admin can run Refresh sources.',freshFailed:'NovelPia refresh failed.',freshFailedSub:'Dollar TL is showing local discovery data while the external source is unavailable.',freshMismatch:'Fresh catalog data is inconsistent.',freshMismatchSub:'NovelPia rows exist in the catalog but did not reach this feed. Refresh sources to repair it.',freshNoUnlinked:'No unlinked Fresh NovelPia titles right now.',freshNoUnlinkedSub:'NovelPia was checked successfully; current fresh titles are already linked or there is nothing new to show.',refreshReady:'Fresh NovelPia updated',refreshStillEmpty:'Source refresh finished; Fresh NovelPia is still empty',refreshWaiting:'Source refresh is still running'},
-    ru:{freshNever:'Свежее с NovelPia ещё не синхронизировано.',freshNeverSub:'Локальный Discover работает. Администратор может запустить «Обновить источники».',freshFailed:'Не удалось обновить NovelPia.',freshFailedSub:'Dollar TL продолжает показывать локальные данные, пока внешний источник недоступен.',freshMismatch:'Данные свежего каталога не совпадают с лентой.',freshMismatchSub:'Свежие строки NovelPia есть в каталоге, но не попали в эту ленту. Запустите «Обновить источники».',freshNoUnlinked:'Сейчас нет новых несвязанных тайтлов NovelPia.',freshNoUnlinkedSub:'NovelPia успешно проверена; свежие тайтлы уже связаны с заявками или новых пока нет.',refreshReady:'Свежее с NovelPia обновлено',refreshStillEmpty:'Источники обновлены, но Fresh NovelPia всё ещё пуст',refreshWaiting:'Обновление источников всё ещё выполняется'},
+    en:{freshNever:'Fresh from NovelPia has not been synced yet.',freshNeverSub:'The local Discover feed still works. An admin can run Refresh sources.',freshFailed:'NovelPia Fresh source failed.',freshFailedSub:'The source error is shown to admins after Refresh sources.',freshMismatch:'Fresh catalog data is inconsistent.',freshMismatchSub:'NovelPia rows exist in the catalog but did not reach this feed. Refresh sources to repair it.',freshNoUnlinked:'No unlinked Fresh NovelPia titles right now.',freshNoUnlinkedSub:'NovelPia was checked successfully; current fresh titles are already linked or there is nothing new to show.',refreshReady:'Fresh NovelPia updated',refreshStillEmpty:'Source refresh finished; Fresh NovelPia is still empty',refreshWaiting:'Source refresh is still running',homepageFailed:'Fresh NovelPia source failed',catalogFailed:'NovelPia catalog source failed',rawFailed:'RAW source failed'},
+    ru:{freshNever:'Свежее с NovelPia ещё не синхронизировано.',freshNeverSub:'Локальный Discover работает. Администратор может запустить «Обновить источники».',freshFailed:'Источник Fresh NovelPia завершился с ошибкой.',freshFailedSub:'После «Обновить источники» администратору показывается точная ошибка источника.',freshMismatch:'Данные свежего каталога не совпадают с лентой.',freshMismatchSub:'Свежие строки NovelPia есть в каталоге, но не попали в эту ленту. Запустите «Обновить источники».',freshNoUnlinked:'Сейчас нет новых несвязанных тайтлов NovelPia.',freshNoUnlinkedSub:'NovelPia успешно проверена; свежие тайтлы уже связаны с заявками или новых пока нет.',refreshReady:'Свежее с NovelPia обновлено',refreshStillEmpty:'Источники обновлены, но Fresh NovelPia всё ещё пуст',refreshWaiting:'Обновление источников всё ещё выполняется',homepageFailed:'Источник Fresh NovelPia завершился с ошибкой',catalogFailed:'Источник каталога NovelPia завершился с ошибкой',rawFailed:'Источник RAW завершился с ошибкой'},
   };
 
   function copy(key){
@@ -96,11 +96,21 @@
           if(path==='/api/app/discovery/feed')lastFeed=result;
           queueMicrotask(()=>{patchVerifiedRawLinks();patchFreshEmptyState();});
         }
-        if(path==='/api/app/discovery/catalog/health')lastHealth=result;
+        if(path==='/api/app/discovery/catalog/health'){
+          lastHealth=result;
+          queueMicrotask(patchFreshEmptyState);
+        }
         return result;
       };
       apiWrapped=true;
     }catch{}
+  }
+
+  function stateCurrentlyFailed(state){
+    if(!state?.last_attempt_at||!state?.last_error)return false;
+    const attempt=Date.parse(state.last_attempt_at);
+    const success=state.last_success_at?Date.parse(state.last_success_at):0;
+    return Number.isFinite(attempt)&&(!Number.isFinite(success)||success<attempt);
   }
 
   function patchFreshEmptyState(){
@@ -112,9 +122,11 @@
     const empty=list.querySelector('.discover-state');
     if(!empty)return;
     const info=lastFeed.novelpia_ingest||{};
+    const homepageFailed=stateCurrentlyFailed(lastHealth?.homepage_state);
     let title='freshNoUnlinked';
     let sub='freshNoUnlinkedSub';
-    if(!info.available||info.reason==='never_refreshed'){title='freshNever';sub='freshNeverSub';}
+    if(homepageFailed){title='freshFailed';sub='freshFailedSub';}
+    else if(!info.available||info.reason==='never_refreshed'){title='freshNever';sub='freshNeverSub';}
     else if(info.reason==='provider_error'){title='freshFailed';sub='freshFailedSub';}
     else if(info.reason==='feed_catalog_mismatch'){title='freshMismatch';sub='freshMismatchSub';}
     empty.classList.add('discover-source-empty');
@@ -135,16 +147,33 @@
     return (Number.isFinite(success)&&success>=attempt)||Boolean(state.last_error);
   }
 
+  function refreshAttemptFailed(state,requestedAt){
+    if(!refreshAttemptFinished(state,requestedAt)||!state?.last_error)return false;
+    const attempt=Date.parse(state.last_attempt_at||'');
+    const success=state.last_success_at?Date.parse(state.last_success_at):0;
+    return Number.isFinite(attempt)&&(!Number.isFinite(success)||success<attempt);
+  }
+
+  function refreshStagesFinished(health,requestedAt){
+    return refreshAttemptFinished(health?.homepage_state,requestedAt)
+      && refreshAttemptFinished(health?.state,requestedAt)
+      && refreshAttemptFinished(health?.raw_state,requestedAt);
+  }
+
+  function compactError(value){
+    return String(value||'unknown_error').replace(/^Error:\s*/,'').replace(/\s+/g,' ').trim().slice(0,220);
+  }
+
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
   async function waitForRefreshCompletion(requestedAt){
     const app=window.DTL_APP;
-    for(let attempt=0;attempt<20;attempt++){
+    for(let attempt=0;attempt<28;attempt++){
       await sleep(attempt===0?500:1000);
       try{
         const health=await app.api('/api/app/discovery/catalog/health');
         lastHealth=health;
-        if(refreshAttemptFinished(health?.state,requestedAt))return health;
+        if(refreshStagesFinished(health,requestedAt))return health;
       }catch{}
     }
     return lastHealth;
@@ -187,10 +216,22 @@
       app.toast?.(result?.busy?copy('busy'):copy('running'),result?.busy?'info':'success');
       const requestedAt=result?.requested_at||result?.last_attempt_at||new Date().toISOString();
       const health=await waitForRefreshCompletion(requestedAt);
-      if(!refreshAttemptFinished(health?.state,requestedAt)){
+      if(!refreshStagesFinished(health,requestedAt)){
         app.toast?.(copy('refreshWaiting'),'info');
         return;
       }
+      if(refreshAttemptFailed(health?.homepage_state,requestedAt)){
+        app.toast?.(`${copy('homepageFailed')}: ${compactError(health?.homepage_state?.last_error)}`,'error');
+        patchFreshEmptyState();
+        return;
+      }
+      if(refreshAttemptFailed(health?.state,requestedAt)){
+        app.toast?.(`${copy('catalogFailed')}: ${compactError(health?.state?.last_error)}`,'error');
+      }
+      if(refreshAttemptFailed(health?.raw_state,requestedAt)){
+        app.toast?.(`${copy('rawFailed')}: ${compactError(health?.raw_state?.last_error)}`,'error');
+      }
+
       const refreshedFeed=await app.api('/api/app/discovery/feed');
       lastFeed=refreshedFeed;
       patchFreshEmptyState();
@@ -198,8 +239,10 @@
       if(freshCount>0){
         app.toast?.(copy('refreshReady'),'success');
         requestDiscoverReload(refreshedFeed);
+      }else if(Number(health?.homepage_state?.unlinked_count||0)>0){
+        app.toast?.(`${copy('refreshStillEmpty')} (${health.homepage_state.unlinked_count} unlinked rows persisted)`,'error');
       }else{
-        app.toast?.(copy('refreshStillEmpty'),health?.state?.last_error?'error':'info');
+        app.toast?.(copy('refreshStillEmpty'),'info');
       }
     }catch(error){
       app.toast?.(error?.message||copy('failed'),'error');
