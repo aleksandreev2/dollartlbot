@@ -17,40 +17,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Inspect live homepage client loader
+      - name: Inspect homepage curation API arguments
         shell: bash
         run: |
           node <<'NODE'
           const origin='https://novelpia.com';
-          const headers={accept:'text/html,application/xhtml+xml,*/*;q=0.8','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'Mozilla/5.0 DollarTL-LiveProbe/2.0'};
+          const headers={accept:'text/html,application/xhtml+xml,*/*;q=0.8','accept-language':'ko-KR,ko;q=0.9,en;q=0.6','user-agent':'Mozilla/5.0 DollarTL-LiveProbe/3.0'};
           const r=await fetch(`${origin}/`,{headers,redirect:'follow'});
           const html=await r.text();
-          console.log('HOMEPAGE',r.status,html.length,'hasFreshHeading=',html.includes('따끈따끈 신규 작품'));
-          const scriptUrls=[];
-          for(const m of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)){
-            try{const u=new URL(m[1],origin).toString();if(!scriptUrls.includes(u))scriptUrls.push(u);}catch{}
+          console.log('HOMEPAGE',r.status,html.length);
+          for(const needle of ['new_novel_curation','basic-v2-curation','basic_v2_curation','main_group','main-group']){
+            let from=0,count=0;
+            while(count<10){
+              const at=html.indexOf(needle,from);if(at<0)break;
+              console.log('HOME_HIT',needle,at,html.slice(Math.max(0,at-700),Math.min(html.length,at+1400)).replace(/\s+/g,' '));
+              from=at+needle.length;count++;
+            }
           }
-          console.log('SCRIPT_URLS',scriptUrls.length,scriptUrls);
-          const needles=['curation','신규','novel_no','novelNo','main_novel','cr-novel','entry/date','freestory/new','top100','ajax','/proc/','/api/'];
-          let hits=0;
-          for(const url of scriptUrls.slice(0,40)){
-            try{
-              const sr=await fetch(url,{headers:{...headers,accept:'*/*'},redirect:'follow'});
-              if(!sr.ok){console.log('SCRIPT_FAIL',sr.status,url);continue;}
-              const body=await sr.text();
-              const lower=body.toLowerCase();
-              const local=[];
-              for(const needle of needles){
-                const at=lower.indexOf(needle.toLowerCase());
-                if(at>=0)local.push({needle,at,snippet:body.slice(Math.max(0,at-500),Math.min(body.length,at+1200)).replace(/\s+/g,' ')});
-              }
-              if(local.length){
-                hits+=1;
-                console.log('SCRIPT_HIT',url,'len',body.length);
-                for(const hit of local.slice(0,8))console.log('HIT',hit.needle,hit.at,hit.snippet);
-              }
-            }catch(e){console.log('SCRIPT_ERROR',url,String(e));}
+          const componentUrl=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']*basic_v2_curation\.js[^"']*)["']/gi)].map(m=>new URL(m[1],origin).toString())[0];
+          console.log('COMPONENT_URL',componentUrl);
+          if(componentUrl){
+            const cr=await fetch(componentUrl,{headers:{...headers,accept:'*/*'}});const js=await cr.text();
+            for(const needle of ['main_group','new_novel_curation','/proc/main_v2']){
+              const at=js.indexOf(needle);console.log('COMPONENT_HIT',needle,at,at>=0?js.slice(Math.max(0,at-900),Math.min(js.length,at+1800)).replace(/\s+/g,' '):'');
+            }
           }
-          console.log('HIT_SCRIPTS',hits);
-          if(!scriptUrls.length)throw new Error('No client scripts discovered');
           NODE
