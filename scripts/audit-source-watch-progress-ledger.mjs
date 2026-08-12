@@ -61,20 +61,46 @@ for (const token of [
   'validateNovelpiaUrl',
   "url.protocol !== 'https:'",
   "host !== 'novelpia.com'",
-  "s.queue_status IN ('queued','in_progress')",
-  "s.queue_status='completed' AND s.publication_status='ongoing'",
+  "s.queue_status IN ('queued','in_progress','completed')",
+  'ACTIVE_WATCH_INTERVAL_MS',
+  'COMPLETED_WATCH_INTERVAL_MS',
+  'MAX_RUN_LIMIT = 16',
   "action: 'auto_applied'",
   "action: 'review_required'",
   "reason: 'remote_chapter_count_decreased'",
   "auto_decrease: false",
   "reason: 'new_source_chapters_after_translation_completed'",
-  "reason: 'remote_status_reversed'",
+  "reason: observed.publicationStatus === 'ongoing' ? 'remote_status_reversed' : 'remote_status_requires_review'",
   "submission_title_unchanged: true",
   "INSERT OR IGNORE INTO discovery_catalog",
   "linked_submission_id=CASE WHEN linked_submission_id IS NULL OR linked_submission_id=? THEN ? ELSE linked_submission_id END",
   "INGEST_PROVIDER = 'novelpia_source_watch'",
 ]) need(watch, token, 'source watch');
-if (watch.includes('raw-fucknovelpia.com')) {
+
+for (const token of [
+  "type RemotePublicationStatus = 'ongoing' | 'completed' | 'paused' | 'discontinued'",
+  'export function parseNovelpiaSourceDetail',
+  'parseRemotePublicationStatus',
+  'chapterMatch?.index ?? null',
+  'const start = Math.max(0, end - 3_000)',
+  'const titleAt = metadata.lastIndexOf(title)',
+  "return 'discontinued'",
+  "return 'paused'",
+  "return 'completed'",
+]) need(watch, token, 'live NovelPia status parser');
+const discontinuedCheck = watch.indexOf('if (/연재중단/u.test(metadata))');
+const pausedCheck = watch.indexOf('if (/연재\\s*휴재|휴재/u.test(metadata))');
+const completedCheck = watch.indexOf("return 'completed';", pausedCheck);
+if (discontinuedCheck < 0 || pausedCheck < 0 || completedCheck < 0 || !(discontinuedCheck < pausedCheck && pausedCheck < completedCheck)) {
+  throw new Error('NovelPia status parser must prioritize discontinued/paused metadata over completed markers');
+}
+if (!watch.includes("watch.publication_status === 'ongoing' && observed.publicationStatus === 'completed'")) {
+  throw new Error('only ongoing -> completed may auto-apply as a publication status transition');
+}
+if (watch.includes("nextPublicationStatus = observed.publicationStatus")) {
+  throw new Error('paused/discontinued/reversed remote statuses must never be copied automatically into the local two-state publication field');
+}
+if (watch.includes("fetch('https://raw-fucknovelpia.com") || watch.includes('RAW crawler')) {
   throw new Error('source watch must not implement another RAW crawler; linked catalog rows reuse the existing RAW provider');
 }
 if (/nextChapterCount\s*=\s*observed\.chapterCount/.test(watch)) {
@@ -138,6 +164,11 @@ for (const token of [
   'data-source-watch-attention',
   'Проверить источники сейчас',
   'Проверено',
+  "status === 'paused'",
+  "status === 'discontinued'",
+  "return 'пауза'",
+  "return 'прекращён'",
+  'releaseButton(button)',
   'window.DTL_ADMIN_SOURCE_WATCH',
 ]) need(ui, token, 'source watch admin UI');
 if (ui.includes('new MutationObserver')) throw new Error('source watch admin UI must not own a MutationObserver');
