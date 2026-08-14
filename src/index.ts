@@ -11,6 +11,7 @@ import { handleAdminPublicationsRequest } from './admin-publications';
 import { handleAdminRequestOps } from './admin-request-ops';
 import { handleAdminUsersRequest } from './admin-users';
 import { runBroadcastMaintenanceWithLease } from './broadcast-runner';
+import { handleChannelLeaveBanUpdate, handleChannelLeaveChatMemberUpdate } from './channel-leave-ban';
 import { handleCoverHealthRequest } from './cover-health';
 import { handleCoverRequest } from './covers';
 import { errorText, safeSecretEqual } from './db';
@@ -206,6 +207,9 @@ export default {
           handleReferralChatMemberUpdate(update.chat_member, env),
           handleAccessChatMemberUpdate(update.chat_member, env),
         ]);
+        await handleChannelLeaveChatMemberUpdate(update.chat_member, env, telegram);
+      } else if (await handleChannelLeaveBanUpdate(update, env, telegram)) {
+        // Voluntary channel leavers can only see the ban reason and appeal flow.
       } else if (await denyBlockedPrivateBotUpdate(update, env, telegram)) {
         // Admin-blocked private accounts stop here. Channel/discussion updates are unaffected.
       } else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
