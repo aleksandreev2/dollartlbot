@@ -34,11 +34,12 @@ const dictionaries = {
   fr: { ...fr, ...featureTranslations.fr, ...policyTranslations.fr, ...policyOverrideTranslations.fr, ...statusOverrideTranslations.fr, ...qualityOverrideTranslations.fr, ...rulesQualityOverrideTranslations.fr, ...interfacePolishTranslations.fr, ...localeCleanupTranslations.fr, ...accessGateTranslations.fr, ...channelLeaveBanTranslations.fr },
   de: { ...de, ...featureTranslations.de, ...policyTranslations.de, ...policyOverrideTranslations.de, ...statusOverrideTranslations.de, ...qualityOverrideTranslations.de, ...rulesQualityOverrideTranslations.de, ...interfacePolishTranslations.de, ...localeCleanupTranslations.de, ...accessGateTranslations.de, ...channelLeaveBanTranslations.de },
   ru: { ...ru, ...featureTranslations.ru, ...policyTranslations.ru, ...policyOverrideTranslations.ru, ...statusOverrideTranslations.ru, ...qualityOverrideTranslations.ru, ...rulesQualityOverrideTranslations.ru, ...interfacePolishTranslations.ru, ...localeCleanupTranslations.ru, ...accessGateTranslations.ru, ...channelLeaveBanTranslations.ru },
-  ur: { ...ur, ...channelLeaveBanTranslations.ur },
+  ur: { ...ur },
 } as const;
 
 export type TranslationKey = keyof typeof dictionaries.en;
 type Dictionary = Partial<Record<TranslationKey, string>>;
+const channelLeaveBanDictionaries = channelLeaveBanTranslations as unknown as Record<Locale, Dictionary>;
 
 export function normalizeLocale(value: string | null | undefined): Locale {
   if (value && value in dictionaries) return value as Locale;
@@ -46,6 +47,7 @@ export function normalizeLocale(value: string | null | undefined): Locale {
 }
 
 export function t(locale: Locale, key: TranslationKey): string {
+  const featureDictionary = channelLeaveBanDictionaries[locale];
   const dictionary = dictionaries[locale] as Dictionary;
-  return dictionary[key] ?? dictionaries.en[key];
+  return featureDictionary[key] ?? dictionary[key] ?? dictionaries.en[key];
 }
