@@ -4,6 +4,7 @@ import {
   accessErrorMessage,
   checkBotAccess,
 } from './access-gate';
+import { getActiveChannelLeaveBan, localeFromTelegramUi } from './channel-leave-ban';
 import { getUser, isAdmin, upsertUser } from './db';
 import { normalizeLocale, t } from './i18n/index';
 import { TelegramClient, type TelegramUser } from './telegram';
@@ -89,7 +90,21 @@ export async function authenticateMiniAppRequest(
   await upsertUser(env, telegramUser);
   const dbUser = await getUser(env, telegramUser.id);
   const locale = normalizeLocale(dbUser?.language);
+  const telegramLocale = localeFromTelegramUi(telegramUser);
   const admin = isAdmin(telegramUser.id, env);
+
+  if (!admin && await getActiveChannelLeaveBan(env, telegramUser.id)) {
+    return miniAppJsonError(
+      'channel_leave_banned',
+      t(telegramLocale, 'channelLeaveBanText'),
+      403,
+      {
+        title: t(telegramLocale, 'channelLeaveBanTitle'),
+        appeal_required: true,
+        appeal_label: t(telegramLocale, 'channelLeaveBanAppealButton'),
+      },
+    );
+  }
 
   if (!admin && await isUserAdministrativelyBlocked(env, telegramUser.id)) {
     return miniAppJsonError(
