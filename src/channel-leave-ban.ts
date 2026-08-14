@@ -246,13 +246,22 @@ async function submitAppeal(
   try {
     await telegram.sendMessage(env.ADMIN_TELEGRAM_ID, adminText, { reply_markup: keyboard });
   } catch (error) {
-    // Keep the appeal pending even if admin delivery temporarily fails; the user
-    // must not regain access merely because an admin notification failed.
+    const retryAt = new Date().toISOString();
+    await env.DB.prepare(`
+      UPDATE channel_leave_bans
+      SET appeal_state = 'awaiting_text', updated_at = ?
+      WHERE user_id = ? AND active = 1
+    `).bind(retryAt, user.id).run().catch(() => undefined);
     console.error(JSON.stringify({
       event: 'channel_leave_appeal_admin_delivery_failed',
       user_id: user.id,
       error: errorText(error),
     }));
+    await telegram.sendMessage(
+      user.id,
+      `<b>${t(locale, 'channelLeaveBanTitle')}</b>\n\n${t(locale, 'channelLeaveBanAppealPrompt')}`,
+    ).catch(() => undefined);
+    return;
   }
 
   await telegram.sendMessage(user.id, t(locale, 'channelLeaveBanAppealSubmitted'));
