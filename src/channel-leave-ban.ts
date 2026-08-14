@@ -1,4 +1,3 @@
-import { isConfiguredAccessChat } from './access-gate';
 import { errorText, isAdmin, upsertUser } from './db';
 import { normalizeLocale, t, type Locale } from './i18n/index';
 import {
@@ -62,7 +61,7 @@ export async function handleChannelLeaveChatMemberUpdate(
   telegram: TelegramClient,
 ): Promise<void> {
   if (update.chat.type !== 'channel') return;
-  if (!(await isConfiguredAccessChat(update, env))) return;
+  if (!(await matchesConfiguredAccessChat(update, env))) return;
 
   const target = update.new_chat_member.user;
   if (isAdmin(target.id, env)) return;
@@ -103,7 +102,10 @@ export async function handleChannelLeaveChatMemberUpdate(
   }
 
   try {
-    await telegram.banChatMember(update.chat.id, target.id);
+    await telegram.call<boolean>('banChatMember', {
+      chat_id: update.chat.id,
+      user_id: target.id,
+    });
     await setTelegramBanStatus(env, target.id, 'applied');
   } catch (error) {
     await setTelegramBanStatus(env, target.id, 'failed').catch(() => undefined);
@@ -282,7 +284,11 @@ async function handleAdminAppealCallback(
 
   if (action === 'approve') {
     try {
-      await telegram.unbanChatMember(ban.channel_id, userId, true);
+      await telegram.call<boolean>('unbanChatMember', {
+        chat_id: ban.channel_id,
+        user_id: userId,
+        only_if_banned: true,
+      });
     } catch (error) {
       await telegram.answerCallbackQuery(callbackQueryId, 'Telegram unban failed.').catch(() => undefined);
       await telegram.sendMessage(admin.id, `<b>Could not unban ${userId}.</b>\n\n${escapeHtml(errorText(error))}`)
@@ -388,6 +394,33 @@ async function rememberLanguage(env: Env, userId: number, locale: Locale): Promi
     UPDATE channel_leave_bans SET last_language = ?, updated_at = ?
     WHERE user_id = ? AND active = 1
   `).bind(locale, new Date().toISOString(), userId).run();
+}
+
+async function matchesConfiguredAccessChat(update: TelegramChatMemberUpdated, env: Env): Promise<boolean> {
+  const row = await env.DB.prepare(
+    "SELECT value FROM app_settings WHERE key = 'access_channel_id'",
+  ).first<{ value: string }>();
+  const channelId = normalizeConfiguredChannelId(String(row?.value ?? ''));
+  if (!channelId) return false;
+  if (/^-?\d+$/.test(channelId)) return String(update.chat.id) === channelId;
+  const configured = channelId.replace(/^@/, '').toLowerCase();
+  return Boolean(update.chat.username && update.chat.username.toLowerCase() === configured);
+}
+
+function normalizeConfiguredChannelId(value: string): string | null {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^-?\d+$/.test(raw)) return raw;
+  const username = raw.replace(/^@/, '');
+  if (/^[A-Za-z0-9_]{5,}$/.test(username)) return `@${username}`;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || !['t.me', 'telegram.me', 'telegram.dog'].includes(url.hostname.toLowerCase())) return null;
+    const part = url.pathname.split('/').filter(Boolean)[0] || '';
+    return /^[A-Za-z0-9_]{5,}$/.test(part) ? `@${part}` : null;
+  } catch {
+    return null;
+  }
 }
 
 function privateActor(update: TelegramUpdate): TelegramUser | null {
