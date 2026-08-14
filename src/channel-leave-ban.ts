@@ -66,6 +66,15 @@ export async function handleChannelLeaveChatMemberUpdate(
   const target = update.new_chat_member.user;
   if (isAdmin(target.id, env)) return;
 
+  // An active leave ban can only be cleared by the appeal flow. If somebody
+  // manually unbans the account in Telegram and it tries to join again while
+  // the database restriction is still active, immediately enforce the ban.
+  const existingBan = await getActiveChannelLeaveBan(env, target.id);
+  if (existingBan && isActiveChatMember(update.new_chat_member)) {
+    await applyTelegramBan(env, telegram, target.id, String(update.chat.id), 'active_leave_ban_rejoin');
+    return;
+  }
+
   const voluntarilyLeft = isActiveChatMember(update.old_chat_member)
     && update.new_chat_member.status === 'left'
     && update.from.id === target.id;
@@ -101,21 +110,7 @@ export async function handleChannelLeaveChatMemberUpdate(
     throw error;
   }
 
-  try {
-    await telegram.call<boolean>('banChatMember', {
-      chat_id: update.chat.id,
-      user_id: target.id,
-    });
-    await setTelegramBanStatus(env, target.id, 'applied');
-  } catch (error) {
-    await setTelegramBanStatus(env, target.id, 'failed').catch(() => undefined);
-    console.error(JSON.stringify({
-      event: 'voluntary_channel_leave_ban_failed',
-      user_id: target.id,
-      channel_id: update.chat.id,
-      error: errorText(error),
-    }));
-  }
+  await applyTelegramBan(env, telegram, target.id, String(update.chat.id), 'voluntary_channel_leave');
 }
 
 /**
@@ -150,6 +145,13 @@ export async function handleChannelLeaveBanUpdate(
 
   const ban = await getActiveChannelLeaveBan(env, actor.id);
   if (!ban) return false;
+
+  // A transient Telegram API error at the moment of leaving must not create a
+  // permanent gap between the Dollar TL block and the channel ban. Retry when
+  // the blocked user interacts with the bot; a rejoin event is also re-banned.
+  if (ban.telegram_ban_status !== 'applied') {
+    await applyTelegramBan(env, telegram, actor.id, ban.channel_id, 'leave_ban_retry');
+  }
 
   const locale = localeFromTelegramUi(actor);
   await rememberLanguage(env, actor.id, locale).catch(() => undefined);
@@ -387,6 +389,31 @@ async function getChannelLeaveBan(env: Env, userId: number): Promise<ChannelLeav
   } catch (error) {
     if (isMissingSchema(error)) return null;
     throw error;
+  }
+}
+
+async function applyTelegramBan(
+  env: Env,
+  telegram: TelegramClient,
+  userId: number,
+  channelId: number | string,
+  source: string,
+): Promise<void> {
+  try {
+    await telegram.call<boolean>('banChatMember', {
+      chat_id: channelId,
+      user_id: userId,
+    });
+    await setTelegramBanStatus(env, userId, 'applied');
+  } catch (error) {
+    await setTelegramBanStatus(env, userId, 'failed').catch(() => undefined);
+    console.error(JSON.stringify({
+      event: 'channel_leave_telegram_ban_failed',
+      source,
+      user_id: userId,
+      channel_id: channelId,
+      error: errorText(error),
+    }));
   }
 }
 
