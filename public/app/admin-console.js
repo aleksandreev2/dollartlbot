@@ -11,6 +11,7 @@
     requests: ['inbox', 'Заявки'],
     queue: ['list-ordered', 'Очередь'],
     publishing: ['send', 'Публикация'],
+    security: ['shield-check', 'Безопасность'],
     settings: ['settings-2', 'Настройки'],
   };
 
@@ -75,6 +76,7 @@
   async function renderSection(section) {
     state.section = section;
     if (section === 'overview') return renderOverview();
+    if (section === 'security') return renderSecurity();
     if (section === 'settings') return renderSettings();
     return false;
   }
@@ -101,6 +103,71 @@
       if (!stale('overview', error)) shell(errorBox(error.message), 'Не удалось загрузить админ-панель');
       return false;
     }
+  }
+
+  async function renderSecurity() {
+    syncSection('security');
+    shell(`<div class="admin-loading">${icon('loader-circle')} Загружаем security telemetry…</div>`, 'Антиспам, блокировки и проверка файлов');
+    try {
+      const [abuse, assets] = await Promise.all([
+        api('/api/app/admin/security/anti-abuse?days=7'),
+        api('/api/app/admin/security/assets'),
+      ]);
+      if (!isActive('security')) return false;
+      const summary = abuse.summary || {};
+      const risky = (abuse.users || []).slice(0, 12);
+      const recent = (abuse.recent || []).slice(0, 12);
+      const assetSummary = assets.summary || [];
+      const unsafeAssets = (assets.assets || []).filter(asset => asset.scan_status !== 'clean').slice(0, 12);
+      shell(`<div class="admin-stat-grid">
+        ${stat('activity', summary.events || 0, 'Security events · 7д', 'blue')}
+        ${stat('users', summary.users || 0, 'Пользователей', 'green')}
+        ${stat('shield-alert', summary.limited || 0, 'Ограничено', 'orange')}
+        ${stat('ban', summary.temporary_blocks || 0, 'Temp blocks', 'gold')}
+      </div>
+      <div class="admin-dashboard-grid">
+        <section class="admin-panel"><div class="admin-panel-head"><div><h2>Подозрительные пользователи</h2><p>Abuse score, rate limit и ручные блокировки</p></div></div>
+          ${risky.length ? risky.map(securityUserRow).join('') : '<div class="admin-empty">Подозрительной активности пока нет.</div>'}
+        </section>
+        <section class="admin-panel"><div class="admin-panel-head"><div><h2>Проверка файлов</h2><p>Статусы publication assets</p></div></div>
+          ${assetSummary.length ? assetSummary.map(scanSummaryRow).join('') : '<div class="admin-empty">Файлы ещё не зарегистрированы.</div>'}
+          ${unsafeAssets.length ? `<div class="admin-panel-head"><div><h2>Требуют внимания</h2><p>Не имеют verdict CLEAN</p></div></div>${unsafeAssets.map(assetSecurityRow).join('')}` : ''}
+        </section>
+      </div>
+      <section class="admin-panel"><div class="admin-panel-head"><div><h2>Последние ограничения</h2><p>Конкретный Telegram ID, действие и причина</p></div></div>
+        ${recent.length ? recent.map(securityEventRow).join('') : '<div class="admin-empty">Ограничений нет.</div>'}
+      </section>`, 'Security telemetry за последние 7 дней');
+      return true;
+    } catch (error) {
+      if (!stale('security', error)) shell(errorBox(error.message), 'Не удалось загрузить security telemetry');
+      return false;
+    }
+  }
+
+  function securityUserRow(user) {
+    const name = user.username ? `@${esc(user.username)}` : esc(user.first_name || 'без username');
+    const blocked = user.blocked_at ? '<span class="admin-badge bad">ADMIN BLOCK</span>' : securityBadge(user.last_decision || 'monitor');
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('user-round-search')}</div><div class="admin-compact-copy"><strong>${name} · ${esc(user.user_id)}</strong><span>score ${Number(user.abuse_score || 0)} · limited ${Number(user.total_limited || 0)} · ${esc(user.last_reason || '—')}</span></div>${blocked}</div>`;
+  }
+
+  function securityEventRow(event) {
+    const name = event.username ? `@${esc(event.username)}` : esc(event.first_name || event.user_id);
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('shield-alert')}</div><div class="admin-compact-copy"><strong>${name} · ${esc(event.user_id)}</strong><span>${esc(event.action)} · ${esc(event.reason || event.decision)} · ${date(event.created_at)}</span></div>${securityBadge(event.decision)}</div>`;
+  }
+
+  function scanSummaryRow(row) {
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon(row.scan_status === 'clean' ? 'shield-check' : 'file-warning')}</div><div class="admin-compact-copy"><strong>${esc(row.scan_status || 'unknown')}</strong><span>${Number(row.count || 0)} файл(ов) · ${formatBytes(row.bytes || 0)}</span></div>${securityBadge(row.scan_status)}</div>`;
+  }
+
+  function assetSecurityRow(asset) {
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('file-warning')}</div><div class="admin-compact-copy"><strong>${esc(asset.file_name)}</strong><span>#${esc(asset.publication_id)} · ${esc(asset.publication_title)}${asset.scan_threat_name ? ` · ${esc(asset.scan_threat_name)}` : ''}</span></div>${securityBadge(asset.scan_status)}</div>`;
+  }
+
+  function securityBadge(value) {
+    const text = String(value || '—');
+    const good = ['clean', 'allow'].includes(text);
+    const bad = ['infected', 'limited', 'temporary_block', 'failed'].includes(text);
+    return `<span class="admin-badge ${good ? 'done' : bad ? 'bad' : 'pending'}">${esc(text)}</span>`;
   }
 
   function stat(ic, number, label, tone) { return `<div class="admin-stat ${tone}"><div class="admin-stat-icon">${icon(ic)}</div><div><strong>${number}</strong><span>${label}</span></div></div>`; }
@@ -166,8 +233,15 @@
     try { return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }
     catch { return String(value); }
   }
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
-  for (const section of ['overview', 'settings']) {
+  for (const section of ['overview', 'security', 'settings']) {
     adminRuntime.registerRoute(routeId(section), { mount: () => renderSection(section), refresh: () => renderSection(section) });
   }
 
