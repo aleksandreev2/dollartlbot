@@ -6,6 +6,7 @@ import {
   sendRegionalRestriction,
   sendRegionVerificationPrompt,
 } from './regional-access';
+import { runtimeFlag } from './runtime-settings';
 import type { TelegramClient, TelegramUpdate } from './telegram';
 
 const DOWNLOAD_START_PREFIX = 'dl_';
@@ -23,6 +24,7 @@ export async function handleRegionalDownloadPreflight(
   if (!payload.startsWith(DOWNLOAD_START_PREFIX)) return false;
   const downloadToken = payload.slice(DOWNLOAD_START_PREFIX.length);
   if (!TOKEN_RE.test(downloadToken)) return false;
+  if (!(await runtimeFlag(env, 'download_gate_enabled', false))) return false;
 
   await upsertUser(env, message.from);
   const regional = await checkRegionalDownloadAccess(message.from.id, env, telegram);
