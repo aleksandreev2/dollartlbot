@@ -42,7 +42,10 @@ export async function handleFileDownloadPreflight(
   if (!assets.results.length) return false;
 
   const quarantined = assets.results.find((asset) =>
-    Boolean(asset.quarantined_at) || asset.scan_status === 'infected' || asset.scan_status === 'suspicious',
+    Boolean(asset.quarantined_at)
+    || Boolean(asset.quarantine_reason)
+    || asset.scan_status === 'infected'
+    || asset.scan_status === 'suspicious',
   );
   if (quarantined) {
     await telegram.sendMessage(
