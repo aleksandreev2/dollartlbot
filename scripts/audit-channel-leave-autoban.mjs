@@ -35,14 +35,18 @@ need(policy, 'only_if_banned: true', 'safe unban semantics');
 need(policy, 'runChannelLeaveAutoBanMaintenance', 'durable retry maintenance');
 need(policy, "status='banned'", 'successful ban persistence');
 need(policy, "status=?,attempts=?,next_attempt_at=?", 'retry persistence');
+need(policy, "VALUES (?,?,?,?,?,'pending'", 'pending row persisted before external ban');
+need(policy, 'ctx.waitUntil(attempt)', 'slow ban attempt is off webhook critical path');
+before(policy, "VALUES (?,?,?,?,?,'pending'", 'ctx.waitUntil(attempt)', 'durable leave must be written before background handoff');
 
-need(entry, 'handleChannelLeaveAutoBan(update.chat_member, env, telegram)', 'production webhook wiring');
+need(entry, 'handleChannelLeaveAutoBan(update.chat_member, env, telegram, ctx)', 'production webhook wiring');
 need(entry, 'runChannelLeaveAutoBanMaintenance(env, telegram, 20)', 'production cron retry wiring');
 need(entry, 'handleAdminChannelAutoBanRequest(', 'admin route wiring');
+need(entry, 'await Promise.all([', 'scheduled work runs concurrently');
 before(
   entry,
   'handleAccessChatMemberUpdate(update.chat_member, env)',
-  'handleChannelLeaveAutoBan(update.chat_member, env, telegram)',
+  'handleChannelLeaveAutoBan(update.chat_member, env, telegram, ctx)',
   'access revocation must happen before permanent channel ban',
 );
 
@@ -58,7 +62,8 @@ need(adminUi, 'Channel leave auto-ban', 'visible security panel');
 need(adminUi, 'data-channel-unban', 'visible manual unban control');
 need(adminUi, 'data-channel-retry', 'visible manual retry control');
 need(adminUi, 'channelAutoBanBoostyExempt', 'visible Boosty exemption control');
+need(adminUi, 'delivered_files_before_leave', 'visible download-before-leave count');
 
 need(configureBot, "'chat_member'", 'chat_member webhook delivery');
 
-console.log('Channel leave autoban audit passed: only verified self-leaves are blacklisted, admins/Boosty are protected, retries are durable, download history is correlated, and manual recovery is available.');
+console.log('Channel leave autoban audit passed: verified self-leaves are durably recorded then blacklisted, admins/Boosty are protected, retries are durable, download history is correlated, and manual recovery is available.');
