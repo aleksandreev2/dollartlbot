@@ -83,7 +83,7 @@ export async function collectSecurityFindings(env: Env): Promise<SecurityFinding
       SELECT id,status,started_at,completed_at,error_text FROM dr_backup_runs ORDER BY started_at DESC LIMIT 1
     `).first<Record<string, unknown>>().catch(() => null),
     env.DB.prepare(`
-      SELECT id,completed_at,verify_status,verified_at FROM dr_backup_runs
+      SELECT id,completed_at,verify_status,verified_at,verification_error FROM dr_backup_runs
       WHERE status='completed' ORDER BY completed_at DESC LIMIT 1
     `).first<Record<string, unknown>>().catch(() => null),
   ]);
@@ -146,10 +146,11 @@ export async function collectSecurityFindings(env: Env): Promise<SecurityFinding
   }
 
   if (config.dr_backup_enabled !== '0') {
+    const backupRunning = String(latestBackup?.status || '') === 'running';
     const intervalHours = bounded(config.dr_backup_interval_hours, 24, 1, 168);
     const completedAt = latestCompletedBackup?.completed_at ? Date.parse(String(latestCompletedBackup.completed_at)) : 0;
     const ageHours = completedAt ? (Date.now() - completedAt) / 3_600_000 : Number.POSITIVE_INFINITY;
-    if (!completedAt || ageHours > intervalHours * 1.5) {
+    if (!backupRunning && (!completedAt || ageHours > intervalHours * 1.5)) {
       findings.push({
         key: 'backup_overdue',
         severity: !completedAt || ageHours > intervalHours * 3 ? 'critical' : 'warning',
@@ -166,6 +167,14 @@ export async function collectSecurityFindings(env: Env): Promise<SecurityFinding
         title: 'Latest recovery backup failed',
         detail: String(latestBackup?.error_text || 'The latest portable backup did not complete.').slice(0, 900),
         value: `${String(latestBackup?.id || '')}:${String(latestBackup?.started_at || '')}`,
+      });
+    }
+    if (String(latestCompletedBackup?.verify_status || '') === 'failed') {
+      findings.push({
+        key: 'backup_verification_failed', severity: 'critical',
+        title: 'Latest recovery backup failed verification',
+        detail: String(latestCompletedBackup?.verification_error || 'Backup chunks or manifest failed integrity verification.').slice(0, 900),
+        value: `${String(latestCompletedBackup?.id || '')}:${String(latestCompletedBackup?.verified_at || '')}`,
       });
     }
   }
