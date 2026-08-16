@@ -28,12 +28,12 @@ CREATE TABLE IF NOT EXISTS anti_abuse_user_stats (
   updated_at TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_mode','monitor');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_global_limit_10s','12');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_global_limit_60s','60');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_commands_limit_10s','5');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_commands_limit_60s','20');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_callbacks_limit_10s','8');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_callbacks_limit_60s','30');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_same_action_cooldown_ms','1500');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('anti_abuse_temp_block_seconds','900');
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_mode','monitor',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_global_limit_10s','12',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_global_limit_60s','60',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_commands_limit_10s','5',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_commands_limit_60s','20',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_callbacks_limit_10s','8',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_callbacks_limit_60s','30',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_same_action_cooldown_ms','1500',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('anti_abuse_temp_block_seconds','900',datetime('now'));
