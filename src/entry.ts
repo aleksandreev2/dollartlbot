@@ -2,6 +2,7 @@ import baseWorker from './index';
 import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
 import { handleAdminChannelAutoBanRequest } from './admin-channel-autoban';
+import { handleAdminCoreReliabilityRequest } from './admin-core-reliability';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminFileSecurityRequest } from './admin-file-security';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
@@ -17,10 +18,12 @@ import { handleDownloadGateUpdate } from './download-gate';
 import { recordPublicationRateLimit } from './download-rate-limit';
 import { handleFileDownloadPreflight } from './file-download-preflight';
 import { handleUpdate } from './handlers';
+import { runProductionSecurityAlerts } from './production-alerts';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handleRegionVerificationRequest } from './regional-access';
 import { handleRegionalDownloadPreflight } from './regional-download-preflight';
 import { handleReferralChatMemberUpdate } from './referrals';
+import { guardSecurityConfiguration } from './security-config-validator';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { denyBlockedPrivateBotUpdate } from './user-controls';
 
@@ -42,6 +45,8 @@ export default {
       if (coverVariant) return coverVariant;
       const regionalAdmin = await handleAdminRegionalAccessRequest(request, env);
       if (regionalAdmin) return regionalAdmin;
+      const reliabilityAdmin = await handleAdminCoreReliabilityRequest(request, env);
+      if (reliabilityAdmin) return reliabilityAdmin;
       const fileSecurityAdmin = await handleAdminFileSecurityRequest(request, env);
       if (fileSecurityAdmin) return fileSecurityAdmin;
       if (url.pathname === '/api/app/admin/security/channel-autobans') {
@@ -52,6 +57,8 @@ export default {
         );
         if (channelAutoBanAdmin) return channelAutoBanAdmin;
       }
+      const configGuard = await guardSecurityConfiguration(request, env);
+      if (configGuard) return configGuard;
       const enforcementGuard = await guardAssetScanEnforcementConfig(request, env);
       if (enforcementGuard) return enforcementGuard;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
@@ -116,7 +123,7 @@ export default {
         } else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
           // Automatic linked-discussion forward handled by publishing center.
         } else if (await handleRegionalDownloadPreflight(update, env, telegram)) {
-          // Free download requires a fresh verified country; CIS users are routed to Russian translations.
+          // Canonical access policy denied regional download or required verification.
         } else if (await handleFileDownloadPreflight(update, env, telegram)) {
           // Quarantine is absolute; optional enforcement requires final CLEAN verdicts for unfinished files.
         } else if (await handleDownloadGateUpdate(update, env, telegram, ctx)) {
@@ -153,6 +160,12 @@ export default {
       runChannelLeaveAutoBanMaintenance(env, telegram, 20).catch((error) => {
         console.error(JSON.stringify({
           event: 'channel_leave_autoban_maintenance_failed',
+          error: errorText(error),
+        }));
+      }),
+      runProductionSecurityAlerts(env, telegram).catch((error) => {
+        console.error(JSON.stringify({
+          event: 'production_security_alerts_failed',
           error: errorText(error),
         }));
       }),

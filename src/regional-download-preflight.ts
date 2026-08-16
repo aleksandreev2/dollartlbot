@@ -1,12 +1,13 @@
+import { evaluateAccessPolicy } from './access-policy';
 import { getUser, upsertUser } from './db';
 import { normalizeLocale } from './i18n/index';
 import {
-  checkRegionalDownloadAccess,
   createRegionVerificationChallenge,
   sendRegionalRestriction,
   sendRegionVerificationPrompt,
 } from './regional-access';
 import { runtimeFlag } from './runtime-settings';
+import { recordSecurityEvent } from './security-events';
 import type { TelegramClient, TelegramUpdate } from './telegram';
 
 const DOWNLOAD_START_PREFIX = 'dl_';
@@ -27,30 +28,41 @@ export async function handleRegionalDownloadPreflight(
   if (!(await runtimeFlag(env, 'download_gate_enabled', false))) return false;
 
   await upsertUser(env, message.from);
-  const regional = await checkRegionalDownloadAccess(message.from.id, env, telegram);
-  if (regional.allowed) return false;
+  const policy = await evaluateAccessPolicy(message.from.id, env, telegram, { activationSource: 'bot' });
+  if (policy.capabilities.download) return false;
 
-  if (regional.reason === 'restricted') {
-    await sendRegionalRestriction(message.from.id, regional.russianChannelUrl, telegram);
+  if (policy.reason === 'regional_restricted' && policy.regional) {
+    await recordSecurityEvent(env, 'download_denied_region', 'access_policy', {
+      userId: message.from.id,
+      severity: 'warning',
+      metadata: { country_code: policy.regional.countryCode },
+    });
+    await sendRegionalRestriction(message.from.id, policy.regional.russianChannelUrl, telegram);
     return true;
   }
 
-  if (regional.reason === 'verification_required') {
+  if (policy.reason === 'regional_verification_required' && policy.regional) {
     const account = await getUser(env, message.from.id).catch(() => null);
     const locale = normalizeLocale(account?.language || message.from.language_code);
     const verificationUrl = await createRegionVerificationChallenge(env, message.from.id, {
       type: 'download',
       token: downloadToken,
     });
+    await recordSecurityEvent(env, 'download_region_verification_required', 'access_policy', {
+      userId: message.from.id,
+      metadata: { country_code: policy.regional.countryCode },
+    });
     await sendRegionVerificationPrompt(
       message.from.id,
       locale,
       verificationUrl,
-      regional.russianChannelUrl,
+      policy.regional.russianChannelUrl,
       telegram,
     );
     return true;
   }
 
+  // Non-regional denials continue into the existing access/download guards so
+  // their established user-facing copy and retry behavior remain unchanged.
   return false;
 }

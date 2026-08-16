@@ -53,6 +53,26 @@ export async function handleAdminChannelAutoBanRequest(
   }
 
   if (body.action === 'config') {
+    if (body.enabled === true) {
+      const readiness = await botRestrictionReadiness(env, telegram);
+      if (!readiness.configured) {
+        return miniAppJsonError(
+          'autoban_channel_not_configured',
+          'Channel leave auto-ban cannot be enabled until the required access channel is configured.',
+          409,
+          readiness,
+        );
+      }
+      if (!readiness.bot_can_restrict_members) {
+        return miniAppJsonError(
+          'autoban_permission_missing',
+          'Channel leave auto-ban cannot be enabled until the bot can restrict/ban members in the required Telegram channel.',
+          409,
+          readiness,
+        );
+      }
+    }
+
     const ops: D1PreparedStatement[] = [];
     if (typeof body.enabled === 'boolean') {
       ops.push(env.DB.prepare(`
@@ -77,7 +97,7 @@ export async function handleAdminChannelAutoBanRequest(
 }
 
 async function readState(env: Env, telegram: TelegramClient): Promise<Response> {
-  const [summary, rows, channel, enabled, boostyExempt] = await Promise.all([
+  const [summary, rows, channel, enabled, boostyExempt, diagnostics] = await Promise.all([
     getChannelLeaveAutoBanSummary(env),
     env.DB.prepare(`
       SELECT b.user_id,b.channel_id,b.username,b.first_name,b.status,b.exemption_reason,b.leave_count,
@@ -95,38 +115,40 @@ async function readState(env: Env, telegram: TelegramClient): Promise<Response> 
     getAccessChannelForAutoBan(env),
     runtimeFlag(env, 'channel_leave_autoban_enabled', true),
     runtimeFlag(env, 'channel_leave_autoban_boosty_exempt', true),
+    botRestrictionReadiness(env, telegram),
   ]);
-
-  let diagnostics: Record<string, unknown> = { configured: Boolean(channel), bot_can_restrict_members: false };
-  if (channel) {
-    try {
-      const me = await telegram.call<{ id: number; username?: string }>('getMe', {});
-      const member = await telegram.call<{ status: string; can_restrict_members?: boolean }>('getChatMember', {
-        chat_id: normalizeChatId(channel.id),
-        user_id: me.id,
-      });
-      diagnostics = {
-        configured: true,
-        channel_id: channel.id,
-        bot_status: member.status,
-        bot_can_restrict_members: member.status === 'creator' || Boolean(member.can_restrict_members),
-      };
-    } catch (error) {
-      diagnostics = {
-        configured: true,
-        channel_id: channel.id,
-        bot_can_restrict_members: false,
-        error: String(error).slice(0, 500),
-      };
-    }
-  }
 
   return miniAppJson({
     config: { enabled, boosty_exempt: boostyExempt },
-    diagnostics,
+    diagnostics: { ...diagnostics, channel_id: channel?.id || diagnostics.channel_id || null },
     summary,
     entries: rows.results,
   });
+}
+
+async function botRestrictionReadiness(env: Env, telegram: TelegramClient): Promise<Record<string, any>> {
+  const channel = await getAccessChannelForAutoBan(env);
+  if (!channel) return { configured: false, bot_can_restrict_members: false };
+  try {
+    const me = await telegram.call<{ id: number; username?: string }>('getMe', {});
+    const member = await telegram.call<{ status: string; can_restrict_members?: boolean }>('getChatMember', {
+      chat_id: normalizeChatId(channel.id),
+      user_id: me.id,
+    });
+    return {
+      configured: true,
+      channel_id: channel.id,
+      bot_status: member.status,
+      bot_can_restrict_members: member.status === 'creator' || Boolean(member.can_restrict_members),
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      channel_id: channel.id,
+      bot_can_restrict_members: false,
+      error: String(error).slice(0, 500),
+    };
+  }
 }
 
 function validUserId(value: unknown): number | null {
