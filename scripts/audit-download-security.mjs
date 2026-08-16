@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const entry = read('src/entry.ts');
 const antiAbuse = read('src/anti-abuse.ts');
+const accessPolicy = read('src/access-policy.ts');
 const gate = read('src/download-gate.ts');
 const filePreflight = read('src/file-download-preflight.ts');
 const scanConfigGuard = read('src/asset-security-config-guard.ts');
@@ -85,8 +86,11 @@ need(regional, 'Only the country code is stored; your IP address is not saved.',
 forbid(m36, 'ip_address', 'IP persistence');
 forbid(regional, 'cf?.city', 'city fingerprinting');
 need(regionalPreflight, "payload.startsWith(DOWNLOAD_START_PREFIX)", 'download-only regional preflight');
-need(regionalPreflight, "regional.reason === 'restricted'", 'CIS routing decision');
-need(regionalPreflight, "regional.reason === 'verification_required'", 'unknown region verification challenge');
+need(regionalPreflight, 'evaluateAccessPolicy(message.from.id, env, telegram', 'regional preflight uses canonical access policy');
+need(regionalPreflight, "policy.reason === 'regional_restricted'", 'CIS routing decision');
+need(regionalPreflight, "policy.reason === 'regional_verification_required'", 'unknown region verification challenge');
+need(accessPolicy, "make(userId, 'regional_restricted', true, false, true, false", 'CIS capability policy');
+need(accessPolicy, "make(userId, 'regional_verification_required', true, false, true, false", 'unknown-region capability policy');
 need(miniappAuth, "captureRegionFromRequest(request, telegramUser.id, env, 'miniapp')", 'Mini App country capture');
 need(entry, 'handleRegionVerificationRequest(request, env)', 'browser verification endpoint');
 need(regionalAdmin, "'/api/app/admin/security/regional'", 'regional admin endpoint');
@@ -165,4 +169,4 @@ for (const route of [
   "'/api/app/admin/security/config'",
 ]) need(adminApi, route, `admin route ${route}`);
 
-console.log('Download/security audit passed: tracked downloads, regional verification, restored Users controls, scanner queue/heartbeat, ClamAV INSTREAM, quarantine, guarded CLEAN-only enforcement, cache safety, immutable covers, and admin observability are wired.');
+console.log('Download/security audit passed: tracked downloads, centralized regional policy, restored Users controls, scanner queue/heartbeat, ClamAV INSTREAM, quarantine, guarded CLEAN-only enforcement, cache safety, immutable covers, and admin observability are wired.');
