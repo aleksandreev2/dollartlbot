@@ -3,6 +3,7 @@ import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
 import { handleAdminChannelAutoBanRequest } from './admin-channel-autoban';
 import { handleAdminCoreReliabilityRequest } from './admin-core-reliability';
+import { handleAdminDisasterRecoveryRequest } from './admin-disaster-recovery';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminFileSecurityRequest } from './admin-file-security';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
@@ -14,6 +15,7 @@ import { handleBotSubmitDeepLink } from './bot-submit-deeplink';
 import { handleChannelLeaveAutoBan, runChannelLeaveAutoBanMaintenance } from './channel-leave-autoban';
 import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
+import { runDisasterRecoveryMaintenance } from './disaster-recovery';
 import { handleDownloadGateUpdate } from './download-gate';
 import { recordPublicationRateLimit } from './download-rate-limit';
 import { handleFileDownloadPreflight } from './file-download-preflight';
@@ -49,6 +51,14 @@ export default {
       if (reliabilityAdmin) return reliabilityAdmin;
       const fileSecurityAdmin = await handleAdminFileSecurityRequest(request, env);
       if (fileSecurityAdmin) return fileSecurityAdmin;
+      if (url.pathname === '/api/app/admin/disaster-recovery') {
+        const disasterRecoveryAdmin = await handleAdminDisasterRecoveryRequest(
+          request,
+          env,
+          new TelegramClient(env.TELEGRAM_BOT_TOKEN, env),
+        );
+        if (disasterRecoveryAdmin) return disasterRecoveryAdmin;
+      }
       if (url.pathname === '/api/app/admin/security/channel-autobans') {
         const channelAutoBanAdmin = await handleAdminChannelAutoBanRequest(
           request,
@@ -160,6 +170,12 @@ export default {
       runChannelLeaveAutoBanMaintenance(env, telegram, 20).catch((error) => {
         console.error(JSON.stringify({
           event: 'channel_leave_autoban_maintenance_failed',
+          error: errorText(error),
+        }));
+      }),
+      runDisasterRecoveryMaintenance(env).catch((error) => {
+        console.error(JSON.stringify({
+          event: 'disaster_recovery_maintenance_failed',
           error: errorText(error),
         }));
       }),
