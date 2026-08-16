@@ -7,6 +7,7 @@ import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './as
 import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
 import { handleDownloadGateUpdate } from './download-gate';
+import { recordPublicationRateLimit } from './download-rate-limit';
 import { handleUpdate } from './handlers';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handleReferralChatMemberUpdate } from './referrals';
@@ -71,6 +72,7 @@ export default {
       } else {
         const abuse = await guardTelegramUpdate(update, env, ctx);
         if (!abuse.allowed) {
+          recordPublicationRateLimit(update, env, ctx);
           if (update.callback_query) {
             await telegram.answerCallbackQuery(
               update.callback_query.id,
