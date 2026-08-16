@@ -80,7 +80,11 @@ for (const token of [
 ]) need(indexTs, token, 'Worker routing');
 
 for (const token of [
-  "ACCESS_CODES = new Set(['membership_required', 'access_check_unavailable', 'access_restricted'])",
+  "'membership_required'",
+  "'access_check_unavailable'",
+  "'access_restricted'",
+  "'regional_restricted'",
+  "'regional_verification_required'",
   "fetch('/api/app/access'",
   "headers.set('x-access-recheck', '1')",
   'tg?.openTelegramLink',
@@ -96,8 +100,10 @@ for (const token of [
   "emitAccessLifecycle('dtl:accessready'",
   'const result = await requestAccess(true)',
   'void verifyAccess(true)',
-  "const restricted = error.code === 'access_restricted'",
-  '!restricted && joinUrl',
+  "const accountRestricted = error.code === 'access_restricted'",
+  "const regionalRestricted = error.code === 'regional_restricted'",
+  "const regionalVerification = error.code === 'regional_verification_required'",
+  '!hardRestricted && joinUrl',
 ]) need(gateUi, token, 'Mini App gate UX');
 for (const token of [
   '.app-shell.access-locked .topbar .brand',
@@ -157,4 +163,4 @@ new Function(gateUi);
 new Function(onboardingUi);
 new Function(adminUi);
 
-console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, strict open/resume rechecks for former members, administrative account restrictions, bounded cache/grace, referral-safe onboarding, coordinated access lifecycle, versioned Telegram menu URL, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
+console.log('Channel access gate audit passed: explicit Dollar TL channel, backend enforcement, immediate membership invalidation, strict open/resume rechecks for former members, administrative and regional Mini App restrictions, bounded cache/grace, referral-safe onboarding, coordinated access lifecycle, versioned Telegram menu URL, full Mini App chrome lock, localized UX, admin diagnostics, and live rechecks are wired.');
