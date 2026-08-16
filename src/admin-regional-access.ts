@@ -24,7 +24,13 @@ export async function handleAdminRegionalAccessRequest(request: Request, env: En
   }
 
   const updates = new Map<string, string>();
-  if ('enabled' in body) updates.set('regional_routing_enabled', truthy(body.enabled) ? '1' : '0');
+  if ('enabled' in body) {
+    const enabled = truthy(body.enabled);
+    updates.set('regional_routing_enabled', enabled ? '1' : '0');
+    // Regional enforcement is impossible while release files are dumped
+    // publicly. Enabling the policy therefore also enables private delivery.
+    if (enabled) updates.set('download_gate_enabled', '1');
+  }
   if ('restricted_countries' in body) {
     const countries = normalizeCountries(body.restricted_countries);
     if (!countries.length) return miniAppJsonError('invalid_countries', 'Add at least one ISO country code.', 400);
@@ -57,21 +63,25 @@ export async function handleAdminRegionalAccessRequest(request: Request, env: En
 }
 
 async function regionalConfig(env: Env): Promise<Response> {
-  const [enabled, countries, channel, countryTtl, challengeTtl, summary] = await Promise.all([
+  const [enabled, countries, channel, countryTtl, challengeTtl, downloadGate, summary] = await Promise.all([
     getRuntimeSetting(env, 'regional_routing_enabled', '1'),
     getRuntimeSetting(env, 'regional_restricted_countries', DEFAULT_COUNTRIES),
     getRuntimeSetting(env, 'regional_russian_channel_url', DEFAULT_CHANNEL),
     getRuntimeSetting(env, 'regional_country_ttl_days', '30'),
     getRuntimeSetting(env, 'regional_challenge_ttl_minutes', '10'),
+    getRuntimeSetting(env, 'download_gate_enabled', '0'),
     regionalSummary(env),
   ]);
+  const routingEnabled = enabled !== '0';
   return miniAppJson({
     config: {
-      enabled: enabled !== '0',
+      enabled: routingEnabled,
       restricted_countries: normalizeCountries(countries),
       russian_channel_url: channel || DEFAULT_CHANNEL,
       country_ttl_days: Number(countryTtl) || 30,
       challenge_ttl_minutes: Number(challengeTtl) || 10,
+      private_download_required: routingEnabled,
+      private_download_setting: downloadGate !== '0',
     },
     summary,
   });
