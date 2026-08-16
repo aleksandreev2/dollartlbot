@@ -29,12 +29,10 @@ export default {
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
       if (readerSecurity) return readerSecurity;
 
-      const assetIntakeRequest = request.method === 'POST' && url.pathname === '/api/app/admin/publications'
-        ? request.clone()
-        : null;
+      const captureAssetSecurity = request.method === 'POST' && url.pathname === '/api/app/admin/publications';
       const response = await baseWorker.fetch(request, env, ctx);
-      if (assetIntakeRequest) {
-        await capturePublicationAssetSecurity(assetIntakeRequest, response, env, ctx).catch((error) => {
+      if (captureAssetSecurity) {
+        await capturePublicationAssetSecurity(response, env, ctx).catch((error) => {
           console.warn(JSON.stringify({ event: 'asset_security_intake_failed', error: errorText(error) }));
         });
       }
