@@ -2,14 +2,13 @@ import {
   accessErrorCode,
   accessErrorDetails,
   accessErrorMessage,
-  checkBotAccess,
 } from './access-gate';
+import { evaluateAccessPolicy } from './access-policy';
 import { getUser, isAdmin, upsertUser } from './db';
 import { normalizeLocale, t } from './i18n/index';
 import { evaluateMiniAppRegionalAccess } from './miniapp-regional-gate';
 import { captureRegionFromRequest, requestCountry } from './regional-access';
 import { TelegramClient, type TelegramUser } from './telegram';
-import { isUserAdministrativelyBlocked } from './user-controls';
 
 const INIT_DATA_MAX_AGE_SECONDS = 24 * 60 * 60;
 
@@ -94,9 +93,6 @@ export async function authenticateMiniAppRequest(
     console.warn(JSON.stringify({ event: 'miniapp_region_capture_failed', user_id: telegramUser.id, error: String(error) }));
   });
   if (observedCountry) {
-    // captureRegionFromRequest intentionally suppresses same-country writes for
-    // several hours. A changed country is security-relevant, so persist it
-    // immediately even when that optimization cache is warm.
     const observedAt = new Date().toISOString();
     await env.DB.prepare(`
       UPDATE users
@@ -104,59 +100,54 @@ export async function authenticateMiniAppRequest(
       WHERE telegram_id=? AND COALESCE(country_code,'')<>?
     `).bind(observedCountry, observedAt, telegramUser.id, observedCountry).run();
   }
+
   const dbUser = await getUser(env, telegramUser.id);
   const locale = normalizeLocale(dbUser?.language || telegramUser.language_code);
   const admin = isAdmin(telegramUser.id, env);
+  const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+  const policy = await evaluateAccessPolicy(telegramUser.id, env, telegram, {
+    forceMembership: request.headers.get('x-access-recheck') === '1',
+    activationSource: 'miniapp',
+  });
 
-  if (!admin && await isUserAdministrativelyBlocked(env, telegramUser.id)) {
+  if (!policy.capabilities.miniapp) {
+    if (policy.reason === 'regional_restricted' || policy.reason === 'regional_verification_required') {
+      const regionalGate = await evaluateMiniAppRegionalAccess(telegramUser.id, locale, env, telegram);
+      if (regionalGate) {
+        return miniAppJsonError(regionalGate.code, regionalGate.message, 403, regionalGate.details);
+      }
+    }
+
+    if (policy.reason === 'membership_required' || policy.reason === 'access_check_unavailable') {
+      const access = policy.access;
+      if (access) {
+        return miniAppJsonError(
+          accessErrorCode(access),
+          accessErrorMessage(locale, access),
+          access.reason === 'check_unavailable' ? 503 : 403,
+          accessErrorDetails(locale, access),
+        );
+      }
+    }
+
+    const leaveBan = policy.reason === 'channel_leave_banned';
     return miniAppJsonError(
       'access_restricted',
-      t(locale, 'accessRestrictedText'),
+      leaveBan
+        ? (locale === 'ru'
+          ? 'Доступ к Dollar TL ограничен после добровольного выхода из обязательного канала.'
+          : 'Dollar TL access is restricted after voluntarily leaving the required channel.')
+        : t(locale, 'accessRestrictedText'),
       403,
       {
-        title: t(locale, 'accessRestrictedTitle'),
+        title: leaveBan && locale === 'ru' ? 'Доступ ограничен' : t(locale, 'accessRestrictedTitle'),
         retry_label: t(locale, 'accessRetryButton'),
+        policy_reason: policy.reason,
       },
     );
   }
 
-  const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
-
-  // Regional policy is a canonical Mini App authorization layer. Restricted
-  // users retain the ordinary Telegram-bot suggestion flow, but cannot use any
-  // authenticated Mini App capability or bypass the lock by calling APIs
-  // directly. Admin and Boosty exemptions are resolved inside the policy.
-  if (!admin) {
-    const regionalGate = await evaluateMiniAppRegionalAccess(telegramUser.id, locale, env, telegram);
-    if (regionalGate) {
-      return miniAppJsonError(
-        regionalGate.code,
-        regionalGate.message,
-        403,
-        regionalGate.details,
-      );
-    }
-  }
-
-  const access = await checkBotAccess(telegramUser.id, env, telegram, {
-    force: request.headers.get('x-access-recheck') === '1',
-    activationSource: 'miniapp',
-  });
-  if (!access.allowed) {
-    return miniAppJsonError(
-      accessErrorCode(access),
-      accessErrorMessage(locale, access),
-      access.reason === 'check_unavailable' ? 503 : 403,
-      accessErrorDetails(locale, access),
-    );
-  }
-
-  return {
-    telegramUser,
-    dbUser,
-    locale,
-    admin,
-  };
+  return { telegramUser, dbUser, locale, admin };
 }
 
 export function miniAppApiHeaders(): Record<string, string> {
