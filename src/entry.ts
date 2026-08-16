@@ -3,6 +3,7 @@ import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
+import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
 import { errorText, safeSecretEqual } from './db';
 import { handleDownloadGateUpdate } from './download-gate';
 import { handleUpdate } from './handlers';
@@ -19,9 +20,21 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method !== 'POST' || url.pathname !== '/webhook') {
+      const scannerResponse = await handleAssetScannerRequest(request, env);
+      if (scannerResponse) return scannerResponse;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
       if (readerSecurity) return readerSecurity;
-      return baseWorker.fetch(request, env, ctx);
+
+      const assetIntakeRequest = request.method === 'POST' && url.pathname === '/api/app/admin/publications'
+        ? request.clone()
+        : null;
+      const response = await baseWorker.fetch(request, env, ctx);
+      if (assetIntakeRequest) {
+        await capturePublicationAssetSecurity(assetIntakeRequest, response, env, ctx).catch((error) => {
+          console.warn(JSON.stringify({ event: 'asset_security_intake_failed', error: errorText(error) }));
+        });
+      }
+      return response;
     }
 
     const suppliedSecret = request.headers.get('x-telegram-bot-api-secret-token') ?? '';
