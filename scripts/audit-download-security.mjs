@@ -5,6 +5,7 @@ const entry = read('src/entry.ts');
 const antiAbuse = read('src/anti-abuse.ts');
 const gate = read('src/download-gate.ts');
 const delivery = read('src/publication-delivery.ts');
+const discussion = read('src/publishing-discussion.ts');
 const assetSecurity = read('src/asset-security.ts');
 const coverVariants = read('src/cover-variants.ts');
 const coverUi = read('public/app/cover-ui.js');
@@ -17,6 +18,9 @@ const m35 = read('migrations/0035_cover_variants.sql');
 
 function need(source, token, label = token) {
   if (!source.includes(token)) throw new Error(`Download/security audit: missing ${label}`);
+}
+function forbid(source, token, label = token) {
+  if (source.includes(token)) throw new Error(`Download/security audit: forbidden ${label}`);
 }
 function before(source, first, second, label) {
   const a = source.indexOf(first);
@@ -40,6 +44,7 @@ need(m33, "('anti_abuse_mode','monitor'", 'anti-abuse defaults monitor');
 need(m34, "('asset_scan_enforcement','0'", 'AV enforcement defaults off');
 need(m35, "('cover_variants_enabled','0'", 'cover variants default off');
 for (const migration of [m32,m33,m34,m35]) need(migration, 'updated_at', 'app_settings timestamp seed');
+need(discussion, "WHEN ?=0 AND download_gate_status='disabled' THEN 'legacy'", 'gate-off releases freeze into legacy mode');
 
 need(delivery, "text:'Thank you.'", 'exact Thank you button');
 need(delivery, "callback_data:`dl:${gate.token}`", 'tracked download callback');
@@ -54,6 +59,8 @@ need(assetSecurity, "crypto.subtle.digest('SHA-256'", 'asset SHA-256');
 need(assetSecurity, 'file_scan_cache', 'scan hash cache');
 need(assetSecurity, "'/internal/asset-scan/result'", 'scanner result endpoint');
 need(assetSecurity, 'x-dollar-sha256', 'scanner content integrity hint');
+need(assetSecurity, 'hashStoredAssets(publicationId, env)', 'post-upload R2 hashing');
+forbid(entry, 'request.clone()', 'large multipart request clone');
 
 need(coverVariants, 'max-age=31536000, immutable', 'immutable cover cache');
 for (const width of ['160','320','640']) need(coverUi, width, `cover UI ${width}px variant`);
@@ -68,4 +75,4 @@ for (const route of [
   "'/api/app/admin/security/config'",
 ]) need(adminApi, route, `admin route ${route}`);
 
-console.log('Download/security audit passed: dedupe, anti-abuse, tracked gate, per-user delivery, AV gate, immutable cover variants, and admin observability are wired.');
+console.log('Download/security audit passed: dedupe, anti-abuse, tracked gate, rollout isolation, per-user delivery, AV gate, upload memory safety, immutable cover variants, and admin observability are wired.');
