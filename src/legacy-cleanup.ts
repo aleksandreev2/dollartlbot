@@ -1,5 +1,5 @@
 import { errorText } from './db';
-import { checkPublicationDelivery } from './publication-delivery';
+import { buildPublicationGateMessage } from './download-gate';
 import { getRuntimeSetting, runtimeFlag } from './runtime-settings';
 import type { TelegramClient } from './telegram';
 
@@ -12,6 +12,7 @@ type LegacyPublication = {
   discussion_message_id: number | null;
   download_gate_status: string;
   telegram_deleted_at: string | null;
+  add_bot_comment: number;
 };
 type LegacyAsset = {
   id: number;
@@ -21,6 +22,7 @@ type LegacyAsset = {
 };
 
 export async function legacyCleanupSnapshot(env: Env): Promise<Record<string, unknown>> {
+  const cutoff = new Date(Date.now() - SAFE_BOT_DELETE_WINDOW_MS).toISOString();
   const [summary, rows] = await Promise.all([
     env.DB.prepare(`
       SELECT
@@ -33,10 +35,7 @@ export async function legacyCleanupSnapshot(env: Env): Promise<Record<string, un
       FROM publications p
       LEFT JOIN legacy_publication_cleanup lc ON lc.publication_id=p.id
       WHERE p.status='published' AND p.telegram_deleted_at IS NULL
-    `).bind(
-      new Date(Date.now() - SAFE_BOT_DELETE_WINDOW_MS).toISOString(),
-      new Date(Date.now() - SAFE_BOT_DELETE_WINDOW_MS).toISOString(),
-    ).first<Record<string, number | null>>(),
+    `).bind(cutoff, cutoff).first<Record<string, number | null>>(),
     env.DB.prepare(`
       SELECT p.id,p.internal_title,p.published_at,p.discussion_message_id,p.download_gate_status,p.download_gate_message_id,
              COUNT(a.id) AS asset_count,
@@ -79,7 +78,7 @@ export async function convertLegacyPublication(
     throw new Error('Private download gate must be enabled before legacy conversion.');
   }
   const publication = await env.DB.prepare(`
-    SELECT id,internal_title,published_at,discussion_message_id,download_gate_status,telegram_deleted_at
+    SELECT id,internal_title,published_at,discussion_message_id,download_gate_status,telegram_deleted_at,add_bot_comment
     FROM publications WHERE id=? AND status='published'
   `).bind(publicationId).first<LegacyPublication>();
   if (!publication || publication.telegram_deleted_at) throw new Error('Published legacy release not found.');
@@ -113,26 +112,10 @@ export async function convertLegacyPublication(
   `).bind(publicationId, knownPublicMessages.length, startedAt, startedAt).run();
 
   try {
-    await env.DB.prepare(`
-      UPDATE publications
-      SET download_gate_status='disabled',download_gate_message_id=NULL,download_gate_error=NULL,comments_check_status='pending',updated_at=?
-      WHERE id=? AND download_gate_status='legacy'
-    `).bind(startedAt, publicationId).run();
-
-    await checkPublicationDelivery(publicationId, env, telegram, true);
-    const gate = await env.DB.prepare(`
-      SELECT download_gate_status,download_gate_message_id,download_gate_error FROM publications WHERE id=?
-    `).bind(publicationId).first<Record<string, unknown>>();
-    if (String(gate?.download_gate_status || '') !== 'sent' || !Number(gate?.download_gate_message_id || 0)) {
-      const gateError = String(gate?.download_gate_error || 'Download gate was not confirmed.');
-      await env.DB.prepare(`
-        UPDATE publications SET download_gate_status='legacy',download_gate_message_id=NULL,updated_at=? WHERE id=?
-      `).bind(new Date().toISOString(), publicationId).run();
-      throw new Error(gateError);
-    }
-
     const discussionId = await linkedDiscussionId(env, telegram);
     if (!discussionId) throw new Error('Linked Telegram discussion group could not be resolved.');
+
+    const gateMessageId = await activateProtectedGate(publication, discussionId, env, telegram);
 
     const publishedAt = publication.published_at ? Date.parse(publication.published_at) : 0;
     const withinDeleteWindow = publishedAt > 0 && publishedAt >= Date.now() - SAFE_BOT_DELETE_WINDOW_MS;
@@ -162,7 +145,7 @@ export async function convertLegacyPublication(
     const status = manualReasons.length ? 'needs_manual_cleanup' : 'converted';
     const completedAt = new Date().toISOString();
     const details = {
-      protected_gate_message_id: Number(gate?.download_gate_message_id || 0),
+      protected_gate_message_id: gateMessageId,
       discussion_chat_id: discussionId,
       deleted_message_ids: deleted,
       remaining_messages: failed,
@@ -184,6 +167,13 @@ export async function convertLegacyPublication(
   } catch (error) {
     const message = errorText(error).slice(0, 1500);
     const now = new Date().toISOString();
+    const gate = await env.DB.prepare(`SELECT download_gate_status FROM publications WHERE id=?`)
+      .bind(publicationId).first<{ download_gate_status: string }>().catch(() => null);
+    if (gate?.download_gate_status !== 'sent') {
+      await env.DB.prepare(`
+        UPDATE publications SET download_gate_status='legacy',download_gate_message_id=NULL,updated_at=? WHERE id=?
+      `).bind(now, publicationId).run().catch(() => undefined);
+    }
     await env.DB.prepare(`
       UPDATE legacy_publication_cleanup
       SET status='failed',last_error=?,completed_at=?,updated_at=? WHERE publication_id=?
@@ -220,6 +210,44 @@ export async function convertSafeLegacyBatch(
     }
   }
   return { attempted: rows.results.length, results };
+}
+
+async function activateProtectedGate(
+  publication: LegacyPublication,
+  discussionId: number,
+  env: Env,
+  telegram: TelegramClient,
+): Promise<number> {
+  const gate = await buildPublicationGateMessage(env, publication.id);
+  if (!gate) throw new Error('Could not build protected download gate.');
+  const buttons: Array<{ text: string; callback_data: string }> = [
+    { text: 'Thank you.', callback_data: `dl:${gate.token}` },
+  ];
+  if (gate.donate) buttons.push({ text: '❤️ Donate', callback_data: `dn:${gate.token}` });
+  const sent = await telegram.sendMessage(discussionId, gate.text, {
+    reply_to_message_id: publication.discussion_message_id || undefined,
+    reply_markup: { inline_keyboard: [buttons] },
+  });
+  const now = new Date().toISOString();
+  const statements = [
+    env.DB.prepare(`
+      UPDATE publications
+      SET download_gate_status='sent',download_gate_message_id=?,download_gate_error=NULL,
+          comments_check_status='complete',comments_checked_at=?,updated_at=?
+      WHERE id=? AND download_gate_status='legacy'
+    `).bind(sent.message_id, now, now, publication.id),
+  ];
+  if (publication.add_bot_comment === 1) {
+    statements.push(env.DB.prepare(`
+      UPDATE publications SET bot_comment_status='sent',bot_comment_message_id=?,bot_comment_error=NULL WHERE id=?
+    `).bind(sent.message_id, publication.id));
+  }
+  await env.DB.batch(statements);
+  await env.DB.prepare(`
+    INSERT INTO publication_logs(publication_id,level,event,message,details,created_at)
+    VALUES (?,'success','legacy_download_gate_sent','Legacy release converted to protected download gate.',NULL,?)
+  `).bind(publication.id, now).run().catch(() => undefined);
+  return sent.message_id;
 }
 
 async function linkedDiscussionId(env: Env, telegram: TelegramClient): Promise<number | null> {
