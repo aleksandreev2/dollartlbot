@@ -7,6 +7,8 @@
   let manifestLoaded = false;
   let manifestLoading = null;
   const assigned = new Map();
+  const versions = new Map();
+  const VARIANT_WIDTHS = [160, 320, 640];
 
   const strings = {
     en:{cover:'Cover',replace:'Replace cover',remove:'Remove cover',auto:'Real cover or branded fallback',updated:'Cover updated',removed:'Cover removed',failed:'Could not update the cover'},
@@ -15,7 +17,7 @@
     hi:{cover:'कवर',replace:'कवर बदलें',remove:'कवर हटाएँ',auto:'वास्तविक कवर या ब्रांडेड फ़ॉलबैक',updated:'कवर अपडेट हो गया',removed:'कवर हटा दिया गया',failed:'कवर अपडेट नहीं हो सका'},
     pt:{cover:'Capa',replace:'Trocar capa',remove:'Remover capa',auto:'Capa real ou fallback da marca',updated:'Capa atualizada',removed:'Capa removida',failed:'Não foi possível atualizar a capa'},
     id:{cover:'Sampul',replace:'Ganti sampul',remove:'Hapus sampul',auto:'Sampul asli atau fallback bermerek',updated:'Sampul diperbarui',removed:'Sampul dihapus',failed:'Sampul tidak dapat diperbarui'},
-    vi:{cover:'Bìa',replace:'Thay bìa',remove:'Xóa bìa',auto:'Bìa thật hoặc bìa dự phòng có thương hiệu',updated:'Đã cập nhật bìa',removed:'Đã xóa bìa',failed:'Không thể cập nhật bìa'},
+    vi:{cover:'Bìa',replace:'Thay bìa',remove:'Xóa bìa',auto:'Bìa thật hoặc bìa dự phòng có thương hiệu',updated:'Bìa đã cập nhật',removed:'Đã xóa bìa',failed:'Không thể cập nhật bìa'},
     fr:{cover:'Couverture',replace:'Remplacer la couverture',remove:'Supprimer la couverture',auto:'Couverture réelle ou visuel de secours',updated:'Couverture mise à jour',removed:'Couverture supprimée',failed:'Impossible de mettre à jour la couverture'},
     de:{cover:'Cover',replace:'Cover ersetzen',remove:'Cover entfernen',auto:'Echtes Cover oder Marken-Fallback',updated:'Cover aktualisiert',removed:'Cover entfernt',failed:'Cover konnte nicht aktualisiert werden'},
     ru:{cover:'Обложка',replace:'Заменить обложку',remove:'Удалить обложку',auto:'Настоящая обложка или фирменный fallback',updated:'Обложка обновлена',removed:'Обложка удалена',failed:'Не удалось обновить обложку'},
@@ -25,7 +27,7 @@
     const value = runtime.locale();
     return strings[value] ? value : 'en';
   }
-  const tr = (key) => strings[locale()]?.[key] || strings.en[key] || key;
+  const tr = key => strings[locale()]?.[key] || strings.en[key] || key;
 
   function authHeaders(extra = {}) {
     return { 'x-telegram-init-data': tg?.initData || '', ...extra };
@@ -35,7 +37,12 @@
     return encodeURIComponent(String(assigned.get(Number(id)) || '1'));
   }
 
-  function coverUrl(id) {
+  function coverUrl(id, width = 320) {
+    id = Number(id);
+    const version = versions.get(id);
+    if (version && VARIANT_WIDTHS.includes(Number(width))) {
+      return `/media/covers/${id}/${encodeURIComponent(version)}/${Number(width)}.webp`;
+    }
     return `/media/covers/${id}?cover=${coverToken(id)}`;
   }
 
@@ -54,7 +61,12 @@
         if (!response.ok) throw new Error('cover manifest unavailable');
         const data = await response.json();
         assigned.clear();
-        for (const row of data.covers || []) assigned.set(Number(row.id), String(row.cover_updated_at || '1'));
+        versions.clear();
+        for (const row of data.covers || []) {
+          const id = Number(row.id);
+          assigned.set(id, String(row.cover_updated_at || '1'));
+          if (row.cover_version) versions.set(id, String(row.cover_version));
+        }
         manifestLoaded = true;
       })
       .catch(() => {
@@ -73,8 +85,9 @@
     cover.querySelectorAll('.real-cover-image').forEach(img => img.remove());
   }
 
-  function installRealCover(cover, id) {
+  function installRealCover(cover, id, preferredWidth = 320) {
     id = Number(id);
+    preferredWidth = Number(preferredWidth) || 320;
     if (!cover || !id || !manifestLoaded) return;
     if (!assigned.has(id)) {
       clearRealCover(cover);
@@ -83,7 +96,7 @@
       return;
     }
 
-    const stamp = String(assigned.get(id) || '1');
+    const stamp = `${String(versions.get(id) || assigned.get(id) || '1')}:${preferredWidth}`;
     const failures = Number(cover.dataset.coverFailures || 0);
     if (cover.dataset.realCoverChecked === stamp && cover.querySelector('.real-cover-image')) return;
     if (cover.dataset.realCoverChecked === stamp && failures >= 3) return;
@@ -95,7 +108,11 @@
     img.alt = '';
     img.decoding = 'async';
     img.loading = 'lazy';
-    img.src = coverUrl(id);
+    img.src = coverUrl(id, preferredWidth);
+    if (versions.has(id)) {
+      img.srcset = VARIANT_WIDTHS.map(width => `${coverUrl(id, width)} ${width}w`).join(', ');
+      img.sizes = preferredWidth >= 640 ? '(max-width: 720px) 68vw, 480px' : '(max-width: 720px) 34vw, 190px';
+    }
     img.addEventListener('load', () => {
       cover.dataset.coverFailures = '0';
       cover.classList.add('has-real-cover');
@@ -109,7 +126,7 @@
         setTimeout(() => {
           if (!cover.isConnected || !assigned.has(id) || cover.classList.contains('has-real-cover')) return;
           delete cover.dataset.realCoverChecked;
-          installRealCover(cover, id);
+          installRealCover(cover, id, preferredWidth);
         }, 500 * nextFailures);
       }
     }, { once:true });
@@ -117,13 +134,13 @@
   }
 
   function patchCovers(root = document) {
-    root.querySelectorAll('[data-novel] .novel-cover').forEach((cover) => {
+    root.querySelectorAll('[data-novel] .novel-cover').forEach(cover => {
       const owner = cover.closest('[data-novel]');
-      installRealCover(cover, Number(owner?.dataset.novel));
+      installRealCover(cover, Number(owner?.dataset.novel), 320);
     });
     const detail = root.querySelector('.detail-hero .novel-cover');
     const detailId = Number(window.DTL_APP?.state?.detailNovel?.id || lastNovelId);
-    if (detail && detailId) installRealCover(detail, detailId);
+    if (detail && detailId) installRealCover(detail, detailId, 640);
   }
 
   function adminId(card) {
@@ -164,7 +181,7 @@
       existing?.remove();
       return;
     }
-    const src = coverUrl(id);
+    const src = coverUrl(id, 320);
     if (existing?.getAttribute('src') === src) return;
     existing?.remove();
     const img = document.createElement('img');
@@ -172,6 +189,10 @@
     img.loading = 'lazy';
     img.decoding = 'async';
     img.src = src;
+    if (versions.has(id)) {
+      img.srcset = `${coverUrl(id,160)} 160w, ${coverUrl(id,320)} 320w, ${coverUrl(id,640)} 640w`;
+      img.sizes = '180px';
+    }
     img.addEventListener('error', () => img.remove(), { once:true });
     preview.appendChild(img);
   }
@@ -227,14 +248,16 @@
     input.addEventListener('change', async () => {
       const file = input.files?.[0];
       if (!file) { input.remove(); return; }
-      const form = new FormData();
-      form.set('cover', file, file.name);
       try {
+        const form = await buildCoverForm(file);
         const response = await fetch(`/api/app/admin/cover/${id}`, {
           method: 'POST', headers: authHeaders(), body: form,
         });
         if (!response.ok) throw new Error('upload failed');
+        const data = await response.json().catch(() => ({}));
         assigned.set(id, String(Date.now()));
+        if (data.cover_version) versions.set(id, String(data.cover_version));
+        else versions.delete(id);
         manifestLoaded = true;
         syncAdminPreview(tools, id);
         refreshVisibleCovers(id);
@@ -248,6 +271,41 @@
     input.click();
   }
 
+  async function buildCoverForm(file) {
+    const form = new FormData();
+    form.set('cover', file, file.name);
+    if (typeof createImageBitmap !== 'function') return form;
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(file);
+      const variants = await Promise.all(VARIANT_WIDTHS.map(async width => [width, await makeWebpVariant(bitmap, width)]));
+      for (const [width, blob] of variants) {
+        if (!blob || blob.type !== 'image/webp') continue;
+        form.set(`cover_${width}`, new File([blob], `cover-${width}.webp`, { type:'image/webp' }));
+      }
+    } catch {
+      // Original cover still uploads through the legacy-safe path.
+    } finally {
+      bitmap?.close?.();
+    }
+    return form;
+  }
+
+  function makeWebpVariant(bitmap, targetWidth) {
+    return new Promise(resolve => {
+      const width = Math.max(1, Math.min(Number(targetWidth), Number(bitmap.width || targetWidth)));
+      const ratio = Number(bitmap.height || 1) / Math.max(1, Number(bitmap.width || 1));
+      const height = Math.max(1, Math.round(width * ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d', { alpha:false });
+      if (!context) { resolve(null); return; }
+      context.drawImage(bitmap, 0, 0, width, height);
+      canvas.toBlob(blob => resolve(blob), 'image/webp', targetWidth <= 160 ? 0.78 : 0.82);
+    });
+  }
+
   async function removeCover(id, tools) {
     try {
       const response = await fetch(`/api/app/admin/cover/${id}`, {
@@ -255,9 +313,10 @@
       });
       if (!response.ok) throw new Error('delete failed');
       assigned.delete(id);
+      versions.delete(id);
       manifestLoaded = true;
       syncAdminPreview(tools, id);
-      document.querySelectorAll(`[data-novel="${id}"] .novel-cover`).forEach((cover) => {
+      document.querySelectorAll(`[data-novel="${id}"] .novel-cover`).forEach(cover => {
         clearRealCover(cover);
         cover.dataset.realCoverChecked = 'none';
         delete cover.dataset.coverFailures;
@@ -274,11 +333,11 @@
   }
 
   function refreshVisibleCovers(id) {
-    document.querySelectorAll(`[data-novel="${id}"] .novel-cover`).forEach((cover) => {
+    document.querySelectorAll(`[data-novel="${id}"] .novel-cover`).forEach(cover => {
       clearRealCover(cover);
       delete cover.dataset.realCoverChecked;
       delete cover.dataset.coverFailures;
-      installRealCover(cover, id);
+      installRealCover(cover, id, 320);
     });
     const detailId = Number(window.DTL_APP?.state?.detailNovel?.id || lastNovelId);
     if (detailId === id) {
@@ -287,7 +346,7 @@
         clearRealCover(detail);
         delete detail.dataset.realCoverChecked;
         delete detail.dataset.coverFailures;
-        installRealCover(detail, id);
+        installRealCover(detail, id, 640);
       }
     }
   }
@@ -310,7 +369,7 @@
     if (window.lucide?.createIcons) window.lucide.createIcons({ attrs:{'stroke-width':1.8,'aria-hidden':'true'} });
   }
 
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', event => {
     const novel = event.target.closest?.('[data-novel]');
     if (novel?.dataset.novel) lastNovelId = Number(novel.dataset.novel);
   }, true);
