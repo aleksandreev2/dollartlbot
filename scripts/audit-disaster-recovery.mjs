@@ -33,6 +33,7 @@ for (const token of [
   "const BACKUP_PREFIX = 'backups/'",
   "const FORMAT = 'dollartl-portable-backup'",
   "consistency: 'application-logical-nontransactional'",
+  "new Set(['d1_migrations'",
   'sqlite_schema',
   'dr_backup_chunks',
   'env.COVERS.put(',
@@ -43,7 +44,10 @@ for (const token of [
   'SHA-256 mismatch',
   'for (const line of lines) JSON.parse(line)',
   'runDisasterRecoveryMaintenance',
+  "const created = await createPortableBackup(env, null, 'scheduled')",
+  'await verifyPortableBackup(env, backupId, null)',
   'pruneBackupRetention',
+  'for (;;) {',
   'Cloudflare D1 Time Travel',
 ]) need(backup, token, 'portable backup/verify pipeline');
 forbid(backup, 'TELEGRAM_BOT_TOKEN', 'backup storage must not serialize Telegram secrets');
@@ -74,6 +78,8 @@ for (const token of [
   'production_incidents',
   "key: 'backup_overdue'",
   "key: 'backup_failed'",
+  "key: 'backup_verification_failed'",
+  "const backupRunning = String(latestBackup?.status || '') === 'running'",
 ]) need(alerts, token, 'incident history and recovery backup alerts');
 
 need(entry, 'handleAdminDisasterRecoveryRequest', 'recovery admin route wired');
@@ -85,4 +91,4 @@ need(ui, 'needs_manual_cleanup', 'manual legacy cleanup surfaced');
 need(html, '/app/admin-disaster-recovery.js?v=20260816-dr1', 'Recovery UI asset loaded');
 
 new Function(ui);
-console.log('Disaster Recovery + Legacy Cleanup audit passed: chunked D1 backup, R2 inventory, SHA-256 verification, retention, incident history, gate-first legacy conversion and manual-delete fallback are wired.');
+console.log('Disaster Recovery + Legacy Cleanup audit passed: chunked D1 backup, automatic verification, R2 inventory, SHA-256 integrity, retention, incident history, gate-first legacy conversion and manual-delete fallback are wired.');
