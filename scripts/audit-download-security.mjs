@@ -80,6 +80,7 @@ need(regionalAdmin, 'regional_restricted_countries', 'editable restricted countr
 need(regionalAdminUi, '/api/app/admin/security/regional', 'regional admin UI API');
 need(regionalAdminUi, 'regionalCountries', 'regional country editor');
 need(appIndex, '/app/admin-regional-access.js', 'regional admin UI loaded');
+new Function(regionalAdminUi);
 
 need(delivery, "text:'Thank you.'", 'exact Thank you button');
 need(delivery, "callback_data:`dl:${gate.token}`", 'tracked download callback');
