@@ -7,6 +7,8 @@ type ScannerEnv = {
   SCANNER_ID: string;
 };
 
+type QueueStatus = { runnable?: unknown };
+
 export class ClamAVContainer extends Container {
   defaultPort = 8080;
   sleepAfter = '30s';
@@ -17,6 +19,18 @@ async function runScanner(env: ScannerEnv): Promise<void> {
   if (!token) throw new Error('ASSET_SCANNER_TOKEN is not configured for scanner worker');
 
   const mainOrigin = new URL(env.MAIN_WORKER_ORIGIN).origin;
+  const queue = await fetch(`${mainOrigin}/internal/asset-scan/status`, {
+    method: 'GET',
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (!queue.ok) {
+    const body = (await queue.text().catch(() => '')).slice(0, 1000);
+    throw new Error(`Scanner queue status failed: HTTP ${queue.status} ${body}`);
+  }
+  const queueData = await queue.json<QueueStatus>().catch(() => ({}));
+  if (Number(queueData.runnable || 0) <= 0) return;
+
   const scannerId = String(env.SCANNER_ID || 'clamav-primary').trim() || 'clamav-primary';
   const container = getContainer(env.CLAMAV, 'primary');
   const response = await container.fetch(new Request('http://container/run', {
