@@ -99,7 +99,7 @@
           <div><label class="admin-field"><span>Boosty exemption</span><input id="channelAutoBanBoostyExempt" type="checkbox" ${cfg.boosty_exempt ? 'checked' : ''}></label></div>
         </div>
         <button class="admin-save-settings" id="saveChannelAutoBan">Сохранить auto-ban policy</button>
-        ${entries.length ? `<div class="admin-panel-head"><div><h3>Последние выходы</h3><p>Разбанивание здесь снимает Telegram blacklist; повторный добровольный выход снова активирует policy.</p></div></div>${entries.map(channelAutoBanRow).join('')}` : '<div class="admin-empty">Событий выхода пока нет.</div>'}`;
+        ${entries.length ? `<div class="admin-panel-head"><div><h3>Последние выходы</h3><p>Здесь видно, успел ли пользователь получить файлы до выхода. Разбанивание снимает Telegram blacklist; повторный добровольный выход снова активирует policy.</p></div></div>${entries.map(channelAutoBanRow).join('')}` : '<div class="admin-empty">Событий выхода пока нет.</div>'}`;
       document.getElementById('saveChannelAutoBan')?.addEventListener('click', saveChannelAutoBan);
       panel.querySelectorAll('[data-channel-unban]').forEach(button => button.addEventListener('click', () => channelAutoBanAction('unban', Number(button.dataset.channelUnban))));
       panel.querySelectorAll('[data-channel-retry]').forEach(button => button.addEventListener('click', () => channelAutoBanAction('retry', Number(button.dataset.channelRetry))));
@@ -113,11 +113,13 @@
     const status = String(entry.status || 'unknown');
     const tone = status === 'banned' ? 'bad' : status === 'failed' ? 'bad' : status === 'exempt' || status === 'unbanned' ? 'good' : 'pending';
     const name = entry.username ? `@${esc(entry.username)}` : esc(entry.first_name || `ID ${entry.user_id}`);
+    const downloads = Number(entry.delivered_files_before_leave || 0);
+    const downloadInfo = downloads > 0 ? ` · файлов до выхода ${downloads} · последняя выдача ${fmt(entry.last_download_at)}` : ' · файлов до выхода 0';
     const detail = status === 'exempt'
-      ? `exempt: ${esc(entry.exemption_reason || 'policy')}`
+      ? `exempt: ${esc(entry.exemption_reason || 'policy')}${downloadInfo}`
       : entry.last_error
-        ? esc(entry.last_error)
-        : `attempts ${Number(entry.attempts || 0)}`;
+        ? `${esc(entry.last_error)}${downloadInfo}`
+        : `attempts ${Number(entry.attempts || 0)}${downloadInfo}`;
     const actions = status === 'banned'
       ? `<button data-channel-unban="${Number(entry.user_id)}">Разбанить</button>`
       : ['failed','retry','pending'].includes(status)
