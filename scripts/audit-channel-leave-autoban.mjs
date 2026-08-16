@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const policy = read('src/channel-leave-autoban.ts');
 const admin = read('src/admin-channel-autoban.ts');
+const adminUi = read('public/app/admin-regional-access.js');
 const entry = read('src/entry.ts');
 const migration = read('migrations/0038_channel_leave_autoban.sql');
 const configureBot = read('scripts/configure-bot.mjs');
@@ -24,11 +25,13 @@ need(migration, 'next_attempt_at', 'durable retry schedule');
 need(policy, "update.new_chat_member.status !== 'left'", 'left-only trigger');
 need(policy, 'isActiveChatMember(update.old_chat_member)', 'must have been an active member');
 need(policy, 'update.from.id !== user.id', 'self-leave actor verification');
-need(policy, 'user.is_bot || isAdmin(user.id, env)', 'bot/admin exemption');
+need(policy, "['creator', 'administrator'].includes(update.old_chat_member.status)", 'Telegram administrator exemption');
+need(policy, 'user.is_bot || isAdmin(user.id, env)', 'bot/Dollar TL admin exemption');
 need(policy, "runtimeFlag(env, 'channel_leave_autoban_boosty_exempt'", 'Boosty exemption flag');
 need(policy, 'subscription.verificationError', 'fail-safe entitlement retry');
 need(policy, "telegram.call<boolean>('banChatMember'", 'Telegram channel blacklist call');
 need(policy, "telegram.call<boolean>('unbanChatMember'", 'manual Telegram unban call');
+need(policy, 'only_if_banned: true', 'safe unban semantics');
 need(policy, 'runChannelLeaveAutoBanMaintenance', 'durable retry maintenance');
 need(policy, "status='banned'", 'successful ban persistence');
 need(policy, "status=?,attempts=?,next_attempt_at=?", 'retry persistence');
@@ -48,7 +51,14 @@ need(admin, "body.action === 'unban'", 'manual unban action');
 need(admin, "body.action === 'retry'", 'manual retry action');
 need(admin, "body.action === 'config'", 'runtime policy configuration');
 need(admin, 'bot_can_restrict_members', 'Telegram permission diagnostics');
+need(admin, 'delivered_files_before_leave', 'download-before-leave correlation');
+need(admin, 'last_download_at', 'last delivery timestamp correlation');
+
+need(adminUi, 'Channel leave auto-ban', 'visible security panel');
+need(adminUi, 'data-channel-unban', 'visible manual unban control');
+need(adminUi, 'data-channel-retry', 'visible manual retry control');
+need(adminUi, 'channelAutoBanBoostyExempt', 'visible Boosty exemption control');
 
 need(configureBot, "'chat_member'", 'chat_member webhook delivery');
 
-console.log('Channel leave autoban audit passed: only verified self-leaves are blacklisted, admins/Boosty are protected, retries are durable, and manual recovery is available.');
+console.log('Channel leave autoban audit passed: only verified self-leaves are blacklisted, admins/Boosty are protected, retries are durable, download history is correlated, and manual recovery is available.');
