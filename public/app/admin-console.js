@@ -11,6 +11,7 @@
     requests: ['inbox', 'Заявки'],
     queue: ['list-ordered', 'Очередь'],
     publishing: ['send', 'Публикация'],
+    security: ['shield-check', 'Безопасность'],
     settings: ['settings-2', 'Настройки'],
   };
 
@@ -75,6 +76,7 @@
   async function renderSection(section) {
     state.section = section;
     if (section === 'overview') return renderOverview();
+    if (section === 'security') return renderSecurity();
     if (section === 'settings') return renderSettings();
     return false;
   }
@@ -103,6 +105,122 @@
     }
   }
 
+  async function renderSecurity() {
+    syncSection('security');
+    shell(`<div class="admin-loading">${icon('loader-circle')} Загружаем security telemetry…</div>`, 'Антиспам, download gate и проверка файлов');
+    try {
+      const [abuse, assets, configData] = await Promise.all([
+        api('/api/app/admin/security/anti-abuse?days=7'),
+        api('/api/app/admin/security/assets'),
+        api('/api/app/admin/security/config'),
+      ]);
+      if (!isActive('security')) return false;
+      const summary = abuse.summary || {};
+      const risky = (abuse.users || []).slice(0, 12);
+      const recent = (abuse.recent || []).slice(0, 12);
+      const assetSummary = assets.summary || [];
+      const unsafeAssets = (assets.assets || []).filter(asset => asset.scan_status !== 'clean').slice(0, 12);
+      const cfg = configData.config || {};
+      shell(`<section class="admin-panel"><div class="admin-panel-head"><div><h2>Режимы защиты</h2><p>Переключатели применяются сервером и кэшируются примерно на минуту</p></div>${securityBadge(cfg.anti_abuse_mode)}</div>
+        <div class="settings-admin-grid">
+          <div>
+            <label class="admin-field"><span>Anti-spam</span><select id="securityAntiAbuseMode"><option value="off" ${selected(cfg.anti_abuse_mode,'off')}>Off</option><option value="monitor" ${selected(cfg.anti_abuse_mode,'monitor')}>Monitor only</option><option value="enforce" ${selected(cfg.anti_abuse_mode,'enforce')}>Enforce</option></select><small>Monitor собирает статистику, но не блокирует пользователей.</small></label>
+            <label class="admin-field"><span>Same action cooldown, ms</span><input id="securityCooldown" type="number" min="100" max="30000" value="${Number(cfg.anti_abuse_same_action_cooldown_ms || 1500)}"></label>
+            <label class="admin-field"><span>Commands / 10 sec</span><input id="securityCommands10" type="number" min="2" max="200" value="${Number(cfg.anti_abuse_commands_limit_10s || 5)}"></label>
+            <label class="admin-field"><span>Callbacks / 10 sec</span><input id="securityCallbacks10" type="number" min="2" max="300" value="${Number(cfg.anti_abuse_callbacks_limit_10s || 8)}"></label>
+          </div>
+          <div class="publisher-options">
+            ${securityToggle('securityDownloadGate', 'Download gate', 'Thank you. → private file delivery', cfg.download_gate_enabled)}
+            ${securityToggle('securityDonateTracking', 'Donate tracking', 'Фиксировать конкретного Telegram-пользователя', cfg.donate_tracking_enabled)}
+            ${securityToggle('securityAssetEnforcement', 'AV enforcement', 'НЕ включать, пока scanner не выдаёт CLEAN verdict', cfg.asset_scan_enforcement, true)}
+            ${securityToggle('securityCoverVariants', 'Cover variants', 'Включать после генератора thumbnail-версий', cfg.cover_variants_enabled)}
+          </div>
+        </div>
+        <button class="admin-save-settings" id="saveSecuritySettings">${icon('save')} Сохранить режимы защиты</button>
+      </section>
+      <div class="admin-stat-grid">
+        ${stat('activity', summary.events || 0, 'Security events · 7д', 'blue')}
+        ${stat('users', summary.users || 0, 'Пользователей', 'green')}
+        ${stat('shield-alert', summary.limited || 0, 'Ограничено', 'orange')}
+        ${stat('ban', summary.temporary_blocks || 0, 'Temp blocks', 'gold')}
+      </div>
+      <div class="admin-dashboard-grid">
+        <section class="admin-panel"><div class="admin-panel-head"><div><h2>Подозрительные пользователи</h2><p>Abuse score, rate limit и ручные блокировки</p></div></div>
+          ${risky.length ? risky.map(securityUserRow).join('') : '<div class="admin-empty">Подозрительной активности пока нет.</div>'}
+        </section>
+        <section class="admin-panel"><div class="admin-panel-head"><div><h2>Проверка файлов</h2><p>Статусы publication assets</p></div></div>
+          ${assetSummary.length ? assetSummary.map(scanSummaryRow).join('') : '<div class="admin-empty">Файлы ещё не зарегистрированы.</div>'}
+          ${unsafeAssets.length ? `<div class="admin-panel-head"><div><h2>Требуют внимания</h2><p>Не имеют verdict CLEAN</p></div></div>${unsafeAssets.map(assetSecurityRow).join('')}` : ''}
+        </section>
+      </div>
+      <section class="admin-panel"><div class="admin-panel-head"><div><h2>Последние ограничения</h2><p>Конкретный Telegram ID, действие и причина</p></div></div>
+        ${recent.length ? recent.map(securityEventRow).join('') : '<div class="admin-empty">Ограничений нет.</div>'}
+      </section>`, 'Security telemetry за последние 7 дней');
+      document.getElementById('saveSecuritySettings')?.addEventListener('click', () => void saveSecuritySettings());
+      refreshIcons();
+      return true;
+    } catch (error) {
+      if (!stale('security', error)) shell(errorBox(error.message), 'Не удалось загрузить security telemetry');
+      return false;
+    }
+  }
+
+  async function saveSecuritySettings() {
+    try {
+      const body = {
+        anti_abuse_mode: document.getElementById('securityAntiAbuseMode')?.value || 'monitor',
+        anti_abuse_same_action_cooldown_ms: Number(document.getElementById('securityCooldown')?.value || 1500),
+        anti_abuse_commands_limit_10s: Number(document.getElementById('securityCommands10')?.value || 5),
+        anti_abuse_callbacks_limit_10s: Number(document.getElementById('securityCallbacks10')?.value || 8),
+        download_gate_enabled: Boolean(document.getElementById('securityDownloadGate')?.checked),
+        donate_tracking_enabled: Boolean(document.getElementById('securityDonateTracking')?.checked),
+        asset_scan_enforcement: Boolean(document.getElementById('securityAssetEnforcement')?.checked),
+        cover_variants_enabled: Boolean(document.getElementById('securityCoverVariants')?.checked),
+      };
+      await api('/api/app/admin/security/config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      toast('Режимы защиты сохранены.');
+      if (isActive('security')) await renderSecurity();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  function securityToggle(id, title, description, checked, danger = false) {
+    return `<label><input id="${id}" type="checkbox" ${checked ? 'checked' : ''}><span><b>${esc(title)}</b><small>${danger ? '⚠ ' : ''}${esc(description)}</small></span></label>`;
+  }
+
+  function selected(value, expected) { return String(value || '') === expected ? 'selected' : ''; }
+
+  function securityUserRow(user) {
+    const name = user.username ? `@${esc(user.username)}` : esc(user.first_name || 'без username');
+    const blocked = user.blocked_at ? '<span class="admin-badge bad">ADMIN BLOCK</span>' : securityBadge(user.last_decision || 'monitor');
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('user-round-search')}</div><div class="admin-compact-copy"><strong>${name} · ${esc(user.user_id)}</strong><span>score ${Number(user.abuse_score || 0)} · limited ${Number(user.total_limited || 0)} · ${esc(user.last_reason || '—')}</span></div>${blocked}</div>`;
+  }
+
+  function securityEventRow(event) {
+    const name = event.username ? `@${esc(event.username)}` : esc(event.first_name || event.user_id);
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('shield-alert')}</div><div class="admin-compact-copy"><strong>${name} · ${esc(event.user_id)}</strong><span>${esc(event.action)} · ${esc(event.reason || event.decision)} · ${date(event.created_at)}</span></div>${securityBadge(event.decision)}</div>`;
+  }
+
+  function scanSummaryRow(row) {
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon(row.scan_status === 'clean' ? 'shield-check' : 'file-warning')}</div><div class="admin-compact-copy"><strong>${esc(row.scan_status || 'unknown')}</strong><span>${Number(row.count || 0)} файл(ов) · ${formatBytes(row.bytes || 0)}</span></div>${securityBadge(row.scan_status)}</div>`;
+  }
+
+  function assetSecurityRow(asset) {
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('file-warning')}</div><div class="admin-compact-copy"><strong>${esc(asset.file_name)}</strong><span>#${esc(asset.publication_id)} · ${esc(asset.publication_title)}${asset.scan_threat_name ? ` · ${esc(asset.scan_threat_name)}` : ''}</span></div>${securityBadge(asset.scan_status)}</div>`;
+  }
+
+  function securityBadge(value) {
+    const text = String(value || '—');
+    const good = ['clean', 'allow', 'enforce'].includes(text);
+    const bad = ['infected', 'limited', 'temporary_block', 'failed'].includes(text);
+    return `<span class="admin-badge ${good ? 'done' : bad ? 'bad' : 'pending'}">${esc(text)}</span>`;
+  }
+
   function stat(ic, number, label, tone) { return `<div class="admin-stat ${tone}"><div class="admin-stat-icon">${icon(ic)}</div><div><strong>${number}</strong><span>${label}</span></div></div>`; }
   function requestCompact(request) { return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('book-open')}</div><div class="admin-compact-copy"><strong>${esc(request.title)}</strong><span>${esc(request.original_language)} · ${request.chapter_count} глав${request.username ? ` · @${esc(request.username)}` : ''}</span></div><span class="admin-badge pending">На проверке</span></div>`; }
   function publicationCompact(publication) { return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon(publication.image_key ? 'image' : 'file-text')}</div><div class="admin-compact-copy"><strong>${esc(publication.internal_title)}</strong><span>${date(publication.created_at)} · ${Number(publication.file_count || 0)} файл(ов)</span></div>${pubBadge(publication.status)}</div>`; }
@@ -128,12 +246,12 @@
       shell(`<div class="settings-admin-grid">
         <section class="admin-panel"><div class="admin-panel-head"><div><h2>Telegram</h2><p>Куда публиковать посты и комментарии</p></div></div>
           <label class="admin-field"><span>Канал публикации</span><input id="setChannel" value="${esc(settings.publish_channel_id || '')}" placeholder="@channel или -100…"><small>Бот должен быть администратором канала.</small></label>
-          <label class="admin-field"><span>Discussion group</span><input id="setDiscussion" value="${esc(settings.discussion_chat_id || '')}" placeholder="-100…"><small>Связанная группа комментариев. Файлы будут отправлены ответом под постом.</small></label>
+          <label class="admin-field"><span>Discussion group</span><input id="setDiscussion" value="${esc(settings.discussion_chat_id || '')}" placeholder="-100…"><small>Связанная группа комментариев. Download gate будет ответом под постом.</small></label>
           <label class="admin-field"><span>Username бота</span><input id="setBot" value="${esc(settings.bot_username || 'dollartlbot')}" placeholder="dollartlbot"></label>
         </section>
         <section class="admin-panel"><div class="admin-panel-head"><div><h2>Шаблон публикации</h2><p>Постоянные ссылки</p></div></div>
           <label class="admin-field"><span>Donate URL</span><input id="setDonate" value="${esc(settings.donation_url || '')}" placeholder="https://boosty.to/…"></label>
-          <div class="settings-preview"><b>Need a translation?</b><p>Open Dollar TL Bot and suggest a novel for translation.</p><div><span>Suggest a Novel</span><span>Donate</span></div></div>
+          <div class="settings-preview"><b>Release gate</b><p>Thank you. → private delivery through Dollar TL Bot.</p><div><span>Thank you.</span><span>Donate</span></div></div>
         </section>
       </div>
       <button class="admin-save-settings" id="saveAdminSettings">${icon('save')} Сохранить настройки</button>`, 'Настройки используются для всех будущих публикаций');
@@ -166,8 +284,15 @@
     try { return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }
     catch { return String(value); }
   }
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
-  for (const section of ['overview', 'settings']) {
+  for (const section of ['overview', 'security', 'settings']) {
     adminRuntime.registerRoute(routeId(section), { mount: () => renderSection(section), refresh: () => renderSection(section) });
   }
 

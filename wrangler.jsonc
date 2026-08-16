@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "dollartlbot",
-  "main": "src/index.ts",
+  "main": "src/entry.ts",
   "compatibility_date": "2026-08-09",
   "compatibility_flags": ["nodejs_compat"],
   "build": {
@@ -44,5 +44,19 @@
       "binding": "COVERS",
       "bucket_name": "dollartl-covers"
     }
-  ]
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USER_GUARD",
+        "class_name": "UserGuard"
+      }
+    ]
+  },
+  "exports": {
+    "UserGuard": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
 }

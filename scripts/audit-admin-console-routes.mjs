@@ -17,11 +17,12 @@ for (const token of [
   'adminRuntime?.registerRoute',
   'adminRuntime.api(path, options)',
   "const routeId = section => `section:${section}`",
-  "for (const section of ['overview', 'settings'])",
+  "for (const section of ['overview', 'security', 'settings'])",
   'adminRuntime.registerRoute(routeId(section)',
   'mount: () => renderSection(section)',
   'refresh: () => renderSection(section)',
   'renderOverview',
+  'renderSecurity',
   'renderSettings',
   'saveAdminSettings',
   'window.DTL_ADMIN_CONSOLE',
@@ -46,7 +47,7 @@ need(healthJs, "registerRoute('health:1'", 'health route');
 for (const route of ['publications', 'users', 'analytics']) need(toolsJs, route, `tools:${route}`);
 
 const expectedOwners = new Map([
-  ['section:overview', consoleJs], ['section:settings', consoleJs], ['section:publishing', publishingView], ['section:broadcasts', broadcastsJs],
+  ['section:overview', consoleJs], ['section:security', consoleJs], ['section:settings', consoleJs], ['section:publishing', publishingView], ['section:broadcasts', broadcastsJs],
   ['section:requests', workflowJs], ['section:queue', workflowJs], ['tools:publications', toolsJs], ['tools:users', toolsJs], ['tools:analytics', toolsJs], ['health:1', healthJs],
 ]);
 for (const [route, source] of expectedOwners) {
@@ -62,4 +63,4 @@ if (index.indexOf(publishingTag) < index.indexOf(consoleTag)) throw new Error('D
 
 new Function(consoleJs);
 new Function(publishingView);
-console.log('Admin route audit passed: shell owns only Overview/Settings, semantic render events remain, and Publishing/Broadcasts have dedicated canonical owners.');
+console.log('Admin route audit passed: shell owns Overview/Security/Settings, semantic render events remain, and Publishing/Broadcasts have dedicated canonical owners.');
