@@ -94,7 +94,15 @@ export default {
           handleReferralChatMemberUpdate(update.chat_member, env),
           handleAccessChatMemberUpdate(update.chat_member, env),
         ]);
-        await handleChannelLeaveAutoBan(update.chat_member, env, telegram);
+        ctx.waitUntil(
+          handleChannelLeaveAutoBan(update.chat_member, env, telegram).catch((error) => {
+            console.error(JSON.stringify({
+              event: 'channel_leave_autoban_event_failed',
+              user_id: update.chat_member?.new_chat_member.user.id,
+              error: errorText(error),
+            }));
+          }),
+        );
       } else {
         const abuse = await guardTelegramUpdate(update, env, ctx);
         if (!abuse.allowed) {
@@ -145,12 +153,14 @@ export default {
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
-    await runChannelLeaveAutoBanMaintenance(env, telegram, 20).catch((error) => {
-      console.error(JSON.stringify({
-        event: 'channel_leave_autoban_maintenance_failed',
-        error: errorText(error),
-      }));
-    });
-    return baseWorker.scheduled(controller, env);
+    await Promise.all([
+      baseWorker.scheduled(controller, env),
+      runChannelLeaveAutoBanMaintenance(env, telegram, 20).catch((error) => {
+        console.error(JSON.stringify({
+          event: 'channel_leave_autoban_maintenance_failed',
+          error: errorText(error),
+        }));
+      }),
+    ]);
   },
 } satisfies ExportedHandler<Env>;
