@@ -9,6 +9,7 @@ import { handleAdminRegionalAccessRequest } from './admin-regional-access';
 import { handleAssetScannerStatusRequest } from './asset-scanner-status';
 import { guardAssetScanEnforcementConfig } from './asset-security-config-guard';
 import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
+import { handleBotSubmitDeepLink } from './bot-submit-deeplink';
 import { handleChannelLeaveAutoBan, runChannelLeaveAutoBanMaintenance } from './channel-leave-autoban';
 import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
@@ -120,6 +121,8 @@ export default {
           // Quarantine is absolute; optional enforcement requires final CLEAN verdicts for unfinished files.
         } else if (await handleDownloadGateUpdate(update, env, telegram, ctx)) {
           // Tracked Thank you / Donate / private download deep-link handled here.
+        } else if (await handleBotSubmitDeepLink(update, env, telegram)) {
+          // Region-restricted users may still suggest titles through the ordinary Telegram bot.
         } else {
           await handleUpdate(update, env, telegram, ctx);
         }
