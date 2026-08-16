@@ -94,15 +94,7 @@ export default {
           handleReferralChatMemberUpdate(update.chat_member, env),
           handleAccessChatMemberUpdate(update.chat_member, env),
         ]);
-        ctx.waitUntil(
-          handleChannelLeaveAutoBan(update.chat_member, env, telegram).catch((error) => {
-            console.error(JSON.stringify({
-              event: 'channel_leave_autoban_event_failed',
-              user_id: update.chat_member?.new_chat_member.user.id,
-              error: errorText(error),
-            }));
-          }),
-        );
+        await handleChannelLeaveAutoBan(update.chat_member, env, telegram, ctx);
       } else {
         const abuse = await guardTelegramUpdate(update, env, ctx);
         if (!abuse.allowed) {
