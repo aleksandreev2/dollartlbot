@@ -8,6 +8,7 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
   const fmt = value => value ? new Date(value).toLocaleString('ru-RU') : '—';
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   async function render() {
     const root = document.querySelector('.admin-content');
@@ -49,14 +50,27 @@
     }
   }
 
+  async function waitForUserProfile(userId, token) {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (token !== userToken) return null;
+      const selected = document.querySelector(`[data-user-id="${userId}"].selected`);
+      const box = document.getElementById('adminUserDetail');
+      if (!selected || !box) return null;
+      if (box.querySelector('.admin-profile-head')) return box;
+      await sleep(100);
+    }
+    return null;
+  }
+
   async function renderUserSecurity(userId) {
     const token = ++userToken;
     try {
+      const box = await waitForUserProfile(userId, token);
+      if (!box || token !== userToken || box.querySelector('[data-user-security]')) return;
       const data = await admin.api(`/api/app/admin/users/${userId}/security-timeline`);
-      if (token !== userToken) return;
+      if (token !== userToken || !box.isConnected || box.querySelector('[data-user-security]')) return;
       const selected = document.querySelector(`[data-user-id="${userId}"].selected`);
-      const box = document.getElementById('adminUserDetail');
-      if (!selected || !box || box.querySelector('[data-user-security]')) return;
+      if (!selected) return;
       const p = data.policy || {};
       const c = p.capabilities || {};
       const country = data.user?.country_code || 'UNKNOWN';
@@ -93,6 +107,6 @@
     const target = event.target?.closest?.('[data-user-id]');
     if (!target) return;
     const userId = Number(target.dataset.userId || 0);
-    if (Number.isSafeInteger(userId) && userId > 0) setTimeout(() => void renderUserSecurity(userId), 0);
+    if (Number.isSafeInteger(userId) && userId > 0) void renderUserSecurity(userId);
   });
 })();
