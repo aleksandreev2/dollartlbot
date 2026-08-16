@@ -6,6 +6,9 @@ const antiAbuse = read('src/anti-abuse.ts');
 const gate = read('src/download-gate.ts');
 const regional = read('src/regional-access.ts');
 const regionalPreflight = read('src/regional-download-preflight.ts');
+const regionalAdmin = read('src/admin-regional-access.ts');
+const regionalAdminUi = read('public/app/admin-regional-access.js');
+const appIndex = read('public/app/index.html');
 const miniappAuth = read('src/miniapp-auth.ts');
 const delivery = read('src/publication-delivery.ts');
 const discussion = read('src/publishing-discussion.ts');
@@ -39,6 +42,7 @@ need(wrangler, '"/verify/*"', 'verification route runs worker first');
 need(entry, 'guardTelegramUpdate(update, env, ctx)');
 need(entry, 'handleRegionalDownloadPreflight(update, env, telegram)');
 need(entry, 'handleDownloadGateUpdate(update, env, telegram, ctx)');
+need(entry, 'handleAdminRegionalAccessRequest(request, env)', 'regional admin API routed');
 before(entry, 'INSERT OR IGNORE INTO processed_updates', 'guardTelegramUpdate(update, env, ctx)', 'webhook dedupe before anti-abuse');
 before(entry, 'handleRegionalDownloadPreflight(update, env, telegram)', 'handleDownloadGateUpdate(update, env, telegram, ctx)', 'regional policy before file delivery');
 need(antiAbuse, "type GuardMode = 'off' | 'monitor' | 'enforce'");
@@ -71,6 +75,11 @@ need(regionalPreflight, "regional.reason === 'restricted'", 'CIS routing decisio
 need(regionalPreflight, "regional.reason === 'verification_required'", 'unknown region verification challenge');
 need(miniappAuth, "captureRegionFromRequest(request, telegramUser.id, env, 'miniapp')", 'Mini App country capture');
 need(entry, 'handleRegionVerificationRequest(request, env)', 'browser verification endpoint');
+need(regionalAdmin, "'/api/app/admin/security/regional'", 'regional admin endpoint');
+need(regionalAdmin, 'regional_restricted_countries', 'editable restricted country list');
+need(regionalAdminUi, '/api/app/admin/security/regional', 'regional admin UI API');
+need(regionalAdminUi, 'regionalCountries', 'regional country editor');
+need(appIndex, '/app/admin-regional-access.js', 'regional admin UI loaded');
 
 need(delivery, "text:'Thank you.'", 'exact Thank you button');
 need(delivery, "callback_data:`dl:${gate.token}`", 'tracked download callback');
@@ -101,4 +110,4 @@ for (const route of [
   "'/api/app/admin/security/config'",
 ]) need(adminApi, route, `admin route ${route}`);
 
-console.log('Download/security audit passed: dedupe, anti-abuse, tracked gate, mandatory country verification, Boosty bypass, CIS routing, rollout isolation, per-user delivery, AV gate, upload memory safety, immutable cover variants, and admin observability are wired.');
+console.log('Download/security audit passed: dedupe, anti-abuse, tracked gate, mandatory country verification, Boosty bypass, CIS routing, editable regional controls, rollout isolation, per-user delivery, AV gate, upload memory safety, immutable cover variants, and admin observability are wired.');
