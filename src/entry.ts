@@ -10,6 +10,7 @@ import { handleDownloadGateUpdate } from './download-gate';
 import { recordPublicationRateLimit } from './download-rate-limit';
 import { handleUpdate } from './handlers';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
+import { handleRegionVerificationRequest } from './regional-access';
 import { handleReferralChatMemberUpdate } from './referrals';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { denyBlockedPrivateBotUpdate } from './user-controls';
@@ -22,6 +23,8 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method !== 'POST' || url.pathname !== '/webhook') {
+      const regionVerification = await handleRegionVerificationRequest(request, env);
+      if (regionVerification) return regionVerification;
       const scannerResponse = await handleAssetScannerRequest(request, env);
       if (scannerResponse) return scannerResponse;
       const coverVariant = await handleCoverVariantRequest(request, env);
