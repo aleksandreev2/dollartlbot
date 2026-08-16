@@ -6,7 +6,7 @@
   "scripts": {
     "cf-typegen": "wrangler types",
     "typecheck": "npm run cf-typegen && tsc --noEmit",
-    "deploy": "npm run typecheck && wrangler deploy --secrets-file ../.dev.vars"
+    "deploy": "npm run typecheck && wrangler deploy --secrets-file .dev.vars"
   },
   "dependencies": {
     "@cloudflare/containers": "latest"
