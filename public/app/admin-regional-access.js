@@ -67,6 +67,103 @@
     }
   }
 
+  async function renderChannelAutoBan() {
+    if (document.getElementById('channelAutoBanSecurityPanel')) return;
+    const host = document.querySelector('.admin-content');
+    if (!host) return;
+    const panel = document.createElement('section');
+    panel.id = 'channelAutoBanSecurityPanel';
+    panel.className = 'admin-panel';
+    panel.innerHTML = '<div class="admin-loading">Загружаем channel leave auto-ban…</div>';
+    host.prepend(panel);
+
+    try {
+      const payload = await admin.api('/api/app/admin/security/channel-autobans');
+      if (!panel.isConnected) return;
+      const cfg = payload.config || {};
+      const diagnostics = payload.diagnostics || {};
+      const summary = payload.summary || {};
+      const entries = (payload.entries || []).slice(0, 30);
+      const ready = Boolean(diagnostics.configured && diagnostics.bot_can_restrict_members);
+      panel.innerHTML = `
+        <div class="admin-panel-head"><div><h2>Channel leave auto-ban</h2><p>Добровольный выход из обязательного канала → Telegram blacklist. Админские удаления не считаются выходом пользователя.</p></div><span class="admin-badge ${cfg.enabled && ready ? 'good' : cfg.enabled ? 'bad' : 'muted'}">${cfg.enabled ? (ready ? 'ACTIVE' : 'NO RIGHTS') : 'OFF'}</span></div>
+        <div class="admin-stat-grid">
+          <div class="admin-stat"><strong>${Number(summary.banned || 0)}</strong><span>Auto-banned</span></div>
+          <div class="admin-stat"><strong>${Number(summary.pending || 0) + Number(summary.retry || 0)}</strong><span>Pending / retry</span></div>
+          <div class="admin-stat"><strong>${Number(summary.failed || 0)}</strong><span>Failed</span></div>
+          <div class="admin-stat"><strong>${Number(summary.exempt || 0)}</strong><span>Exempt</span></div>
+        </div>
+        <div class="admin-compact-row"><div class="admin-compact-copy"><strong>${ready ? 'Права Telegram подтверждены' : 'Бот не может банить участников'}</strong><span>Channel: ${esc(diagnostics.channel_id || 'не настроен')} · Bot status: ${esc(diagnostics.bot_status || '—')} · can_restrict_members: ${diagnostics.bot_can_restrict_members ? 'yes' : 'no'}</span>${diagnostics.error ? `<small>${esc(diagnostics.error)}</small>` : ''}</div></div>
+        <div class="settings-admin-grid">
+          <div><label class="admin-field"><span>Auto-ban after self-leave</span><input id="channelAutoBanEnabled" type="checkbox" ${cfg.enabled ? 'checked' : ''}></label></div>
+          <div><label class="admin-field"><span>Boosty exemption</span><input id="channelAutoBanBoostyExempt" type="checkbox" ${cfg.boosty_exempt ? 'checked' : ''}></label></div>
+        </div>
+        <button class="admin-save-settings" id="saveChannelAutoBan">Сохранить auto-ban policy</button>
+        ${entries.length ? `<div class="admin-panel-head"><div><h3>Последние выходы</h3><p>Разбанивание здесь снимает Telegram blacklist; повторный добровольный выход снова активирует policy.</p></div></div>${entries.map(channelAutoBanRow).join('')}` : '<div class="admin-empty">Событий выхода пока нет.</div>'}`;
+      document.getElementById('saveChannelAutoBan')?.addEventListener('click', saveChannelAutoBan);
+      panel.querySelectorAll('[data-channel-unban]').forEach(button => button.addEventListener('click', () => channelAutoBanAction('unban', Number(button.dataset.channelUnban))));
+      panel.querySelectorAll('[data-channel-retry]').forEach(button => button.addEventListener('click', () => channelAutoBanAction('retry', Number(button.dataset.channelRetry))));
+      admin.icons?.();
+    } catch (error) {
+      if (panel.isConnected) panel.innerHTML = `<div class="admin-empty">Channel leave auto-ban: ${esc(error?.message || error)}</div>`;
+    }
+  }
+
+  function channelAutoBanRow(entry) {
+    const status = String(entry.status || 'unknown');
+    const tone = status === 'banned' ? 'bad' : status === 'failed' ? 'bad' : status === 'exempt' || status === 'unbanned' ? 'good' : 'pending';
+    const name = entry.username ? `@${esc(entry.username)}` : esc(entry.first_name || `ID ${entry.user_id}`);
+    const detail = status === 'exempt'
+      ? `exempt: ${esc(entry.exemption_reason || 'policy')}`
+      : entry.last_error
+        ? esc(entry.last_error)
+        : `attempts ${Number(entry.attempts || 0)}`;
+    const actions = status === 'banned'
+      ? `<button data-channel-unban="${Number(entry.user_id)}">Разбанить</button>`
+      : ['failed','retry','pending'].includes(status)
+        ? `<button data-channel-retry="${Number(entry.user_id)}">Повторить</button>`
+        : '';
+    return `<div class="admin-compact-row"><div class="admin-compact-copy"><strong>${name} · ${Number(entry.user_id)}</strong><span>${esc(status)} · выходов ${Number(entry.leave_count || 1)} · ${fmt(entry.left_at)}</span><small>${detail}</small></div><span class="admin-badge ${tone}">${esc(status.toUpperCase())}</span>${actions}</div>`;
+  }
+
+  async function saveChannelAutoBan() {
+    const button = document.getElementById('saveChannelAutoBan');
+    if (button) button.disabled = true;
+    try {
+      await admin.api('/api/app/admin/security/channel-autobans', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'config',
+          enabled: Boolean(document.getElementById('channelAutoBanEnabled')?.checked),
+          boosty_exempt: Boolean(document.getElementById('channelAutoBanBoostyExempt')?.checked),
+        }),
+      });
+      admin.toast?.('Channel leave auto-ban сохранён.');
+      document.getElementById('channelAutoBanSecurityPanel')?.remove();
+      await renderChannelAutoBan();
+    } catch (error) {
+      admin.toast?.(error?.message || String(error), true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function channelAutoBanAction(action, userId) {
+    try {
+      await admin.api('/api/app/admin/security/channel-autobans', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, user_id: userId }),
+      });
+      admin.toast?.(action === 'unban' ? `Пользователь ${userId} разбанен в канале.` : `Auto-ban для ${userId} отправлен на повтор.`);
+      document.getElementById('channelAutoBanSecurityPanel')?.remove();
+      await renderChannelAutoBan();
+    } catch (error) {
+      admin.toast?.(error?.message || String(error), true);
+    }
+  }
+
   async function renderScanner() {
     if (document.getElementById('scannerSecurityPanel')) return;
     const host = document.querySelector('.admin-content');
@@ -164,6 +261,7 @@
     if (event.detail?.section === 'security') {
       void renderRegional();
       void renderScanner();
+      void renderChannelAutoBan();
     }
   });
   document.addEventListener('dtl:adminroutechange', ensureUsersNavigation);
