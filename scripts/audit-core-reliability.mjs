@@ -11,6 +11,8 @@ const auth = read('src/miniapp-auth.ts');
 const regionalDownload = read('src/regional-download-preflight.ts');
 const alerts = read('src/production-alerts.ts');
 const admin = read('src/admin-core-reliability.ts');
+const autoBanAdmin = read('src/admin-channel-autoban.ts');
+const configValidator = read('src/security-config-validator.ts');
 const events = read('src/security-events.ts');
 const entry = read('src/entry.ts');
 const ui = read('public/app/admin-core-reliability.js');
@@ -63,6 +65,18 @@ for (const token of [
 need(entry, 'runProductionSecurityAlerts(env, telegram)', 'scheduled production alerts');
 
 for (const token of [
+  'guardSecurityConfiguration',
+  'regional_requires_private_delivery',
+  "runtimeFlag(env, 'regional_routing_enabled', true)",
+]) need(configValidator + entry, token, 'security configuration validator');
+for (const token of [
+  "body.enabled === true",
+  'botRestrictionReadiness(env, telegram)',
+  'autoban_permission_missing',
+  'bot_can_restrict_members',
+]) need(autoBanAdmin, token, 'channel auto-ban configuration validator');
+
+for (const token of [
   '/api/app/admin/security/core-reliability',
   '/security-timeline',
   'evaluateAccessPolicy(userId, env, telegram)',
@@ -70,6 +84,7 @@ for (const token of [
 ]) need(admin, token, 'admin reliability APIs');
 need(events, 'INSERT INTO security_events', 'security event ledger');
 need(ui, '/api/app/admin/security/core-reliability', 'admin health panel');
+need(ui, '/security-timeline', 'user security snapshot');
 need(html, '/app/admin-core-reliability.js?v=20260816-core1', 'admin health asset');
 
 forbid(subscription, 'BOOSTY_SUBSCRIPTION_URL', 'entitlement checks must use group membership, not purchase URL');
@@ -86,4 +101,4 @@ const expectedMatrix = [
 ];
 if (expectedMatrix.length !== 7) throw new Error('Core reliability audit: policy matrix incomplete');
 
-console.log('Core Reliability v1 audit passed: centralized capabilities, shared Boosty cache, fail-safe policy matrix, incident alerts, security ledger and admin health visibility are wired.');
+console.log('Core Reliability v1 audit passed: centralized capabilities, shared Boosty cache, fail-safe policy matrix, pre-save config validation, incident alerts, security ledger and admin health visibility are wired.');
