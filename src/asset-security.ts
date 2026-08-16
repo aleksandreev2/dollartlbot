@@ -30,8 +30,8 @@ type ScannerResult = {
 };
 
 export async function capturePublicationAssetSecurity(
-  request: Request,
-  response: Response,
+  request: Request<any, any>,
+  response: Response<any, any>,
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
@@ -55,7 +55,7 @@ export async function capturePublicationAssetSecurity(
   ctx.waitUntil(hashUploadedFiles(body, publicationId, env));
 }
 
-export async function handleAssetScannerRequest(request: Request, env: Env): Promise<Response | null> {
+export async function handleAssetScannerRequest(request: Request<any, any>, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   const contentMatch = SCAN_CONTENT_RE.exec(url.pathname);
   if (!contentMatch && url.pathname !== SCAN_RESULT_PATH) return null;
@@ -141,7 +141,7 @@ export async function handleAssetScannerRequest(request: Request, env: Env): Pro
   return new Response('Method not allowed', { status: 405 });
 }
 
-async function hashUploadedFiles(request: Request, publicationId: number, env: Env): Promise<void> {
+async function hashUploadedFiles(request: Request<any, any>, publicationId: number, env: Env): Promise<void> {
   let form: FormData;
   try {
     form = await request.formData();
@@ -199,7 +199,7 @@ async function validCachedVerdict(env: Env, sha256: string, nowIso: string): Pro
   `).bind(sha256, nowIso).first<ScanCacheRow>();
 }
 
-function scannerAuthorized(request: Request, env: ScannerEnv): boolean {
+function scannerAuthorized(request: Request<any, any>, env: ScannerEnv): boolean {
   const expected = String(env.ASSET_SCANNER_TOKEN || '').trim();
   if (!expected) return false;
   const auth = request.headers.get('authorization') || '';
@@ -233,7 +233,8 @@ function normalizeScannerResult(body: ScannerResult) {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  const input = Uint8Array.from(bytes).buffer;
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', input));
   return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
