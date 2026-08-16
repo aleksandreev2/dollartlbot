@@ -29,6 +29,7 @@ export async function handleChannelLeaveAutoBan(
   update: TelegramChatMemberUpdated,
   env: Env,
   telegram: TelegramClient,
+  ctx?: ExecutionContext,
 ): Promise<void> {
   if (!(await runtimeFlag(env, 'channel_leave_autoban_enabled', true))) return;
 
@@ -45,6 +46,9 @@ export async function handleChannelLeaveAutoBan(
   // voluntary leave.
   if (update.from.id !== user.id) return;
 
+  // Persist the self-leave before the webhook is acknowledged. The slower
+  // entitlement and Telegram ban calls may run in waitUntil; if they are cut
+  // short, the durable pending row is picked up by scheduled maintenance.
   const leftAt = new Date(update.date * 1000).toISOString();
   const now = new Date().toISOString();
   await env.DB.prepare(`
@@ -84,7 +88,19 @@ export async function handleChannelLeaveAutoBan(
     now,
   ).run();
 
-  await attemptChannelLeaveAutoBan(user.id, channel.key, env, telegram);
+  const attempt = attemptChannelLeaveAutoBan(user.id, channel.key, env, telegram).catch((error) => {
+    console.error(JSON.stringify({
+      event: 'channel_leave_autoban_attempt_crashed',
+      user_id: user.id,
+      channel: channel.id,
+      error: errorText(error),
+    }));
+  });
+  if (ctx) {
+    ctx.waitUntil(attempt);
+    return;
+  }
+  await attempt;
 }
 
 export async function runChannelLeaveAutoBanMaintenance(
