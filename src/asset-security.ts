@@ -1,4 +1,6 @@
+import { safeSecretEqual } from './db';
 import { miniAppJson, miniAppJsonError } from './miniapp-auth';
+import { getRuntimeSetting } from './runtime-settings';
 
 const MAX_SCAN_RESULT_BYTES = 16 * 1024;
 const SCAN_RESULT_PATH = '/internal/asset-scan/result';
@@ -29,15 +31,20 @@ type ScannerResult = {
   scanned_at?: unknown;
 };
 
+type StoredAsset = {
+  id: number;
+  file_name: string;
+  mime_type: string | null;
+  r2_key: string;
+  sha256: string | null;
+};
+
 export async function capturePublicationAssetSecurity(
-  request: Request<any, any>,
   response: Response,
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
-  const url = new URL(request.url);
-  if (request.method !== 'POST' || url.pathname !== '/api/app/admin/publications' || !response.ok) return;
-
+  if (!response.ok) return;
   let responseData: any;
   try {
     responseData = await response.clone().json();
@@ -50,9 +57,7 @@ export async function capturePublicationAssetSecurity(
       ?? responseData?.id,
   );
   if (!publicationId) return;
-
-  const body = request.clone();
-  ctx.waitUntil(hashUploadedFiles(body, publicationId, env));
+  ctx.waitUntil(hashStoredAssets(publicationId, env));
 }
 
 export async function handleAssetScannerRequest(request: Request<any, any>, env: Env): Promise<Response | null> {
@@ -60,7 +65,7 @@ export async function handleAssetScannerRequest(request: Request<any, any>, env:
   const contentMatch = SCAN_CONTENT_RE.exec(url.pathname);
   if (!contentMatch && url.pathname !== SCAN_RESULT_PATH) return null;
 
-  if (!scannerAuthorized(request, env as ScannerEnv)) {
+  if (!(await scannerAuthorized(request, env as ScannerEnv))) {
     return new Response('Unauthorized', { status: 401 });
   }
 
@@ -104,7 +109,8 @@ export async function handleAssetScannerRequest(request: Request<any, any>, env:
     }
 
     const now = result.scannedAt;
-    const expiry = new Date(Date.parse(now) + 7 * 86_400_000).toISOString();
+    const ttlDays = clampInteger(await getRuntimeSetting(env, 'asset_scan_cache_ttl_days', '7'), 7, 1, 90);
+    const expiry = new Date(Date.parse(now) + ttlDays * 86_400_000).toISOString();
     await env.DB.batch([
       env.DB.prepare(`
         INSERT INTO file_scan_cache(
@@ -135,35 +141,30 @@ export async function handleAssetScannerRequest(request: Request<any, any>, env:
         result.threatName,now,result.sha256,
       ),
     ]);
-    return miniAppJson({ ok: true, asset_id: result.assetId, verdict: result.verdict });
+    return miniAppJson({ ok: true, asset_id: result.assetId, verdict: result.verdict, cache_ttl_days: ttlDays });
   }
 
   return new Response('Method not allowed', { status: 405 });
 }
 
-async function hashUploadedFiles(request: Request<any, any>, publicationId: number, env: Env): Promise<void> {
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch (error) {
-    console.warn(JSON.stringify({ event: 'asset_hash_form_failed', publication_id: publicationId, error: String(error) }));
-    return;
-  }
-  const files = form.getAll('files').filter((value): value is File => value instanceof File && value.size > 0);
-  if (!files.length) return;
-
+async function hashStoredAssets(publicationId: number, env: Env): Promise<void> {
   const assets = await env.DB.prepare(`
-    SELECT id,file_name,sort_order FROM publication_assets WHERE publication_id=? ORDER BY sort_order,id
-  `).bind(publicationId).all<{ id: number; file_name: string; sort_order: number }>();
+    SELECT id,file_name,mime_type,r2_key,sha256
+    FROM publication_assets
+    WHERE publication_id=?
+    ORDER BY sort_order,id
+  `).bind(publicationId).all<StoredAsset>();
+  if (!assets.results.length) return;
   const now = new Date().toISOString();
 
-  for (let index = 0; index < Math.min(files.length, assets.results.length); index += 1) {
-    const file = files[index];
-    const asset = assets.results[index];
+  for (const asset of assets.results) {
+    if (asset.sha256 && /^[a-f0-9]{64}$/i.test(asset.sha256)) continue;
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      const object = await env.COVERS.get(asset.r2_key);
+      if (!object) throw new Error(`R2 object missing: ${asset.r2_key}`);
+      const bytes = new Uint8Array(await object.arrayBuffer());
       const sha256 = await sha256Hex(bytes);
-      const detectedMime = detectMime(bytes, file.type, file.name);
+      const detectedMime = detectMime(bytes, asset.mime_type || '', asset.file_name);
       const cached = await validCachedVerdict(env, sha256, now);
       const status = cached?.verdict || 'pending';
       await env.DB.prepare(`
@@ -199,11 +200,11 @@ async function validCachedVerdict(env: Env, sha256: string, nowIso: string): Pro
   `).bind(sha256, nowIso).first<ScanCacheRow>();
 }
 
-function scannerAuthorized(request: Request<any, any>, env: ScannerEnv): boolean {
+async function scannerAuthorized(request: Request<any, any>, env: ScannerEnv): Promise<boolean> {
   const expected = String(env.ASSET_SCANNER_TOKEN || '').trim();
   if (!expected) return false;
-  const auth = request.headers.get('authorization') || '';
-  return auth === `Bearer ${expected}`;
+  const supplied = request.headers.get('authorization') || '';
+  return safeSecretEqual(supplied, `Bearer ${expected}`);
 }
 
 function normalizeScannerResult(body: ScannerResult) {
@@ -268,6 +269,12 @@ function clean(value: unknown, max: number): string {
 function positiveInteger(value: unknown): number | null {
   const number = Number(value);
   return Number.isSafeInteger(number) && number > 0 ? number : null;
+}
+
+function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
 }
 
 function safeHeaderName(value: string): string {
