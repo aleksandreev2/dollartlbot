@@ -28,7 +28,7 @@ async function runScanner(env: ScannerEnv): Promise<void> {
     const body = (await queue.text().catch(() => '')).slice(0, 1000);
     throw new Error(`Scanner queue status failed: HTTP ${queue.status} ${body}`);
   }
-  const queueData = await queue.json<QueueStatus>().catch(() => ({}));
+  const queueData: QueueStatus = await queue.json<QueueStatus>().catch(() => ({} as QueueStatus));
   if (Number(queueData.runnable || 0) <= 0) return;
 
   const scannerId = String(env.SCANNER_ID || 'clamav-primary').trim() || 'clamav-primary';
