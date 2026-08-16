@@ -45,7 +45,7 @@ need(delivery, "text:'Thank you.'", 'exact Thank you button');
 need(delivery, "callback_data:`dl:${gate.token}`", 'tracked download callback');
 need(delivery, "callback_data:`dn:${gate.token}`", 'tracked donate callback');
 need(delivery, "publication.download_gate_status!=='legacy'", 'legacy release fallback');
-need(gate, "eventType: string", 'reader event ledger');
+need(gate, 'eventType: string', 'reader event ledger');
 need(gate, "asset.scan_status !== 'clean'", 'fail-closed scan enforcement');
 need(gate, 'telegram_file_id', 'Telegram file cache');
 need(gate, 'publication_deliveries', 'per-user delivery ledger');
@@ -53,21 +53,19 @@ need(gate, 'publication_deliveries', 'per-user delivery ledger');
 need(assetSecurity, "crypto.subtle.digest('SHA-256'", 'asset SHA-256');
 need(assetSecurity, 'file_scan_cache', 'scan hash cache');
 need(assetSecurity, "'/internal/asset-scan/result'", 'scanner result endpoint');
-need(assetSecurity, "x-dollar-sha256", 'scanner content integrity hint');
+need(assetSecurity, 'x-dollar-sha256', 'scanner content integrity hint');
 
 need(coverVariants, 'max-age=31536000, immutable', 'immutable cover cache');
-for (const width of ['160','320','640']) {
-  need(coverUi, width, `cover UI ${width}px variant`);
-}
+for (const width of ['160','320','640']) need(coverUi, width, `cover UI ${width}px variant`);
 need(coverUi, 'img.srcset', 'responsive cover srcset');
-need(coverUi, "canvas.toBlob", 'client-side cover optimization');
+need(coverUi, 'canvas.toBlob', 'client-side cover optimization');
 
+need(adminApi, "const publicationReaders = /^\\/api\\/app\\/admin\\/publications", 'publication readers admin route');
+need(adminApi, "const userActivity = /^\\/api\\/app\\/admin\\/users", 'user reader activity admin route');
 for (const route of [
-  '/api/app/admin/publications\\/(\\d+)\\/readers',
-  '/api/app/admin/users\\/(\\d+)\\/reader-activity',
-  '/api/app/admin/security/anti-abuse',
-  '/api/app/admin/security/assets',
-  '/api/app/admin/security/config',
+  "'/api/app/admin/security/anti-abuse'",
+  "'/api/app/admin/security/assets'",
+  "'/api/app/admin/security/config'",
 ]) need(adminApi, route, `admin route ${route}`);
 
 console.log('Download/security audit passed: dedupe, anti-abuse, tracked gate, per-user delivery, AV gate, immutable cover variants, and admin observability are wired.');
