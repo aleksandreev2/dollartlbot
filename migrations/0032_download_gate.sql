@@ -87,5 +87,5 @@ CREATE TABLE IF NOT EXISTS publication_user_stats (
 CREATE INDEX IF NOT EXISTS idx_publication_user_stats_user
   ON publication_user_stats(user_id, last_seen_at DESC);
 
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('download_gate_enabled','0');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('donate_tracking_enabled','1');
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('download_gate_enabled','0',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('donate_tracking_enabled','1',datetime('now'));
