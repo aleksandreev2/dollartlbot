@@ -1,0 +1,46 @@
+name: File Security Scanner
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scanner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install scanner dependencies
+        working-directory: scanner
+        run: npm install
+      - name: Typecheck scanner Worker
+        working-directory: scanner
+        run: npm run typecheck
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Compile scanner service
+        working-directory: scanner/container
+        run: go test ./...
+      - name: Validate scanner shell
+        run: sh -n scanner/container/start.sh
+      - name: Build ClamAV container image
+        working-directory: scanner/container
+        run: docker build -t dollartlbot-clamav-scanner:ci .
+      - name: Smoke test live ClamAV container
+        run: |
+          docker run -d --name dollar-clamav-ci -p 18080:8080 dollartlbot-clamav-scanner:ci
+          for attempt in $(seq 1 180); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/health > /tmp/clam-health.json; then
+              cat /tmp/clam-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs dollar-clamav-ci || true
+          exit 1
+      - name: Validate security extension JavaScript
+        run: node --check public/app/admin-regional-access.js
