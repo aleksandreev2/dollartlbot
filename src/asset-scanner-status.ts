@@ -3,6 +3,7 @@ import { miniAppJson } from './miniapp-auth';
 import { getRuntimeSetting } from './runtime-settings';
 
 const PATH = '/internal/asset-scan/status';
+const REVALIDATE_BATCH = 20;
 type ScannerEnv = Env & { ASSET_SCANNER_TOKEN?: string };
 
 export async function handleAssetScannerStatusRequest(request: Request, env: Env): Promise<Response | null> {
@@ -18,8 +19,32 @@ export async function handleAssetScannerStatusRequest(request: Request, env: Env
 
   const maxAttempts = bounded(await getRuntimeSetting(env, 'asset_scan_max_attempts', '5'), 5, 1, 20);
   const claimTimeout = bounded(await getRuntimeSetting(env, 'asset_scan_claim_timeout_seconds', '900'), 900, 60, 7200);
-  const now = new Date().toISOString();
-  const staleCutoff = new Date(Date.now() - claimTimeout * 1000).toISOString();
+  const verdictTtlDays = bounded(await getRuntimeSetting(env, 'asset_scan_cache_ttl_days', '7'), 7, 1, 90);
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  const staleCutoff = new Date(nowMs - claimTimeout * 1000).toISOString();
+  const verdictCutoff = new Date(nowMs - verdictTtlDays * 86_400_000).toISOString();
+
+  const staleClean = await env.DB.prepare(`
+    SELECT id FROM publication_assets
+    WHERE scan_status='clean'
+      AND quarantined_at IS NULL
+      AND (scanned_at IS NULL OR scanned_at<=?)
+    ORDER BY COALESCE(scanned_at,''),id
+    LIMIT ?
+  `).bind(verdictCutoff, REVALIDATE_BATCH).all<{ id: number }>();
+  if (staleClean.results.length) {
+    const ids = staleClean.results.map((row) => Number(row.id)).filter((id) => Number.isSafeInteger(id) && id > 0);
+    if (ids.length) {
+      await env.DB.prepare(`
+        UPDATE publication_assets SET
+          scan_status='pending',scan_attempts=0,scan_claimed_at=NULL,
+          scan_next_attempt_at=?,scan_error=NULL
+        WHERE id IN (${ids.map(() => '?').join(',')}) AND scan_status='clean'
+      `).bind(now, ...ids).run();
+    }
+  }
+
   const row = await env.DB.prepare(`
     SELECT
       COUNT(*) AS runnable,
@@ -42,6 +67,8 @@ export async function handleAssetScannerStatusRequest(request: Request, env: Env
     pending: Number(row?.pending || 0),
     failed: Number(row?.failed || 0),
     scanning: Number(row?.scanning || 0),
+    requeued_stale_clean: staleClean.results.length,
+    verdict_ttl_days: verdictTtlDays,
   });
 }
 
