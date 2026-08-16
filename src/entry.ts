@@ -3,6 +3,7 @@ import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
+import { handleAdminRegionalAccessRequest } from './admin-regional-access';
 import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
 import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
@@ -30,6 +31,8 @@ export default {
       if (scannerResponse) return scannerResponse;
       const coverVariant = await handleCoverVariantRequest(request, env);
       if (coverVariant) return coverVariant;
+      const regionalAdmin = await handleAdminRegionalAccessRequest(request, env);
+      if (regionalAdmin) return regionalAdmin;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
       if (readerSecurity) return readerSecurity;
 
