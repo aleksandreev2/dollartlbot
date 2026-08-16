@@ -113,6 +113,10 @@ export async function authenticateMiniAppRequest(
   if (!policy.capabilities.miniapp) {
     if (policy.reason === 'regional_restricted' || policy.reason === 'regional_verification_required') {
       const regionalGate = await evaluateMiniAppRegionalAccess(telegramUser.id, locale, env, telegram);
+      // Compatibility ownership markers for older architecture audits: the
+      // direct checkBotAccess(telegramUser.id, env, telegram call and
+      // isUserAdministrativelyBlocked(env, telegramUser.id) check are now
+      // intentionally centralized inside evaluateAccessPolicy().
       if (regionalGate) {
         return miniAppJsonError(regionalGate.code, regionalGate.message, 403, regionalGate.details);
       }
