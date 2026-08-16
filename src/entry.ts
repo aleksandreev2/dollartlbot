@@ -3,6 +3,7 @@ import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
+import { handleAdminRegionalAccessRequest } from './admin-regional-access';
 import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
 import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
@@ -10,6 +11,8 @@ import { handleDownloadGateUpdate } from './download-gate';
 import { recordPublicationRateLimit } from './download-rate-limit';
 import { handleUpdate } from './handlers';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
+import { handleRegionVerificationRequest } from './regional-access';
+import { handleRegionalDownloadPreflight } from './regional-download-preflight';
 import { handleReferralChatMemberUpdate } from './referrals';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { denyBlockedPrivateBotUpdate } from './user-controls';
@@ -22,10 +25,14 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method !== 'POST' || url.pathname !== '/webhook') {
+      const regionVerification = await handleRegionVerificationRequest(request, env);
+      if (regionVerification) return regionVerification;
       const scannerResponse = await handleAssetScannerRequest(request, env);
       if (scannerResponse) return scannerResponse;
       const coverVariant = await handleCoverVariantRequest(request, env);
       if (coverVariant) return coverVariant;
+      const regionalAdmin = await handleAdminRegionalAccessRequest(request, env);
+      if (regionalAdmin) return regionalAdmin;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
       if (readerSecurity) return readerSecurity;
 
@@ -86,6 +93,8 @@ export default {
           // Admin-blocked private accounts stop here.
         } else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
           // Automatic linked-discussion forward handled by publishing center.
+        } else if (await handleRegionalDownloadPreflight(update, env, telegram)) {
+          // Free download requires a fresh verified country; CIS users are routed to Russian translations.
         } else if (await handleDownloadGateUpdate(update, env, telegram, ctx)) {
           // Tracked Thank you / Donate / private download deep-link handled here.
         } else {

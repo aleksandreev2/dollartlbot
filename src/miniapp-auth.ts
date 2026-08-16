@@ -6,6 +6,7 @@ import {
 } from './access-gate';
 import { getUser, isAdmin, upsertUser } from './db';
 import { normalizeLocale, t } from './i18n/index';
+import { captureRegionFromRequest } from './regional-access';
 import { TelegramClient, type TelegramUser } from './telegram';
 import { isUserAdministrativelyBlocked } from './user-controls';
 
@@ -87,6 +88,9 @@ export async function authenticateMiniAppRequest(
   }
 
   await upsertUser(env, telegramUser);
+  await captureRegionFromRequest(request, telegramUser.id, env, 'miniapp').catch((error) => {
+    console.warn(JSON.stringify({ event: 'miniapp_region_capture_failed', user_id: telegramUser.id, error: String(error) }));
+  });
   const dbUser = await getUser(env, telegramUser.id);
   const locale = normalizeLocale(dbUser?.language);
   const admin = isAdmin(telegramUser.id, env);
