@@ -61,7 +61,9 @@ for (const token of [
   "key: 'scanner_unhealthy'",
   "key: 'regional_without_private_delivery'",
   "key: 'autoban_failures'",
-]) need(alerts, token, 'production alerts');
+  'pruneSecurityEvents(env)',
+  'SELECT id FROM security_events WHERE created_at<? ORDER BY id LIMIT 500',
+]) need(alerts, token, 'production alerts and bounded retention');
 need(entry, 'runProductionSecurityAlerts(env, telegram)', 'scheduled production alerts');
 
 for (const token of [
@@ -85,6 +87,7 @@ for (const token of [
 need(events, 'INSERT INTO security_events', 'security event ledger');
 need(ui, '/api/app/admin/security/core-reliability', 'admin health panel');
 need(ui, '/security-timeline', 'user security snapshot');
+need(ui, 'waitForUserProfile', 'deterministic user snapshot rendering');
 need(html, '/app/admin-core-reliability.js?v=20260816-core1', 'admin health asset');
 
 forbid(subscription, 'BOOSTY_SUBSCRIPTION_URL', 'entitlement checks must use group membership, not purchase URL');
@@ -101,4 +104,4 @@ const expectedMatrix = [
 ];
 if (expectedMatrix.length !== 7) throw new Error('Core reliability audit: policy matrix incomplete');
 
-console.log('Core Reliability v1 audit passed: centralized capabilities, shared Boosty cache, fail-safe policy matrix, pre-save config validation, incident alerts, security ledger and admin health visibility are wired.');
+console.log('Core Reliability v1 audit passed: centralized capabilities, shared Boosty cache, fail-safe policy matrix, pre-save config validation, incident alerts, bounded security ledger and admin health visibility are wired.');
