@@ -3,7 +3,7 @@ import { getRuntimeSetting, runtimeFlag } from './runtime-settings';
 import { recordSecurityEvent } from './security-events';
 import type { TelegramClient } from './telegram';
 
-type Finding = {
+export type SecurityFinding = {
   key: string;
   severity: 'warning' | 'critical';
   title: string;
@@ -15,12 +15,17 @@ export async function runProductionSecurityAlerts(env: Env, telegram: TelegramCl
   await pruneSecurityEvents(env).catch((error) => {
     console.warn(JSON.stringify({ event: 'security_event_retention_failed', error: errorText(error) }));
   });
+
+  const findings = await collectSecurityFindings(env);
+  const activeKeys = new Set(findings.map((finding) => finding.key));
+  for (const finding of findings) await touchProductionIncident(env, finding);
+  await resolveRecoveredIncidents(env, activeKeys);
+  await clearRecoveredAlertState(env, activeKeys);
+
   if (!(await runtimeFlag(env, 'security_alerts_enabled', true))) return;
   const adminId = Number(env.ADMIN_TELEGRAM_ID || 0);
   if (!Number.isSafeInteger(adminId) || adminId <= 0) return;
 
-  const findings = await collectSecurityFindings(env);
-  const activeKeys = new Set(findings.map((finding) => finding.key));
   const cooldownMinutes = bounded(
     await getRuntimeSetting(env, 'security_alert_cooldown_minutes', '60'),
     60,
@@ -45,16 +50,17 @@ export async function runProductionSecurityAlerts(env: Env, telegram: TelegramCl
       console.error(JSON.stringify({ event: 'production_alert_delivery_failed', key: finding.key, error: errorText(error) }));
     }
   }
-
-  await clearRecovered(env, activeKeys);
 }
 
-export async function collectSecurityFindings(env: Env): Promise<Finding[]> {
-  const findings: Finding[] = [];
-  const [settings, scanner, assets, autobans] = await Promise.all([
+export async function collectSecurityFindings(env: Env): Promise<SecurityFinding[]> {
+  const findings: SecurityFinding[] = [];
+  const [settings, scanner, assets, autobans, latestBackup, latestCompletedBackup] = await Promise.all([
     env.DB.prepare(`
       SELECT key,value FROM app_settings
-      WHERE key IN ('regional_routing_enabled','download_gate_enabled','asset_scan_enforcement','channel_leave_autoban_enabled')
+      WHERE key IN (
+        'regional_routing_enabled','download_gate_enabled','asset_scan_enforcement','channel_leave_autoban_enabled',
+        'dr_backup_enabled','dr_backup_interval_hours'
+      )
     `).all<{ key: string; value: string }>(),
     env.DB.prepare(`
       SELECT ready,last_seen_at,last_error FROM asset_scanner_health
@@ -73,6 +79,13 @@ export async function collectSecurityFindings(env: Env): Promise<Finding[]> {
         SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
       FROM channel_leave_auto_bans
     `).first<Record<string, number>>().catch(() => null),
+    env.DB.prepare(`
+      SELECT id,status,started_at,completed_at,error_text FROM dr_backup_runs ORDER BY started_at DESC LIMIT 1
+    `).first<Record<string, unknown>>().catch(() => null),
+    env.DB.prepare(`
+      SELECT id,completed_at,verify_status,verified_at FROM dr_backup_runs
+      WHERE status='completed' ORDER BY completed_at DESC LIMIT 1
+    `).first<Record<string, unknown>>().catch(() => null),
   ]);
 
   const config = Object.fromEntries(settings.results.map((row) => [row.key, row.value]));
@@ -131,6 +144,32 @@ export async function collectSecurityFindings(env: Env): Promise<Finding[]> {
       value: `${autoBanFailed}:${autoBanPending}`,
     });
   }
+
+  if (config.dr_backup_enabled !== '0') {
+    const intervalHours = bounded(config.dr_backup_interval_hours, 24, 1, 168);
+    const completedAt = latestCompletedBackup?.completed_at ? Date.parse(String(latestCompletedBackup.completed_at)) : 0;
+    const ageHours = completedAt ? (Date.now() - completedAt) / 3_600_000 : Number.POSITIVE_INFINITY;
+    if (!completedAt || ageHours > intervalHours * 1.5) {
+      findings.push({
+        key: 'backup_overdue',
+        severity: !completedAt || ageHours > intervalHours * 3 ? 'critical' : 'warning',
+        title: 'Portable recovery backup is overdue',
+        detail: completedAt
+          ? `Last completed backup is ${Math.round(ageHours)}h old; target interval is ${intervalHours}h.`
+          : 'No completed portable recovery backup has been recorded yet.',
+        value: completedAt ? String(latestCompletedBackup?.completed_at) : 'missing',
+      });
+    }
+    if (String(latestBackup?.status || '') === 'failed') {
+      findings.push({
+        key: 'backup_failed', severity: 'warning',
+        title: 'Latest recovery backup failed',
+        detail: String(latestBackup?.error_text || 'The latest portable backup did not complete.').slice(0, 900),
+        value: `${String(latestBackup?.id || '')}:${String(latestBackup?.started_at || '')}`,
+      });
+    }
+  }
+
   return findings;
 }
 
@@ -144,7 +183,38 @@ async function pruneSecurityEvents(env: Env): Promise<void> {
   `).bind(cutoff).run();
 }
 
-async function shouldFire(env: Env, finding: Finding, cooldownMinutes: number): Promise<boolean> {
+async function touchProductionIncident(env: Env, finding: SecurityFinding): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await env.DB.prepare(`
+    SELECT id FROM production_incidents WHERE incident_key=? AND status='open' LIMIT 1
+  `).bind(finding.key).first<{ id: number }>().catch(() => null);
+  const details = JSON.stringify({ detail: finding.detail, value: finding.value });
+  if (existing) {
+    await env.DB.prepare(`
+      UPDATE production_incidents
+      SET severity=?,title=?,last_seen_at=?,last_value=?,occurrences=occurrences+1,details_json=? WHERE id=?
+    `).bind(finding.severity, finding.title, now, finding.value, details, existing.id).run();
+    return;
+  }
+  await env.DB.prepare(`
+    INSERT INTO production_incidents(incident_key,severity,title,status,opened_at,last_seen_at,last_value,occurrences,details_json)
+    VALUES (?,?,?,'open',?,?,?,?,?)
+  `).bind(finding.key, finding.severity, finding.title, now, now, finding.value, 1, details).run();
+}
+
+async function resolveRecoveredIncidents(env: Env, activeKeys: Set<string>): Promise<void> {
+  const open = await env.DB.prepare(`SELECT id,incident_key FROM production_incidents WHERE status='open'`)
+    .all<{ id: number; incident_key: string }>().catch(() => ({ results: [] as Array<{ id: number; incident_key: string }> }));
+  const now = new Date().toISOString();
+  for (const incident of open.results) {
+    if (activeKeys.has(incident.incident_key)) continue;
+    await env.DB.prepare(`
+      UPDATE production_incidents SET status='resolved',resolved_at=?,last_seen_at=? WHERE id=?
+    `).bind(now, now, incident.id).run();
+  }
+}
+
+async function shouldFire(env: Env, finding: SecurityFinding, cooldownMinutes: number): Promise<boolean> {
   const row = await env.DB.prepare(`
     SELECT status,last_fired_at,last_value FROM incident_alert_state WHERE alert_key=?
   `).bind(finding.key).first<{ status: string; last_fired_at: string | null; last_value: string | null }>().catch(() => null);
@@ -155,7 +225,7 @@ async function shouldFire(env: Env, finding: Finding, cooldownMinutes: number): 
   return last < Date.now() - cooldownMinutes * 60_000;
 }
 
-async function markAlert(env: Env, finding: Finding, status: string): Promise<void> {
+async function markAlert(env: Env, finding: SecurityFinding, status: string): Promise<void> {
   const now = new Date().toISOString();
   await env.DB.prepare(`
     INSERT INTO incident_alert_state(alert_key,status,last_fired_at,last_value,updated_at)
@@ -165,7 +235,7 @@ async function markAlert(env: Env, finding: Finding, status: string): Promise<vo
   `).bind(finding.key, status, now, finding.value, now).run();
 }
 
-async function clearRecovered(env: Env, activeKeys: Set<string>): Promise<void> {
+async function clearRecoveredAlertState(env: Env, activeKeys: Set<string>): Promise<void> {
   const rows = await env.DB.prepare(`SELECT alert_key FROM incident_alert_state WHERE status='firing'`)
     .all<{ alert_key: string }>().catch(() => ({ results: [] as { alert_key: string }[] }));
   const now = new Date().toISOString();
