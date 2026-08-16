@@ -9,7 +9,7 @@
     "deploy": "npm run typecheck && wrangler deploy --secrets-file .dev.vars"
   },
   "dependencies": {
-    "@cloudflare/containers": "latest"
+    "@cloudflare/containers": "0.3.7"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
