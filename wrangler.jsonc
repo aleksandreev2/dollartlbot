@@ -44,5 +44,19 @@
       "binding": "COVERS",
       "bucket_name": "dollartl-covers"
     }
-  ]
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USER_GUARD",
+        "class_name": "UserGuard"
+      }
+    ]
+  },
+  "exports": {
+    "UserGuard": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
 }
