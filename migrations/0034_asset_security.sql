@@ -32,5 +32,5 @@ CREATE INDEX IF NOT EXISTS idx_file_scan_cache_expiry
   ON file_scan_cache(expires_at)
   WHERE expires_at IS NOT NULL;
 
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('asset_scan_enforcement','0');
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('asset_scan_cache_ttl_days','7');
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('asset_scan_enforcement','0',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('asset_scan_cache_ttl_days','7',datetime('now'));
