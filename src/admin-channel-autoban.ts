@@ -80,10 +80,16 @@ async function readState(env: Env, telegram: TelegramClient): Promise<Response> 
   const [summary, rows, channel, enabled, boostyExempt] = await Promise.all([
     getChannelLeaveAutoBanSummary(env),
     env.DB.prepare(`
-      SELECT user_id,channel_id,username,first_name,status,exemption_reason,leave_count,
-             left_at,banned_at,unbanned_at,attempts,next_attempt_at,last_error,updated_at
-      FROM channel_leave_auto_bans
-      ORDER BY left_at DESC
+      SELECT b.user_id,b.channel_id,b.username,b.first_name,b.status,b.exemption_reason,b.leave_count,
+             b.left_at,b.banned_at,b.unbanned_at,b.attempts,b.next_attempt_at,b.last_error,b.updated_at,
+             (SELECT COUNT(*) FROM publication_deliveries d
+               WHERE d.user_id=b.user_id AND d.status='delivered' AND d.delivered_at IS NOT NULL AND d.delivered_at<=b.left_at
+             ) AS delivered_files_before_leave,
+             (SELECT MAX(d.delivered_at) FROM publication_deliveries d
+               WHERE d.user_id=b.user_id AND d.status='delivered' AND d.delivered_at IS NOT NULL AND d.delivered_at<=b.left_at
+             ) AS last_download_at
+      FROM channel_leave_auto_bans b
+      ORDER BY b.left_at DESC
       LIMIT 100
     `).all<Record<string, unknown>>(),
     getAccessChannelForAutoBan(env),
