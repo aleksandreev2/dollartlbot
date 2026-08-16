@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "dollartlbot-clamav-scanner",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    "MAIN_WORKER_ORIGIN": "https://dollartlbot.sashahumortele2.workers.dev",
+    "SCANNER_ID": "clamav-primary"
+  },
+  "containers": [
+    {
+      "class_name": "ClamAVContainer",
+      "image": "./container/Dockerfile",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CLAMAV",
+        "class_name": "ClamAVContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ClamAVContainer"]
+    }
+  ]
+}
