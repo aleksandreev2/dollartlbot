@@ -6,6 +6,25 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[char]));
 
+  function ensureUsersNavigation() {
+    const root = document.querySelector('.admin-v2');
+    if (!root) return;
+    for (const nav of root.querySelectorAll('.admin-side-nav,.admin-mobile-nav')) {
+      let button = nav.querySelector('[data-admin-tools="users"]');
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.adminTools = 'users';
+        button.innerHTML = '<i data-lucide="users" aria-hidden="true"></i><span>Пользователи</span>';
+      }
+      const security = nav.querySelector('[data-admin-section="security"]');
+      if (security && button.nextElementSibling !== security) nav.insertBefore(button, security);
+      else if (!button.isConnected) nav.append(button);
+      button.classList.toggle('active', admin.activeRoute?.() === 'tools:users');
+    }
+    admin.icons?.();
+  }
+
   async function render() {
     if (document.getElementById('regionalSecurityPanel')) return;
     const host = document.querySelector('.admin-content');
@@ -75,6 +94,10 @@
   }
 
   document.addEventListener('dtl:adminrender', event => {
+    ensureUsersNavigation();
     if (event.detail?.section === 'security') void render();
   });
+  document.addEventListener('dtl:adminroutechange', ensureUsersNavigation);
+  queueMicrotask(ensureUsersNavigation);
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(ensureUsersNavigation);
 })();
