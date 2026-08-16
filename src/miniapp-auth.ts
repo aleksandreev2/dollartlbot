@@ -7,7 +7,7 @@ import {
 import { getUser, isAdmin, upsertUser } from './db';
 import { normalizeLocale, t } from './i18n/index';
 import { evaluateMiniAppRegionalAccess } from './miniapp-regional-gate';
-import { captureRegionFromRequest } from './regional-access';
+import { captureRegionFromRequest, requestCountry } from './regional-access';
 import { TelegramClient, type TelegramUser } from './telegram';
 import { isUserAdministrativelyBlocked } from './user-controls';
 
@@ -89,9 +89,21 @@ export async function authenticateMiniAppRequest(
   }
 
   await upsertUser(env, telegramUser);
+  const observedCountry = requestCountry(request);
   await captureRegionFromRequest(request, telegramUser.id, env, 'miniapp').catch((error) => {
     console.warn(JSON.stringify({ event: 'miniapp_region_capture_failed', user_id: telegramUser.id, error: String(error) }));
   });
+  if (observedCountry) {
+    // captureRegionFromRequest intentionally suppresses same-country writes for
+    // several hours. A changed country is security-relevant, so persist it
+    // immediately even when that optimization cache is warm.
+    const observedAt = new Date().toISOString();
+    await env.DB.prepare(`
+      UPDATE users
+      SET country_code=?,country_verified_at=?,country_source='miniapp'
+      WHERE telegram_id=? AND COALESCE(country_code,'')<>?
+    `).bind(observedCountry, observedAt, telegramUser.id, observedCountry).run();
+  }
   const dbUser = await getUser(env, telegramUser.id);
   const locale = normalizeLocale(dbUser?.language || telegramUser.language_code);
   const admin = isAdmin(telegramUser.id, env);
