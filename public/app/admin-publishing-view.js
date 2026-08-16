@@ -43,11 +43,17 @@
   }
 
   function publicationRow(publication) {
+    const editActions = publication.status !== 'published'
+      ? `<button type="button" data-pub-test="${publication.id}" title="Тест">${icon('flask-conical')}</button><button type="button" data-pub-send="${publication.id}" title="Опубликовать">${icon('send')}</button><button type="button" data-pub-del="${publication.id}" title="Удалить">${icon('trash-2')}</button>`
+      : '';
+    const readerAction = publication.status === 'published'
+      ? `<button type="button" data-pub-readers="${publication.id}" title="Readers / скачивания">${icon('users')}</button>`
+      : '';
     return `<div class="publication-row">
       <div class="publication-thumb">${publication.image_key ? `<img src="/media/publications/${publication.id}/image" alt="">` : icon('file-text')}</div>
       <div class="publication-copy"><strong>${esc(publication.internal_title)}</strong><span>${date(publication.created_at)} · ${Number(publication.file_count || 0)} файл(ов)</span>${publication.error_text ? `<small>${esc(publication.error_text)}</small>` : ''}</div>
       ${pubBadge(publication.status)}
-      <div class="publication-actions">${publication.status !== 'published' ? `<button type="button" data-pub-test="${publication.id}" title="Тест">${icon('flask-conical')}</button><button type="button" data-pub-send="${publication.id}" title="Опубликовать">${icon('send')}</button><button type="button" data-pub-del="${publication.id}" title="Удалить">${icon('trash-2')}</button>` : ''}</div>
+      <div class="publication-actions">${readerAction}${editActions}</div>
     </div>`;
   }
 
@@ -81,10 +87,10 @@
             </section>
 
             <section class="publisher-flow-step">
-              ${stepHead('2', 'Вложения', 'Обложка поста и файлы, которые уйдут в комментарии.')}
+              ${stepHead('2', 'Вложения', 'Обложка поста и файлы релиза, которые читатель получает через Dollar TL Bot.')}
               <div class="publisher-upload-grid">
                 <label class="publisher-drop" id="pubImageDrop">${icon('image-plus')}<strong>Изображение поста</strong><span>JPEG, PNG, WebP или AVIF · до 8 МБ</span><input id="pubImage" type="file" accept="image/jpeg,image/png,image/webp,image/avif" hidden></label>
-                <label class="publisher-drop" id="pubFilesDrop">${icon('paperclip')}<strong>Файлы в комментарий</strong><span>До 8 файлов · каждый до 45 МБ</span><input id="pubFiles" type="file" multiple hidden></label>
+                <label class="publisher-drop" id="pubFilesDrop">${icon('paperclip')}<strong>Файлы релиза</strong><span>До 8 файлов · каждый до 45 МБ</span><input id="pubFiles" type="file" multiple hidden></label>
               </div>
               <div id="pubAssetSummary" class="publisher-assets"></div>
             </section>
@@ -93,8 +99,8 @@
               ${stepHead('3', 'Настройки', 'Редкие параметры не мешают основному тексту.')}
               <div class="publisher-options">
                 <label><input id="pubFooter" type="checkbox" checked><span><b>Шаблонный footer</b><small>Need a translation? → Dollar TL Bot</small></span></label>
-                <label><input id="pubDonate" type="checkbox" checked><span><b>Кнопка Donate</b><small>Boosty donation</small></span></label>
-                <label><input id="pubBotComment" type="checkbox" checked><span><b>Реклама бота под файлами</b><small>Отдельным комментарием</small></span></label>
+                <label><input id="pubDonate" type="checkbox" checked><span><b>Donate</b><small>Отслеживаемый CTA у download gate</small></span></label>
+                <label><input id="pubBotComment" type="checkbox" checked><span><b>Комментарий Dollar TL Bot</b><small>Download gate / promo в ветке комментариев</small></span></label>
                 <label><input id="pubNotify" type="checkbox"><span><b>Разослать релиз пользователям</b><small>Только тем, кто не отключил релизы</small></span></label>
               </div>
             </section>
@@ -112,13 +118,13 @@
               <div id="tgPreviewImage" class="tg-preview-image empty">${icon('image')}</div>
               <div class="tg-preview-body" id="tgPreviewBody">Текст публикации появится здесь.</div>
               <div class="tg-preview-footer"><b>Need a translation?</b><br>Open <span>Dollar TL Bot</span> and suggest a novel for translation.</div>
-              <div class="tg-preview-buttons"><span>Suggest a Novel</span><span>Donate</span></div>
+              <div class="tg-preview-buttons"><span>Thank you.</span><span>Donate</span></div>
             </div>
           </div>
         </details>
       </div>
       <section class="admin-panel admin-publication-history">
-        <div class="admin-panel-head"><div><h2>История публикаций</h2><p>Черновики и опубликованные посты</p></div></div>
+        <div class="admin-panel-head"><div><h2>История публикаций</h2><p>Черновики и опубликованные посты · у опубликованных доступен список Readers</p></div></div>
         <div class="admin-publication-list">${publications.length ? publications.map(publicationRow).join('') : '<div class="admin-empty">Пока пусто.</div>'}</div>
       </section>`);
       bindPreview();
@@ -197,6 +203,48 @@
     document.querySelectorAll('[data-pub-del]').forEach(button => {
       button.addEventListener('click', () => void deletePublication(Number(button.dataset.pubDel)));
     });
+    document.querySelectorAll('[data-pub-readers]').forEach(button => {
+      button.addEventListener('click', () => void showReaders(Number(button.dataset.pubReaders)));
+    });
+  }
+
+  async function showReaders(id) {
+    try {
+      const data = await api(`/api/app/admin/publications/${id}/readers`);
+      const stats = data.stats || {};
+      const readers = data.readers || [];
+      let dialog = document.getElementById('publicationReadersDialog');
+      if (!dialog) {
+        dialog = document.createElement('dialog');
+        dialog.id = 'publicationReadersDialog';
+        dialog.className = 'admin-panel publication-readers-dialog';
+        document.body.appendChild(dialog);
+      }
+      dialog.innerHTML = `<div class="admin-panel-head"><div><h2>Readers · ${esc(data.publication?.display_title || `#${id}`)}</h2><p>Конкретные Telegram-пользователи и действия</p></div><button type="button" data-readers-close title="Закрыть">${icon('x')}</button></div>
+        <div class="admin-stat-grid">
+          ${readerStat(stats.thank_you_clicks, 'Thank you clicks')}
+          ${readerStat(stats.unique_clickers, 'Unique clickers')}
+          ${readerStat(stats.delivery_successes, 'Files delivered')}
+          ${readerStat(stats.unique_readers, 'Unique readers')}
+          ${readerStat(stats.donate_clicks, 'Donate clicks')}
+        </div>
+        <div class="admin-publication-list">${readers.length ? readers.map(readerRow).join('') : '<div class="admin-empty">По этой публикации действий ещё нет.</div>'}</div>`;
+      dialog.querySelector('[data-readers-close]')?.addEventListener('click', () => dialog.close());
+      admin.icons?.();
+      if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+    } catch (error) {
+      admin.toast?.(error.message, true);
+    }
+  }
+
+  function readerStat(value, label) {
+    return `<div class="admin-stat blue"><div><strong>${Number(value || 0)}</strong><span>${esc(label)}</span></div></div>`;
+  }
+
+  function readerRow(reader) {
+    const person = reader.username ? `@${esc(reader.username)}` : esc(reader.first_name || 'без username');
+    const block = reader.blocked_at ? '<span class="admin-badge bad">BLOCKED</span>' : '';
+    return `<div class="admin-compact-row"><div class="admin-compact-icon">${icon('user')}</div><div class="admin-compact-copy"><strong>${person} · ${esc(reader.user_id)}</strong><span>Thank you ${Number(reader.thank_you_clicks || 0)} · delivered ${Number(reader.delivery_successes || 0)} · repeat ${Number(reader.repeat_deliveries || 0)} · Donate ${Number(reader.donate_clicks || 0)} · ${date(reader.last_seen_at)}</span></div>${block}</div>`;
   }
 
   async function confirmAction(config) {
