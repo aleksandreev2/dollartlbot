@@ -1,6 +1,7 @@
 import baseWorker from './index';
 import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
+import { handleAdminChannelAutoBanRequest } from './admin-channel-autoban';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminFileSecurityRequest } from './admin-file-security';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
@@ -8,6 +9,7 @@ import { handleAdminRegionalAccessRequest } from './admin-regional-access';
 import { handleAssetScannerStatusRequest } from './asset-scanner-status';
 import { guardAssetScanEnforcementConfig } from './asset-security-config-guard';
 import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
+import { handleChannelLeaveAutoBan, runChannelLeaveAutoBanMaintenance } from './channel-leave-autoban';
 import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
 import { handleDownloadGateUpdate } from './download-gate';
@@ -41,6 +43,14 @@ export default {
       if (regionalAdmin) return regionalAdmin;
       const fileSecurityAdmin = await handleAdminFileSecurityRequest(request, env);
       if (fileSecurityAdmin) return fileSecurityAdmin;
+      if (url.pathname === '/api/app/admin/security/channel-autobans') {
+        const channelAutoBanAdmin = await handleAdminChannelAutoBanRequest(
+          request,
+          env,
+          new TelegramClient(env.TELEGRAM_BOT_TOKEN, env),
+        );
+        if (channelAutoBanAdmin) return channelAutoBanAdmin;
+      }
       const enforcementGuard = await guardAssetScanEnforcementConfig(request, env);
       if (enforcementGuard) return enforcementGuard;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
@@ -84,6 +94,7 @@ export default {
           handleReferralChatMemberUpdate(update.chat_member, env),
           handleAccessChatMemberUpdate(update.chat_member, env),
         ]);
+        await handleChannelLeaveAutoBan(update.chat_member, env, telegram);
       } else {
         const abuse = await guardTelegramUpdate(update, env, ctx);
         if (!abuse.allowed) {
@@ -133,6 +144,13 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+    await runChannelLeaveAutoBanMaintenance(env, telegram, 20).catch((error) => {
+      console.error(JSON.stringify({
+        event: 'channel_leave_autoban_maintenance_failed',
+        error: errorText(error),
+      }));
+    });
     return baseWorker.scheduled(controller, env);
   },
 } satisfies ExportedHandler<Env>;
