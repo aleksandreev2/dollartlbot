@@ -42,11 +42,12 @@ export async function handleAdminFileSecurityRequest(request: Request, env: Env)
     const now = new Date().toISOString();
     const result = await env.DB.prepare(`
       UPDATE publication_assets SET
-        scan_status='pending',scan_attempts=0,scan_claimed_at=NULL,scan_next_attempt_at=?,scan_error=NULL
+        scan_status='pending',scan_attempts=0,scan_claimed_at=NULL,scan_next_attempt_at=?,scan_error=NULL,
+        quarantined_at=NULL
       WHERE id=?
     `).bind(now, assetId).run();
     if ((result.meta.changes || 0) !== 1) return miniAppJsonError('not_found', 'Asset not found.', 404);
-    return miniAppJson({ ok: true, action, asset_id: assetId });
+    return miniAppJson({ ok: true, action, asset_id: assetId, quarantine_hold: true });
   }
 
   if (action === 'backfill') {
@@ -80,7 +81,7 @@ async function report(env: Env): Promise<Response> {
     env.DB.prepare(`
       SELECT COUNT(*) AS count
       FROM publication_assets
-      WHERE quarantined_at IS NOT NULL OR scan_status IN ('infected','suspicious')
+      WHERE quarantined_at IS NOT NULL OR quarantine_reason IS NOT NULL OR scan_status IN ('infected','suspicious')
     `).first<{ count: number }>(),
     env.DB.prepare(`
       SELECT a.id,a.publication_id,a.file_name,a.size_bytes,a.sha256,a.scan_status,a.scan_attempts,
