@@ -3,6 +3,7 @@ import { authenticateMiniAppRequest, miniAppJsonError } from './miniapp-auth';
 
 const CONFIG_PATH = '/api/app/admin/security/config';
 const MAX_CONFIG_BYTES = 64 * 1024;
+const ACTIVATION_HEALTH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export async function guardAssetScanEnforcementConfig(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
@@ -26,10 +27,15 @@ export async function guardAssetScanEnforcementConfig(request: Request, env: Env
   if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
 
   const health = await scannerHealth(env);
-  if (!health.ready) {
+  const scanner = health.scanner || {};
+  const lastSeen = scanner.last_seen_at ? Date.parse(String(scanner.last_seen_at)) : 0;
+  const recentlyHealthy = Number(scanner.ready) === 1
+    && Number.isFinite(lastSeen)
+    && lastSeen > Date.now() - ACTIVATION_HEALTH_MAX_AGE_MS;
+  if (!health.ready && !recentlyHealthy) {
     return miniAppJsonError(
       'scanner_not_ready',
-      'AV enforcement cannot be enabled until the ClamAV scanner is healthy and reporting fresh heartbeats.',
+      'AV enforcement cannot be enabled until the ClamAV scanner has reported a successful health heartbeat.',
       409,
       { scanner: health.scanner, stale: health.stale },
     );
