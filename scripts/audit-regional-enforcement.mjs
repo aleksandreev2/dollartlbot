@@ -4,6 +4,8 @@ const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'ut
 const runtime = read('src/runtime-settings.ts');
 const auth = read('src/miniapp-auth.ts');
 const gate = read('src/miniapp-regional-gate.ts');
+const botSubmit = read('src/bot-submit-deeplink.ts');
+const entry = read('src/entry.ts');
 const downloadPreflight = read('src/regional-download-preflight.ts');
 const delivery = read('src/publication-delivery.ts');
 const discussion = read('src/publishing-discussion.ts');
@@ -31,6 +33,8 @@ need(admin, "updates.set('download_gate_enabled', '1')", 'admin enabling routing
 
 need(auth, 'evaluateMiniAppRegionalAccess', 'canonical Mini App regional authorization');
 need(auth, 'regionalGate.code', 'regional auth error returned from canonical auth');
+need(auth, 'requestCountry(request)', 'current Cloudflare country observed on every Mini App auth');
+need(auth, "COALESCE(country_code,'')<>?", 'country changes bypass same-country write suppression');
 before(auth, 'evaluateMiniAppRegionalAccess(', 'checkBotAccess(telegramUser.id', 'regional Mini App lock before ordinary access gate');
 need(gate, "code: 'regional_restricted'", 'restricted-region Mini App deny');
 need(gate, "code: 'regional_verification_required'", 'unknown-region fail-closed Mini App deny');
@@ -46,8 +50,11 @@ need(ui, 'setChromeLocked(true)', 'Mini App navigation hidden while region-locke
 need(downloadPreflight, "payload.startsWith(DOWNLOAD_START_PREFIX)", 'bot region preflight remains download-specific');
 forbid(handlers, 'evaluateMiniAppRegionalAccess', 'ordinary Telegram bot must not inherit Mini App region ban');
 need(handlers, "case 'menu:submit':", 'ordinary bot title suggestion remains available');
+need(botSubmit, "/^\\/start\\s+submit", 'bot submit deep link interception');
+need(botSubmit, 'beginSubmission(', 'deep link opens title suggestion flow');
+need(entry, 'handleBotSubmitDeepLink(update, env, telegram)', 'bot submit deep link wired in production');
 need(delivery, "runtimeFlag(env,'download_gate_enabled',false)", 'publishing honors effective private gate');
 need(discussion, "runtimeFlag(env,'download_gate_enabled',false)", 'discussion routing honors effective private gate');
 
 new Function(ui);
-console.log('Regional enforcement audit passed: CIS/unknown Mini App access is fail-closed, private delivery is mandatory while routing is enabled, Boosty/admin bypass remains canonical, and ordinary bot suggestions stay available.');
+console.log('Regional enforcement audit passed: CIS/unknown Mini App access is fail-closed, private delivery is mandatory while routing is enabled, Boosty/admin bypass remains canonical, country changes refresh immediately, and ordinary bot suggestions stay available.');
