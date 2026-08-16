@@ -7,7 +7,7 @@ chown -R clamav:clamav /run/clamav /var/log/clamav /var/lib/clamav 2>/dev/null |
 # Refresh signatures on boot when network is available. The official image also
 # ships a database, so a transient FreshClam failure must not prevent startup.
 freshclam --stdout || true
-freshclam -d -c "${FRESHCLAM_CHECKS:-12}" >/proc/1/fd/1 2>/proc/1/fd/2 || true
+freshclam -d -c "${FRESHCLAM_CHECKS:-12}" >/proc/1/fd/1 2>/proc/1/fd/2 &
 
 clamd --config-file=/etc/clamav/clamd.conf >/proc/1/fd/1 2>/proc/1/fd/2 &
 CLAMD_PID=$!
