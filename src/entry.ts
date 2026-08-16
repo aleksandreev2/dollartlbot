@@ -5,6 +5,7 @@ import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminFileSecurityRequest } from './admin-file-security';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
 import { handleAdminRegionalAccessRequest } from './admin-regional-access';
+import { handleAssetScannerStatusRequest } from './asset-scanner-status';
 import { guardAssetScanEnforcementConfig } from './asset-security-config-guard';
 import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
 import { handleCoverVariantRequest } from './cover-variants';
@@ -30,6 +31,8 @@ export default {
     if (request.method !== 'POST' || url.pathname !== '/webhook') {
       const regionVerification = await handleRegionVerificationRequest(request, env);
       if (regionVerification) return regionVerification;
+      const scannerStatus = await handleAssetScannerStatusRequest(request, env);
+      if (scannerStatus) return scannerStatus;
       const scannerResponse = await handleAssetScannerRequest(request, env);
       if (scannerResponse) return scannerResponse;
       const coverVariant = await handleCoverVariantRequest(request, env);
@@ -103,7 +106,7 @@ export default {
         } else if (await handleRegionalDownloadPreflight(update, env, telegram)) {
           // Free download requires a fresh verified country; CIS users are routed to Russian translations.
         } else if (await handleFileDownloadPreflight(update, env, telegram)) {
-          // Quarantine is absolute; optional enforcement also requires a healthy scanner and CLEAN verdicts.
+          // Quarantine is absolute; optional enforcement requires final CLEAN verdicts for unfinished files.
         } else if (await handleDownloadGateUpdate(update, env, telegram, ctx)) {
           // Tracked Thank you / Donate / private download deep-link handled here.
         } else {
