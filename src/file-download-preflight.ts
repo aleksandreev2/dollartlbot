@@ -57,22 +57,21 @@ export async function handleFileDownloadPreflight(
 
   if (!(await runtimeFlag(env, 'asset_scan_enforcement', false))) return false;
 
+  const unfinished = assets.results.some((asset) => asset.scan_status !== 'clean');
+  if (!unfinished) return false;
+
   const health = await scannerHealth(env);
   if (!health.ready) {
     await telegram.sendMessage(
       message.from.id,
-      '<b>File security check is temporarily unavailable.</b>\n\nDownloads are paused until the scanner is healthy again. Please try later.',
+      '<b>File security check is temporarily unavailable.</b>\n\nThis release still needs a final security verdict. Please try again after the scanner resumes.',
     ).catch(() => undefined);
     return true;
   }
 
-  if (assets.results.some((asset) => asset.scan_status !== 'clean')) {
-    await telegram.sendMessage(
-      message.from.id,
-      '<b>The file is still being checked.</b>\n\nDelivery will be available after the security scan finishes successfully.',
-    ).catch(() => undefined);
-    return true;
-  }
-
-  return false;
+  await telegram.sendMessage(
+    message.from.id,
+    '<b>The file is still being checked.</b>\n\nDelivery will be available after the security scan finishes successfully.',
+  ).catch(() => undefined);
+  return true;
 }
