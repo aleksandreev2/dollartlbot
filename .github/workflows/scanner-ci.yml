@@ -30,5 +30,17 @@ jobs:
       - name: Build ClamAV container image
         working-directory: scanner/container
         run: docker build -t dollartlbot-clamav-scanner:ci .
+      - name: Smoke test live ClamAV container
+        run: |
+          docker run -d --name dollar-clamav-ci -p 18080:8080 dollartlbot-clamav-scanner:ci
+          for attempt in $(seq 1 180); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/health > /tmp/clam-health.json; then
+              cat /tmp/clam-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs dollar-clamav-ci || true
+          exit 1
       - name: Validate security extension JavaScript
         run: node --check public/app/admin-regional-access.js
