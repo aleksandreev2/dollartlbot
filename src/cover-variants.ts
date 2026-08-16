@@ -7,7 +7,7 @@ const WIDTHS = [160, 320, 640] as const;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 const VERSION_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
-export async function handleCoverVariantRequest(request: Request, env: Env): Promise<Response | null> {
+export async function handleCoverVariantRequest(request: Request<any, any>, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   const media = /^\/media\/covers\/(\d+)\/([A-Za-z0-9_-]{8,64})\/(160|320|640)\.webp$/.exec(url.pathname);
   if (request.method === 'GET' && media) {
@@ -40,14 +40,15 @@ export async function handleCoverVariantRequest(request: Request, env: Env): Pro
   if (!exists) return miniAppJsonError('not_found', 'Request not found.', 404);
 
   if (request.method === 'DELETE') {
-    const variants = await env.DB.prepare(`SELECT r2_key FROM cover_variants WHERE submission_id=?`)
-      .bind(submissionId).all<{ r2_key: string }>().catch(() => ({ results: [] } as D1Result<{ r2_key: string }>));
+    const variantsResult = await env.DB.prepare(`SELECT r2_key FROM cover_variants WHERE submission_id=?`)
+      .bind(submissionId).all<{ r2_key: string }>().catch(() => null);
+    const variantRows = variantsResult?.results ?? [];
     await removeSubmissionCover(env, submissionId);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM cover_variants WHERE submission_id=?').bind(submissionId),
       env.DB.prepare('UPDATE submissions SET cover_version=NULL WHERE id=?').bind(submissionId),
     ]).catch(() => undefined);
-    if (variants.results.length) await env.COVERS.delete(variants.results.map((row) => row.r2_key)).catch(() => undefined);
+    if (variantRows.length) await env.COVERS.delete(variantRows.map((row) => row.r2_key)).catch(() => undefined);
     return miniAppJson({ ok: true, cover_url: null, cover_version: null });
   }
 
@@ -79,8 +80,9 @@ export async function handleCoverVariantRequest(request: Request, env: Env): Pro
     return miniAppJson({ ok: true, cover_url: `/media/covers/${submissionId}`, cover_version: null, variants: [] });
   }
 
-  const previous = await env.DB.prepare(`SELECT r2_key FROM cover_variants WHERE submission_id=?`)
-    .bind(submissionId).all<{ r2_key: string }>().catch(() => ({ results: [] } as D1Result<{ r2_key: string }>));
+  const previousResult = await env.DB.prepare(`SELECT r2_key FROM cover_variants WHERE submission_id=?`)
+    .bind(submissionId).all<{ r2_key: string }>().catch(() => null);
+  const previousRows = previousResult?.results ?? [];
   const version = versionToken();
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [
@@ -101,7 +103,7 @@ export async function handleCoverVariantRequest(request: Request, env: Env): Pro
     `).bind(submissionId, version, width, key, file.size, now));
   }
   await env.DB.batch(statements);
-  if (previous.results.length) await env.COVERS.delete(previous.results.map((row) => row.r2_key)).catch(() => undefined);
+  if (previousRows.length) await env.COVERS.delete(previousRows.map((row) => row.r2_key)).catch(() => undefined);
 
   return miniAppJson({
     ok: true,
