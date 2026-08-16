@@ -3,6 +3,7 @@ PRAGMA foreign_keys=ON;
 ALTER TABLE publications ADD COLUMN download_gate_status TEXT NOT NULL DEFAULT 'disabled';
 ALTER TABLE publications ADD COLUMN download_gate_message_id INTEGER;
 ALTER TABLE publications ADD COLUMN download_gate_error TEXT;
+UPDATE publications SET download_gate_status='legacy' WHERE status='published';
 
 CREATE TABLE IF NOT EXISTS publication_download_tokens (
   token TEXT PRIMARY KEY,
