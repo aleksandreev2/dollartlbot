@@ -23,6 +23,7 @@ import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handleRegionVerificationRequest } from './regional-access';
 import { handleRegionalDownloadPreflight } from './regional-download-preflight';
 import { handleReferralChatMemberUpdate } from './referrals';
+import { guardSecurityConfiguration } from './security-config-validator';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { denyBlockedPrivateBotUpdate } from './user-controls';
 
@@ -56,6 +57,8 @@ export default {
         );
         if (channelAutoBanAdmin) return channelAutoBanAdmin;
       }
+      const configGuard = await guardSecurityConfiguration(request, env);
+      if (configGuard) return configGuard;
       const enforcementGuard = await guardAssetScanEnforcementConfig(request, env);
       if (enforcementGuard) return enforcementGuard;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
