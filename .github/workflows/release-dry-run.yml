@@ -1,0 +1,20 @@
+name: Release Dry Run
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  wrangler-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Prepare pinned frontend vendor assets
+        run: npm run prepare:vendor
+      - name: Build production Worker without deploying
+        run: npx wrangler deploy --dry-run
