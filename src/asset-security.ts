@@ -31,7 +31,7 @@ type ScannerResult = {
 
 export async function capturePublicationAssetSecurity(
   request: Request<any, any>,
-  response: Response<any, any>,
+  response: Response,
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
