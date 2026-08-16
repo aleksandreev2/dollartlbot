@@ -4,6 +4,7 @@ import { handleAccessChatMemberUpdate } from './access-gate';
 import { runAdminEventMaintenance } from './admin-events';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
 import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
+import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
 import { handleDownloadGateUpdate } from './download-gate';
 import { handleUpdate } from './handlers';
@@ -22,6 +23,8 @@ export default {
     if (request.method !== 'POST' || url.pathname !== '/webhook') {
       const scannerResponse = await handleAssetScannerRequest(request, env);
       if (scannerResponse) return scannerResponse;
+      const coverVariant = await handleCoverVariantRequest(request, env);
+      if (coverVariant) return coverVariant;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
       if (readerSecurity) return readerSecurity;
 
