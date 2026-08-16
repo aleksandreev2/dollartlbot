@@ -27,5 +27,8 @@ jobs:
         run: go test ./...
       - name: Validate scanner shell
         run: sh -n scanner/container/start.sh
+      - name: Build ClamAV container image
+        working-directory: scanner/container
+        run: docker build -t dollartlbot-clamav-scanner:ci .
       - name: Validate security extension JavaScript
         run: node --check public/app/admin-regional-access.js
