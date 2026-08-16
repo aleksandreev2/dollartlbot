@@ -2,13 +2,16 @@ import baseWorker from './index';
 import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
 import { runAdminEventMaintenance } from './admin-events';
+import { handleAdminFileSecurityRequest } from './admin-file-security';
 import { handleAdminReaderSecurityRequest } from './admin-reader-security';
 import { handleAdminRegionalAccessRequest } from './admin-regional-access';
+import { guardAssetScanEnforcementConfig } from './asset-security-config-guard';
 import { capturePublicationAssetSecurity, handleAssetScannerRequest } from './asset-security';
 import { handleCoverVariantRequest } from './cover-variants';
 import { errorText, safeSecretEqual } from './db';
 import { handleDownloadGateUpdate } from './download-gate';
 import { recordPublicationRateLimit } from './download-rate-limit';
+import { handleFileDownloadPreflight } from './file-download-preflight';
 import { handleUpdate } from './handlers';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handleRegionVerificationRequest } from './regional-access';
@@ -33,6 +36,10 @@ export default {
       if (coverVariant) return coverVariant;
       const regionalAdmin = await handleAdminRegionalAccessRequest(request, env);
       if (regionalAdmin) return regionalAdmin;
+      const fileSecurityAdmin = await handleAdminFileSecurityRequest(request, env);
+      if (fileSecurityAdmin) return fileSecurityAdmin;
+      const enforcementGuard = await guardAssetScanEnforcementConfig(request, env);
+      if (enforcementGuard) return enforcementGuard;
       const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
       if (readerSecurity) return readerSecurity;
 
@@ -95,6 +102,8 @@ export default {
           // Automatic linked-discussion forward handled by publishing center.
         } else if (await handleRegionalDownloadPreflight(update, env, telegram)) {
           // Free download requires a fresh verified country; CIS users are routed to Russian translations.
+        } else if (await handleFileDownloadPreflight(update, env, telegram)) {
+          // Quarantine is absolute; optional enforcement also requires a healthy scanner and CLEAN verdicts.
         } else if (await handleDownloadGateUpdate(update, env, telegram, ctx)) {
           // Tracked Thank you / Donate / private download deep-link handled here.
         } else {
