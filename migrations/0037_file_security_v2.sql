@@ -28,6 +28,6 @@ CREATE INDEX IF NOT EXISTS idx_asset_scanner_health_seen
 
 DELETE FROM file_scan_cache WHERE verdict='failed';
 
-INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('asset_scan_scanner_stale_seconds','300',datetime('now'));
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('asset_scan_scanner_stale_seconds','900',datetime('now'));
 INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('asset_scan_claim_timeout_seconds','900',datetime('now'));
 INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('asset_scan_max_attempts','5',datetime('now'));
