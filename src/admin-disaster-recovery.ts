@@ -38,7 +38,7 @@ export async function handleAdminDisasterRecoveryRequest(
 
   try {
     if (request.method === 'GET') return miniAppJson(await snapshot(env));
-    const body = await request.json<ActionBody>().catch(() => ({}));
+    const body: ActionBody = await request.json<ActionBody>().catch(() => ({} as ActionBody));
     const action = String(body.action || '');
 
     if (action === 'create_backup') {
