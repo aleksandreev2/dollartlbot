@@ -1,6 +1,6 @@
 # Dollar TL Telegram Bot
 
-Telegram bot for collecting novel translation requests, verifying Boosty access, and managing a public translation queue.
+Telegram bot for collecting novel translation requests, verifying Boosty access, managing a public translation queue, and publishing Dollar TL releases.
 
 ## Current rules
 
@@ -42,19 +42,72 @@ Operational requirements:
 
 The access channel is intentionally independent from the publication channel so changing publishing destinations cannot accidentally lock users in or out.
 
+## Release download gate
+
+The release gate is feature-flagged and controlled from **Admin → Безопасность**.
+
+When `download_gate_enabled` is on for new publications with attached files:
+
+1. the channel post is published without an inline keyboard, preserving Telegram's native comments button;
+2. the linked discussion receives a Dollar TL Bot reply with title, genres, `Thank you.` and optional `Donate` buttons;
+3. `Thank you.` records the exact Telegram user and opens a private bot deep-link;
+4. access is rechecked before delivery;
+5. the bot delivers the release privately and records successful/failed/repeat deliveries per user and per asset;
+6. an existing Telegram `file_id` is reused whenever possible so repeated deliveries do not reread/reupload the R2 object.
+
+Historical publications are migrated as `download_gate_status='legacy'` and keep the previous delivery semantics even after the new gate is enabled. This avoids retroactive bot comments on old releases.
+
+## Anti-spam and abuse protection
+
+Telegram webhook dedupe remains the first protection layer. A per-user SQLite Durable Object (`USER_GUARD`) then keeps hot anti-abuse state without using D1 as a per-click counter.
+
+Modes:
+
+- `off` — bypass the guard;
+- `monitor` — collect suspicious activity without blocking (default after migration);
+- `enforce` — apply cooldown/rate-limit/temporary-block decisions.
+
+Manual admin blocks in `user_admin_controls` remain authoritative. Security telemetry stores the Telegram user ID, action, decision and reason; repeated blocked bursts are aggregated rather than turning every allowed interaction into a D1 row.
+
+## Publication asset security
+
+Publication assets receive a SHA-256 after upload. The hash is checked against `file_scan_cache`; a still-valid cached verdict is reused, otherwise the asset becomes `pending` for the scanner.
+
+`asset_scan_enforcement` defaults to **off**. When enabled, private release delivery is fail-closed: every attached asset must have `scan_status='clean'`.
+
+The Worker exposes a token-protected scanner contract:
+
+- `GET /internal/asset-scan/assets/:id` — stream one R2 publication asset to the scanner;
+- `POST /internal/asset-scan/result` — submit the verdict, engine/signature metadata and matching SHA-256.
+
+Set `ASSET_SCANNER_TOKEN` only when a ClamAV/external scanner is connected. Do **not** enable AV enforcement until the scanner is producing `clean` verdicts.
+
+Raw submission files are still represented primarily by Telegram `file_id`; the publication-asset security pipeline applies to files uploaded for reader distribution.
+
+## Cover optimization
+
+Existing cover URLs keep their legacy fallback. Manual admin cover uploads additionally generate WebP variants in the Mini App at widths **160 / 320 / 640** and store them in R2 under versioned immutable keys.
+
+When `cover_variants_enabled` is enabled:
+
+- catalog cards use responsive `srcset` variants;
+- detail pages prefer the 640px variant;
+- variant responses use `Cache-Control: public, max-age=31536000, immutable`;
+- the version is part of the URL, so replacing a cover naturally invalidates the old URL without cache purges.
+
+If a client cannot generate WebP variants, the existing original-cover path remains the fallback.
+
 ## Admin features
 
 Use `/admin` from the Telegram account configured as `ADMIN_TELEGRAM_ID`.
 
-The admin dashboard contains:
+The admin dashboard contains Pending requests, Translation queue, In-progress titles, Completed requests and All requests. Admin actions include Accept → Queue, Reject, Reject + Return Slot, Raw File, Message User, Start, Complete, Back to Queue and queue reordering.
 
-- Pending requests
-- Translation queue
-- In-progress titles
-- Completed requests
-- All requests
+Additional release/security views:
 
-Admin actions include Accept → Queue, Reject, Reject + Return Slot, Raw File, Message User, Start, Complete, Back to Queue and queue reordering.
+- **Publishing → Readers** on published releases shows concrete Telegram users, Thank you clicks, successful deliveries, repeats and Donate clicks;
+- **Безопасность** shows anti-spam telemetry, concrete rate-limited users, asset scan states and feature controls;
+- per-user reader/security APIs expose the same history for the user control center.
 
 See `ADMIN_GUIDE.md` for the full admin workflow.
 
@@ -73,13 +126,15 @@ See `ADMIN_GUIDE.md` for the full admin workflow.
 11. Additional notes (optional)
 12. Review and confirm
 
-Raw files are not downloaded or stored by Cloudflare. The bot stores Telegram's `file_id` and re-sends the existing Telegram file to the owner.
+Raw submission files are not stored as permanent Cloudflare copies. The bot stores Telegram's `file_id` for the request workflow.
 
 ## Stack
 
 - Telegram Bot API webhook
 - Cloudflare Workers
+- Cloudflare Durable Objects
 - Cloudflare D1
+- Cloudflare R2
 - Cloudflare Cron Trigger
 - TypeScript
 
@@ -101,17 +156,23 @@ ADMIN_TELEGRAM_ID="..."
 BOOSTY_GROUP_ID="..."
 ```
 
+Optional while the scanner is not connected:
+
+```dotenv
+ASSET_SCANNER_TOKEN=""
+```
+
 ## First deployment
 
 ```powershell
 npm install
 npx wrangler login
-npm run typecheck
-npx wrangler deploy --secrets-file .dev.vars
+npm run release:check
 npm run db:remote
+npx wrangler deploy --secrets-file .dev.vars
 ```
 
-Then configure the webhook:
+Then configure the webhook if this is a new bot/URL:
 
 ```powershell
 $env:WEBHOOK_URL="https://dollartlbot.<your-subdomain>.workers.dev"
@@ -120,17 +181,32 @@ npm run configure-bot
 
 ## Updating the live bot
 
-When new migrations exist, use this order:
+Normal production update:
 
 ```powershell
 git pull
 npm install
-npm run db:remote
-npm run typecheck
-npx wrangler deploy --secrets-file .dev.vars
+npm run release:prod
 ```
 
-If Telegram commands changed, refresh them afterwards:
+`release:prod` performs:
+
+1. TypeScript/type-generation and architecture audits;
+2. `wrangler deploy --dry-run`;
+3. remote D1 migrations;
+4. production `wrangler deploy --secrets-file .dev.vars`.
+
+The new migrations are additive. Their initial rollout state is deliberately conservative:
+
+- `anti_abuse_mode = monitor`
+- `download_gate_enabled = 0`
+- `asset_scan_enforcement = 0`
+- `cover_variants_enabled = 0`
+- `donate_tracking_enabled = 1`
+
+After deployment, change these from **Admin → Безопасность** rather than editing D1 manually. Recommended rollout: observe anti-spam in `monitor`, enable download gate, enable cover variants after new variants exist, and enable AV enforcement only after scanner health is confirmed.
+
+If Telegram commands themselves change in a later release, refresh them afterwards:
 
 ```powershell
 $env:WEBHOOK_URL="https://dollartlbot.<your-subdomain>.workers.dev"
