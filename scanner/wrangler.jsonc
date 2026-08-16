@@ -9,7 +9,7 @@
     "head_sampling_rate": 1
   },
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": ["*/5 * * * *"]
   },
   "vars": {
     "MAIN_WORKER_ORIGIN": "https://dollartlbot.sashahumortele2.workers.dev",
