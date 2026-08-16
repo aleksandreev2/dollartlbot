@@ -2,6 +2,7 @@ import baseWorker from './index';
 import { guardTelegramUpdate } from './anti-abuse';
 import { handleAccessChatMemberUpdate } from './access-gate';
 import { runAdminEventMaintenance } from './admin-events';
+import { handleAdminReaderSecurityRequest } from './admin-reader-security';
 import { errorText, safeSecretEqual } from './db';
 import { handleDownloadGateUpdate } from './download-gate';
 import { handleUpdate } from './handlers';
@@ -18,6 +19,8 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (request.method !== 'POST' || url.pathname !== '/webhook') {
+      const readerSecurity = await handleAdminReaderSecurityRequest(request, env);
+      if (readerSecurity) return readerSecurity;
       return baseWorker.fetch(request, env, ctx);
     }
 
