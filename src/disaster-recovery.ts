@@ -7,7 +7,7 @@ const FORMAT_VERSION = 1;
 const MAX_VERIFY_CHUNKS = 5000;
 const MAX_TABLES = 256;
 const MAX_BACKUP_ROWS = 2_000_000;
-const EXCLUDED_TABLES = new Set(['dr_backup_runs','dr_backup_chunks','dr_backup_verifications']);
+const EXCLUDED_TABLES = new Set(['d1_migrations','dr_backup_runs','dr_backup_chunks','dr_backup_verifications']);
 
 type BackupTrigger = 'manual' | 'scheduled';
 type BackupChunk = {
@@ -67,9 +67,8 @@ export async function createPortableBackup(
       ORDER BY name
     `).all<{ name: string; sql: string | null }>();
     const tables = schemaRows.results
-      .filter((row) => safeIdentifier(row.name) && !EXCLUDED_TABLES.has(row.name))
-      .slice(0, MAX_TABLES);
-    if (schemaRows.results.length > MAX_TABLES) throw new Error(`Too many D1 tables for portable backup: ${schemaRows.results.length}.`);
+      .filter((row) => safeIdentifier(row.name) && !EXCLUDED_TABLES.has(row.name));
+    if (tables.length > MAX_TABLES) throw new Error(`Too many D1 application tables for portable backup: ${tables.length}.`);
 
     const manifestTables: BackupTable[] = [];
     let totalRows = 0;
@@ -146,9 +145,10 @@ export async function createPortableBackup(
     return backupSummary(env, id);
   } catch (error) {
     const message = errorText(error).slice(0, 1500);
+    const failedAt = new Date().toISOString();
     await env.DB.prepare(`
       UPDATE dr_backup_runs SET status='failed',error_text=?,completed_at=?,updated_at=? WHERE id=?
-    `).bind(message, new Date().toISOString(), new Date().toISOString(), id).run().catch(() => undefined);
+    `).bind(message, failedAt, failedAt, id).run().catch(() => undefined);
     throw error;
   }
 }
@@ -247,7 +247,11 @@ export async function runDisasterRecoveryMaintenance(env: Env): Promise<void> {
   `).first<{ completed_at: string }>().catch(() => null);
   const lastCompleted = completed?.completed_at ? Date.parse(completed.completed_at) : 0;
   if (lastCompleted && lastCompleted > Date.now() - intervalHours * 60 * 60_000) return;
-  await createPortableBackup(env, null, 'scheduled');
+
+  const created = await createPortableBackup(env, null, 'scheduled');
+  const backupId = String(created.id || '');
+  if (!backupId) throw new Error('Scheduled backup completed without an ID.');
+  await verifyPortableBackup(env, backupId, null);
 }
 
 export async function pruneBackupRetention(env: Env, limit = 10): Promise<number> {
@@ -377,13 +381,12 @@ async function markStaleRunsFailed(env: Env): Promise<void> {
 }
 
 async function deleteR2Prefix(bucket: R2Bucket, prefix: string): Promise<void> {
-  let cursor: string | undefined;
-  do {
-    const page = await bucket.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+  for (;;) {
+    const page = await bucket.list({ prefix, limit: 1000 });
     const keys = page.objects.map((object) => object.key);
-    if (keys.length) await bucket.delete(keys);
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
+    if (!keys.length) return;
+    await bucket.delete(keys);
+  }
 }
 
 function jsonSafe(row: Record<string, unknown>): Record<string, unknown> {
