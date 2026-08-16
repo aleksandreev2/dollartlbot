@@ -11,6 +11,7 @@ import { recordPublicationRateLimit } from './download-rate-limit';
 import { handleUpdate } from './handlers';
 import { handleLinkedPublicationDiscussion } from './publishing-discussion';
 import { handleRegionVerificationRequest } from './regional-access';
+import { handleRegionalDownloadPreflight } from './regional-download-preflight';
 import { handleReferralChatMemberUpdate } from './referrals';
 import { TelegramClient, type TelegramUpdate } from './telegram';
 import { denyBlockedPrivateBotUpdate } from './user-controls';
@@ -89,6 +90,8 @@ export default {
           // Admin-blocked private accounts stop here.
         } else if (update.message && await handleLinkedPublicationDiscussion(update.message, env, telegram, ctx)) {
           // Automatic linked-discussion forward handled by publishing center.
+        } else if (await handleRegionalDownloadPreflight(update, env, telegram)) {
+          // Free download requires a fresh verified country; CIS users are routed to Russian translations.
         } else if (await handleDownloadGateUpdate(update, env, telegram, ctx)) {
           // Tracked Thank you / Donate / private download deep-link handled here.
         } else {
