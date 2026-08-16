@@ -18,4 +18,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cover_variants_r2_key
 CREATE INDEX IF NOT EXISTS idx_cover_variants_submission_version
   ON cover_variants(submission_id, cover_version);
 
-INSERT OR IGNORE INTO app_settings(key,value) VALUES ('cover_variants_enabled','0');
+INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES ('cover_variants_enabled','0',datetime('now'));
