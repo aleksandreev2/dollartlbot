@@ -59,9 +59,9 @@ need(worker,'denyBlockedPrivateBotUpdate(update, env, telegram)','Telegram bot a
 
 for(const token of [
   "'access_restricted'",
-  "const restricted = error.code === 'access_restricted'",
-  "icon(restricted ? 'shield-x'",
-  '!restricted && joinUrl',
+  "const accountRestricted = error.code === 'access_restricted'",
+  "accountRestricted ? 'shield-x'",
+  '!hardRestricted && joinUrl',
 ])need(gateUi,token,'Mini App restricted access UX');
 
 for(const token of [

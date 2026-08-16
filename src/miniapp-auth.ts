@@ -6,7 +6,8 @@ import {
 } from './access-gate';
 import { getUser, isAdmin, upsertUser } from './db';
 import { normalizeLocale, t } from './i18n/index';
-import { captureRegionFromRequest } from './regional-access';
+import { evaluateMiniAppRegionalAccess } from './miniapp-regional-gate';
+import { captureRegionFromRequest, requestCountry } from './regional-access';
 import { TelegramClient, type TelegramUser } from './telegram';
 import { isUserAdministrativelyBlocked } from './user-controls';
 
@@ -88,11 +89,23 @@ export async function authenticateMiniAppRequest(
   }
 
   await upsertUser(env, telegramUser);
+  const observedCountry = requestCountry(request);
   await captureRegionFromRequest(request, telegramUser.id, env, 'miniapp').catch((error) => {
     console.warn(JSON.stringify({ event: 'miniapp_region_capture_failed', user_id: telegramUser.id, error: String(error) }));
   });
+  if (observedCountry) {
+    // captureRegionFromRequest intentionally suppresses same-country writes for
+    // several hours. A changed country is security-relevant, so persist it
+    // immediately even when that optimization cache is warm.
+    const observedAt = new Date().toISOString();
+    await env.DB.prepare(`
+      UPDATE users
+      SET country_code=?,country_verified_at=?,country_source='miniapp'
+      WHERE telegram_id=? AND COALESCE(country_code,'')<>?
+    `).bind(observedCountry, observedAt, telegramUser.id, observedCountry).run();
+  }
   const dbUser = await getUser(env, telegramUser.id);
-  const locale = normalizeLocale(dbUser?.language);
+  const locale = normalizeLocale(dbUser?.language || telegramUser.language_code);
   const admin = isAdmin(telegramUser.id, env);
 
   if (!admin && await isUserAdministrativelyBlocked(env, telegramUser.id)) {
@@ -108,6 +121,23 @@ export async function authenticateMiniAppRequest(
   }
 
   const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN, env);
+
+  // Regional policy is a canonical Mini App authorization layer. Restricted
+  // users retain the ordinary Telegram-bot suggestion flow, but cannot use any
+  // authenticated Mini App capability or bypass the lock by calling APIs
+  // directly. Admin and Boosty exemptions are resolved inside the policy.
+  if (!admin) {
+    const regionalGate = await evaluateMiniAppRegionalAccess(telegramUser.id, locale, env, telegram);
+    if (regionalGate) {
+      return miniAppJsonError(
+        regionalGate.code,
+        regionalGate.message,
+        403,
+        regionalGate.details,
+      );
+    }
+  }
+
   const access = await checkBotAccess(telegramUser.id, env, telegram, {
     force: request.headers.get('x-access-recheck') === '1',
     activationSource: 'miniapp',

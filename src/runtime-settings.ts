@@ -3,6 +3,15 @@ const DEFAULT_TTL_MS = 60_000;
 type CacheEntry = { value: string; expiresAt: number };
 const cache = new Map<string, CacheEntry>();
 
+// Some feature flags are policy prerequisites rather than independent toggles.
+// Regional routing cannot be enforced while publication files are delivered
+// publicly, so an enabled regional policy always implies the private download
+// gate. Keeping the implication here protects every existing call site that
+// gates publishing, callbacks, deep links, and maintenance.
+const FLAG_IMPLICATIONS: Record<string, readonly string[]> = {
+  download_gate_enabled: ['regional_routing_enabled'],
+};
+
 export async function getRuntimeSetting(
   env: Env,
   key: string,
@@ -53,8 +62,13 @@ export async function getRuntimeSettings(
 }
 
 export async function runtimeFlag(env: Env, key: string, fallback = false): Promise<boolean> {
-  const value = (await getRuntimeSetting(env, key, fallback ? '1' : '0')).toLowerCase();
-  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+  const value = await getRuntimeSetting(env, key, fallback ? '1' : '0');
+  if (parseFlag(value)) return true;
+
+  for (const impliedBy of FLAG_IMPLICATIONS[key] || []) {
+    if (parseFlag(await getRuntimeSetting(env, impliedBy, '0'))) return true;
+  }
+  return false;
 }
 
 export function runtimeNumber(
@@ -72,4 +86,9 @@ export function runtimeNumber(
 export function invalidateRuntimeSetting(key?: string): void {
   if (key) cache.delete(key);
   else cache.clear();
+}
+
+function parseFlag(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 }
