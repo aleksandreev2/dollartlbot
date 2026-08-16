@@ -5,6 +5,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o
 
 FROM clamav/clamav:stable
 USER root
+RUN apk add --no-cache netcat-openbsd
 COPY clamd.conf /etc/clamav/clamd.conf
 COPY start.sh /opt/dollar-scanner/start.sh
 COPY --from=builder /out/scanner /opt/dollar-scanner/scanner
