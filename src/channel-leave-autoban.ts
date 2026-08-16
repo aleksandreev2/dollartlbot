@@ -37,6 +37,7 @@ export async function handleChannelLeaveAutoBan(
 
   const user = update.new_chat_member.user;
   if (user.is_bot || isAdmin(user.id, env)) return;
+  if (['creator', 'administrator'].includes(update.old_chat_member.status)) return;
   if (!isActiveChatMember(update.old_chat_member) || update.new_chat_member.status !== 'left') return;
 
   // ChatMemberUpdated.from is the performer of the action. Requiring the same
