@@ -12,6 +12,9 @@ type Finding = {
 };
 
 export async function runProductionSecurityAlerts(env: Env, telegram: TelegramClient): Promise<void> {
+  await pruneSecurityEvents(env).catch((error) => {
+    console.warn(JSON.stringify({ event: 'security_event_retention_failed', error: errorText(error) }));
+  });
   if (!(await runtimeFlag(env, 'security_alerts_enabled', true))) return;
   const adminId = Number(env.ADMIN_TELEGRAM_ID || 0);
   if (!Number.isSafeInteger(adminId) || adminId <= 0) return;
@@ -129,6 +132,16 @@ export async function collectSecurityFindings(env: Env): Promise<Finding[]> {
     });
   }
   return findings;
+}
+
+async function pruneSecurityEvents(env: Env): Promise<void> {
+  const cutoff = new Date(Date.now() - 180 * 86_400_000).toISOString();
+  await env.DB.prepare(`
+    DELETE FROM security_events
+    WHERE id IN (
+      SELECT id FROM security_events WHERE created_at<? ORDER BY id LIMIT 500
+    )
+  `).bind(cutoff).run();
 }
 
 async function shouldFire(env: Env, finding: Finding, cooldownMinutes: number): Promise<boolean> {
