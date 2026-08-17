@@ -67,7 +67,8 @@ export async function sendPersonalizedReaderAsset(
       noticeTitle: copy.termsTitle,
       noticeBody: copy.termsBody,
     });
-    const file = new File([personalized.bytes], asset.file_name, { type:'application/epub+zip' });
+    const payload = Uint8Array.from(personalized.bytes);
+    const file = new File([payload.buffer], asset.file_name, { type:'application/epub+zip' });
     const sent = await telegram.sendDocumentUpload(userId,file);
     const personalizedTelegramFileId = sent.document?.file_id || null;
     const updatedAt = new Date().toISOString();
