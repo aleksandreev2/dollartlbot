@@ -1,17 +1,22 @@
 import { scannerHealth } from './asset-security';
+import { identifyLeakedEpub, recordLeakIncident } from './leak-checker';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
+import { runtimeFlag } from './runtime-settings';
 
-const PATH = '/api/app/admin/security/scanner';
+const SCANNER_PATH = '/api/app/admin/security/scanner';
+const LEAK_PATH = '/api/app/admin/security/leak-checker';
 const MAX_BODY_BYTES = 16 * 1024;
+const MAX_LEAK_FILE_BYTES = 50 * 1024 * 1024;
 
 export async function handleAdminFileSecurityRequest(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
-  if (url.pathname !== PATH || !['GET','POST'].includes(request.method)) return null;
+  if (![SCANNER_PATH, LEAK_PATH].includes(url.pathname) || !['GET','POST'].includes(request.method)) return null;
 
   const auth = await authenticateMiniAppRequest(request, env);
   if (auth instanceof Response) return auth;
   if (!auth.admin) return miniAppJsonError('forbidden', 'Admin access required.', 403);
 
+  if (url.pathname === LEAK_PATH) return handleLeakChecker(request, env, auth.telegramUser.id);
   if (request.method === 'GET') return report(env);
 
   const length = Number(request.headers.get('content-length') || 0);
@@ -61,6 +66,49 @@ export async function handleAdminFileSecurityRequest(request: Request, env: Env)
   }
 
   return miniAppJsonError('invalid_action', 'Use retry_failed, rescan_asset or backfill.', 400);
+}
+
+async function handleLeakChecker(request: Request, env: Env, adminUserId: number): Promise<Response> {
+  const enabled = await runtimeFlag(env, 'reader_leak_checker_enabled', false);
+  if (request.method === 'GET') {
+    const rows = await env.DB.prepare(`
+      SELECT id,submission_id,publication_id,asset_id,distribution_id,matched_user_id,
+             source_url,source_domain,evidence_sha256,confidence,status,discovered_at,
+             reviewed_at,reviewed_by,notes
+      FROM leak_incidents ORDER BY discovered_at DESC,id DESC LIMIT 100
+    `).all<Record<string, unknown>>();
+    return miniAppJson({ enabled, incidents: rows.results });
+  }
+  if (!enabled) return miniAppJsonError('leak_checker_disabled', 'Leak checker is disabled by rollout settings.', 503);
+
+  const length = Number(request.headers.get('content-length') || 0);
+  if (Number.isFinite(length) && length > MAX_LEAK_FILE_BYTES + 256 * 1024) {
+    return miniAppJsonError('payload_too_large', 'Leak evidence file is too large.', 413);
+  }
+
+  let form: FormData;
+  try { form = await request.formData(); }
+  catch { return miniAppJsonError('invalid_form', 'Use multipart/form-data with an EPUB file.', 400); }
+  const evidence = form.get('file');
+  if (!(evidence instanceof File)) return miniAppJsonError('file_required', 'EPUB evidence file is required.', 400);
+  if (evidence.size <= 0 || evidence.size > MAX_LEAK_FILE_BYTES) return miniAppJsonError('invalid_file_size', 'EPUB evidence must be between 1 byte and 50 MB.', 400);
+  if (!evidence.name.toLowerCase().endsWith('.epub') && evidence.type !== 'application/epub+zip') {
+    return miniAppJsonError('unsupported_file', 'Leak checker v1 accepts EPUB files only.', 415);
+  }
+
+  let match;
+  try { match = await identifyLeakedEpub(env, await evidence.arrayBuffer()); }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return miniAppJsonError('invalid_epub', message.slice(0,300) || 'Could not inspect EPUB.', 400);
+  }
+
+  const sourceUrl = String(form.get('source_url') || '').trim().slice(0,2000) || null;
+  const shouldRecord = String(form.get('record') || '') === '1';
+  const incidentId = shouldRecord && match.matched
+    ? await recordLeakIncident(env, match, { sourceUrl, reviewedBy:adminUserId })
+    : null;
+  return miniAppJson({ ok:true, match, recorded:Boolean(incidentId), incident_id:incidentId });
 }
 
 async function report(env: Env): Promise<Response> {
