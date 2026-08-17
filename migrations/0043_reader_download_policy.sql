@@ -54,5 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_reader_download_grants_lookup
 INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES
   ('reader_terms_enabled','1',CURRENT_TIMESTAMP),
   ('reader_terms_version','1',CURRENT_TIMESTAMP),
+  ('reader_thank_you_enforcement','1',CURRENT_TIMESTAMP),
+  ('reader_download_grant_minutes','15',CURRENT_TIMESTAMP),
   ('reader_daily_quota_mode','monitor',CURRENT_TIMESTAMP),
   ('reader_daily_quota_limit','5',CURRENT_TIMESTAMP);
