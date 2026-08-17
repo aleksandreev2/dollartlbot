@@ -7,6 +7,7 @@
   loadReaderAssets();
   let releases = null;
   let loading = null;
+  let refreshEpoch = 0;
 
   const copy = {
     en:{title:'Library',subtitle:'Read and download Dollar TL translations.',empty:'No translated titles have been published yet.',open:'Open title',files:n=>`${n} file${n===1?'':'s'}`,chapter:'Ch.'},
@@ -22,19 +23,25 @@
     ur:{title:'لائبریری',subtitle:'Dollar TL تراجم پڑھیں اور ڈاؤن لوڈ کریں۔',empty:'ابھی کوئی ترجمہ شدہ عنوان شائع نہیں ہوا۔',open:'عنوان کھولیں',files:n=>`${n} فائل`,chapter:'باب'},
   };
 
+  function withBuild(url){
+    const build=String(window.DTL_BUILD_ID||'').trim();
+    if(!build)return url;
+    try{const parsed=new URL(url,location.origin);parsed.searchParams.set('dtl_build',build);return `${parsed.pathname}${parsed.search}${parsed.hash}`;}catch{return url;}
+  }
+
   function loadReaderAssets(){
     if(!document.querySelector('link[data-reader-title-css]')){
-      const link=document.createElement('link');link.rel='stylesheet';link.href='/app/reader-title-ui.css?v=20260817-reader1';link.dataset.readerTitleCss='1';document.head.appendChild(link);
+      const link=document.createElement('link');link.rel='stylesheet';link.href=withBuild('/app/reader-title-ui.css?v=20260817-reader1');link.dataset.readerTitleCss='1';document.head.appendChild(link);
     }
     if(window.DTL_READER_TITLE){queueMicrotask(()=>window.DTL_READER_TITLE?.mount?.());return;}
     if(!document.querySelector('script[data-reader-title-js]')){
-      const script=document.createElement('script');script.src='/app/reader-title-ui.js?v=20260817-reader1';script.dataset.readerTitleJs='1';script.defer=true;script.addEventListener('load',()=>queueMicrotask(()=>window.DTL_READER_TITLE?.mount?.()),{once:true});document.head.appendChild(script);
+      const script=document.createElement('script');script.src=withBuild('/app/reader-title-ui.js?v=20260817-reader1');script.dataset.readerTitleJs='1';script.defer=true;script.addEventListener('load',()=>queueMicrotask(()=>window.DTL_READER_TITLE?.mount?.()),{once:true});document.head.appendChild(script);
     }
   }
 
   function locale(){ const value=runtime.locale(); return copy[value]?value:'en'; }
   function t(){ return copy[locale()] || copy.en; }
-  function esc(value=''){ return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+  function esc(value=''){ return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[ch])); }
 
   function formatDate(value){
     if(!value) return '';
@@ -48,12 +55,25 @@
     if(releases) return Promise.resolve(releases);
     if(loading) return loading;
     if(!tg?.initData){ releases=[]; queueMicrotask(rerenderIfHome); return Promise.resolve(releases); }
+    const epoch=refreshEpoch;
     loading=fetch('/api/app/releases',{cache:'no-store',headers:{'x-telegram-init-data':tg.initData}})
       .then(async r=>{const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d?.error?.message||`HTTP ${r.status}`);return Array.isArray(d.releases)?d.releases:[];})
-      .then(rows=>{releases=rows;return rows;})
-      .catch(()=>{releases=[];return[];})
-      .finally(()=>{loading=null;rerenderIfHome();});
+      .then(rows=>{if(epoch===refreshEpoch)releases=rows;return rows;})
+      .catch(()=>{if(epoch===refreshEpoch)releases=[];return[];})
+      .finally(()=>{if(epoch===refreshEpoch){loading=null;rerenderIfHome();}});
     return loading;
+  }
+
+  function refreshReleases(){
+    refreshEpoch+=1;
+    releases=null;
+    loading=null;
+    const section=document.querySelector('.dtl-releases-section');
+    if(section)delete section.dataset.releaseState;
+    if(window.DTL_APP?.state?.view==='home'){
+      renderHomeReleaseSection();
+      void loadReleases();
+    }
   }
 
   function releaseCard(row){
@@ -98,6 +118,7 @@
 
   document.addEventListener('dtl:home',renderHomeReleaseSection);
   document.addEventListener('dtl:localechange',rerenderIfHome);
+  document.addEventListener('dtl:datarefresh',refreshReleases);
   document.addEventListener('click',event=>{
     const card=event.target.closest?.('[data-reader-title]');
     if(!card)return;
