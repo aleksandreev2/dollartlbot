@@ -26,8 +26,9 @@
     if(!document.querySelector('link[data-reader-title-css]')){
       const link=document.createElement('link');link.rel='stylesheet';link.href='/app/reader-title-ui.css?v=20260817-reader1';link.dataset.readerTitleCss='1';document.head.appendChild(link);
     }
-    if(!window.DTL_READER_TITLE&&!document.querySelector('script[data-reader-title-js]')){
-      const script=document.createElement('script');script.src='/app/reader-title-ui.js?v=20260817-reader1';script.dataset.readerTitleJs='1';script.defer=true;document.head.appendChild(script);
+    if(window.DTL_READER_TITLE){queueMicrotask(()=>window.DTL_READER_TITLE?.mount?.());return;}
+    if(!document.querySelector('script[data-reader-title-js]')){
+      const script=document.createElement('script');script.src='/app/reader-title-ui.js?v=20260817-reader1';script.dataset.readerTitleJs='1';script.defer=true;script.addEventListener('load',()=>queueMicrotask(()=>window.DTL_READER_TITLE?.mount?.()),{once:true});document.head.appendChild(script);
     }
   }
 
