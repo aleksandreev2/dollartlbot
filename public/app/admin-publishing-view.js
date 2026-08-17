@@ -82,7 +82,7 @@
           <div class="publisher-flow">
             <section class="publisher-flow-step publisher-flow-main">
               ${stepHead('1', 'Заявка и текст', 'Свяжи пост с заявкой — название и обложка подставятся автоматически.')}
-              <label class="admin-field"><span>Название для админки</span><input id="pubTitle" maxlength="180" placeholder="Например: Chapters 78–85 · Pure Love"></label>
+              <label class="admin-field"><span>Заголовок публикации <small>добавится в пост автоматически</small></span><input id="pubTitle" maxlength="180" placeholder="Например: Pure Love"></label>
               <label class="admin-field"><span>Текст поста <small id="pubCounter">0 / 700</small></span><textarea id="pubBody" maxlength="700" rows="8" placeholder="Напишите основной текст публикации…"></textarea></label>
             </section>
 
@@ -139,7 +139,25 @@
     }
   }
 
+  function normalizedHeading(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  }
+
+  function bodyStartsWithTitle(body, title) {
+    const firstLine = String(body || '').split(/\r?\n/, 1)[0] || '';
+    return Boolean(firstLine.trim() && normalizedHeading(firstLine) === normalizedHeading(title));
+  }
+
+  function publicationPreviewText(title, body) {
+    const heading = String(title || '').trim();
+    const copy = String(body || '').trim();
+    if (!heading) return copy;
+    if (!copy) return heading;
+    return bodyStartsWithTitle(copy, heading) ? copy : `${heading}\n\n${copy}`;
+  }
+
   function bindPreview() {
+    const title = document.getElementById('pubTitle');
     const body = document.getElementById('pubBody');
     const footer = document.getElementById('pubFooter');
     const donate = document.getElementById('pubDonate');
@@ -150,13 +168,14 @@
       const counter = document.getElementById('pubCounter');
       const previewBody = document.getElementById('tgPreviewBody');
       if (counter && body) counter.textContent = `${body.value.length} / 700`;
-      if (previewBody && body) previewBody.textContent = body.value || 'Текст публикации появится здесь.';
+      if (previewBody) previewBody.textContent = publicationPreviewText(title?.value, body?.value) || 'Текст публикации появится здесь.';
       const footerNode = document.querySelector('.tg-preview-footer');
       if (footerNode) footerNode.style.display = footer?.checked ? 'block' : 'none';
       const donateNode = document.querySelector('.tg-preview-buttons')?.children?.[1];
       if (donateNode) donateNode.style.display = donate?.checked ? 'inline-flex' : 'none';
     };
 
+    title?.addEventListener('input', update);
     body?.addEventListener('input', update);
     footer?.addEventListener('change', update);
     donate?.addEventListener('change', update);
