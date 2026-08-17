@@ -6,6 +6,19 @@ type TelegramUserProfilePhotos = {
   photos: TelegramPhotoSize[][];
 };
 
+type TelegramChatPhoto = {
+  small_file_id: string;
+  small_file_unique_id: string;
+  big_file_id: string;
+  big_file_unique_id: string;
+};
+
+type TelegramChatFullInfo = {
+  id: number;
+  type: string;
+  photo?: TelegramChatPhoto;
+};
+
 type TelegramFile = {
   file_id: string;
   file_unique_id: string;
@@ -28,20 +41,10 @@ export async function adminUserAvatarResponse(
   if (!exists) return emptyAvatar(404);
 
   try {
-    const profile = await telegram.call<TelegramUserProfilePhotos>('getUserProfilePhotos', {
-      user_id: userId,
-      offset: 0,
-      limit: 1,
-    });
-    const sizes = Array.isArray(profile.photos?.[0]) ? profile.photos[0] : [];
-    if (!sizes.length) return emptyAvatar(204);
+    const fileId = await currentAvatarFileId(userId, telegram);
+    if (!fileId) return emptyAvatar(204);
 
-    const largest = sizes.reduce((best, candidate) => {
-      const bestArea = Number(best.width || 0) * Number(best.height || 0);
-      const candidateArea = Number(candidate.width || 0) * Number(candidate.height || 0);
-      return candidateArea > bestArea ? candidate : best;
-    });
-    const file = await telegram.call<TelegramFile>('getFile', { file_id: largest.file_id });
+    const file = await telegram.call<TelegramFile>('getFile', { file_id: fileId });
     const filePath = safeTelegramFilePath(file.file_path);
     if (!filePath) return emptyAvatar(204);
 
@@ -64,6 +67,35 @@ export async function adminUserAvatarResponse(
     });
     return emptyAvatar(204);
   }
+}
+
+async function currentAvatarFileId(userId: number, telegram: TelegramClient): Promise<string | null> {
+  // getChat exposes the current chat photo for a private chat. Prefer it so the
+  // admin sees the user's current avatar instead of relying on profile history.
+  try {
+    const chat = await telegram.call<TelegramChatFullInfo>('getChat', { chat_id: userId });
+    if (Number(chat.id) === userId && chat.type === 'private' && chat.photo?.big_file_id) {
+      return chat.photo.big_file_id;
+    }
+  } catch {
+    // Fall back to profile photos below. Some accounts/privacy combinations may
+    // not expose ChatFullInfo.photo even though profile photo history is usable.
+  }
+
+  const profile = await telegram.call<TelegramUserProfilePhotos>('getUserProfilePhotos', {
+    user_id: userId,
+    offset: 0,
+    limit: 1,
+  });
+  const sizes = Array.isArray(profile.photos?.[0]) ? profile.photos[0] : [];
+  if (!sizes.length) return null;
+
+  const largest = sizes.reduce((best, candidate) => {
+    const bestArea = Number(best.width || 0) * Number(best.height || 0);
+    const candidateArea = Number(candidate.width || 0) * Number(candidate.height || 0);
+    return candidateArea > bestArea ? candidate : best;
+  });
+  return largest.file_id || null;
 }
 
 function safeTelegramFilePath(value: unknown): string | null {
