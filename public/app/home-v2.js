@@ -41,7 +41,7 @@
 
   function locale(){ const value=runtime.locale(); return copy[value]?value:'en'; }
   function t(){ return copy[locale()] || copy.en; }
-  function esc(value=''){ return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[ch])); }
+  function esc(value=''){ return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 
   function formatDate(value){
     if(!value) return '';
