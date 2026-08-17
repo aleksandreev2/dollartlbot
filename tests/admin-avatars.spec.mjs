@@ -11,7 +11,7 @@ test('реальные Telegram-аватары появляются во все�
     avatarRequests.push({url:route.request().url(),headers:await route.request().allHeaders()});
     await route.fulfill({status:200,contentType:'image/svg+xml',body:svg});
   });
-  await page.route('https://dtl.test/',route=>route.fulfill({status:200,contentType:'text/html',body:`
+  await page.route('https://dtl.test/',route=>route.fulfill({status:200,headers:{'content-type':'text/html; charset=utf-8'},body:`
     <div class="admin-v2"><main class="admin-content">
       <button class="admin-user-row selected" data-user-id="101"><span class="admin-user-avatar">A</span></button>
       <span class="admin-profile-avatar">A</span>
@@ -35,10 +35,10 @@ test('реальные Telegram-аватары появляются во все�
   await page.evaluate(()=>{
     window.Telegram={WebApp:{initData:'signed-admin-init-data'}};
     try{window.IntersectionObserver=undefined;}catch{}
-    const handlers=[];
-    window.__avatarTest={handlers};
+    const handlers=[];const patchers=[];
+    window.__avatarTest={handlers,patchers};
     window.DTL_RUNTIME={
-      registerPatcher(fn){fn();return()=>{};},
+      registerPatcher(fn){patchers.push(fn);fn();return()=>{};},
       registerResponseHandler(fn){handlers.push(fn);return()=>{};},
     };
     window.DTL_ADMIN={activeRoute(){return 'section:overview';}};
@@ -46,6 +46,7 @@ test('реальные Telegram-аватары появляются во все�
       let response=new Response(JSON.stringify(payload),{status:200,headers:{'content-type':'application/json'}});
       const context={pathname:new URL(`https://dtl.test${path}`).pathname};
       for(const handler of handlers)response=await handler(response,context);
+      for(const patcher of patchers)patcher();
     };
   });
   await page.addScriptTag({content:source});
@@ -59,6 +60,7 @@ test('реальные Telegram-аватары появляются во все�
   await page.locator('[data-stat-title-user="102"]').click();
   await page.evaluate(()=>{
     document.querySelector('[data-stat-title-user-detail]').innerHTML='<span class="statistics-user-avatar large">B</span>';
+    for(const patcher of window.__avatarTest.patchers)patcher();
   });
 
   const avatarSelectors=[
@@ -84,7 +86,7 @@ test('реальные Telegram-аватары появляются во все�
 
 test('если у пользователя нет фото, остаётся безопасный fallback',async({page})=>{
   await page.route('https://dtl.test/api/app/admin/users/999/avatar',route=>route.fulfill({status:204,body:''}));
-  await page.route('https://dtl.test/',route=>route.fulfill({status:200,contentType:'text/html',body:'<div class="admin-v2"><main class="admin-content"><button class="admin-user-row selected" data-user-id="999"><span class="admin-user-avatar">Ф</span></button></main></div>'}));
+  await page.route('https://dtl.test/',route=>route.fulfill({status:200,headers:{'content-type':'text/html; charset=utf-8'},body:'<div class="admin-v2"><main class="admin-content"><button class="admin-user-row selected" data-user-id="999"><span class="admin-user-avatar">Ф</span></button></main></div>'}));
   await page.goto('https://dtl.test/');
   await page.evaluate(()=>{
     window.Telegram={WebApp:{initData:'signed-admin-init-data'}};
