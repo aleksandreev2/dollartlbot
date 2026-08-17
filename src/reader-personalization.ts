@@ -20,7 +20,6 @@ type PersonalizedRow = {
 export async function sendPersonalizedReaderAsset(
   userId: number,
   asset: PersonalizableAsset,
-  locale: string,
   env: Env,
   telegram: TelegramClient,
 ): Promise<TelegramMessage | null> {
@@ -32,7 +31,7 @@ export async function sendPersonalizedReaderAsset(
       FROM reader_personalized_assets WHERE asset_id=? AND user_id=?
     `).bind(asset.id,userId).first<PersonalizedRow>();
     if (existing?.telegram_file_id && existing.status === 'ready') {
-      try { return await telegram.sendDocument(userId, existing.telegram_file_id); }
+      try { return hidePersonalFileId(await telegram.sendDocument(userId, existing.telegram_file_id)); }
       catch {
         await env.DB.prepare(`
           UPDATE reader_personalized_assets SET telegram_file_id=NULL,status='pending',updated_at=?
@@ -59,7 +58,9 @@ export async function sendPersonalizedReaderAsset(
     if (!object) throw new Error(`R2 object missing: ${asset.r2_key}`);
     const source = new Uint8Array(await object.arrayBuffer());
     const masterSha256 = await sha256Hex(source);
-    const copy = readerCopy(locale);
+    const account = await env.DB.prepare('SELECT language FROM users WHERE telegram_id=?')
+      .bind(userId).first<{ language: string | null }>();
+    const copy = readerCopy(account?.language);
     const personalized = await personalizeEpubWithHash(source, {
       distributionId,
       fingerprintVersion,
@@ -68,6 +69,7 @@ export async function sendPersonalizedReaderAsset(
     });
     const file = new File([personalized.bytes], asset.file_name, { type:'application/epub+zip' });
     const sent = await telegram.sendDocumentUpload(userId,file);
+    const personalizedTelegramFileId = sent.document?.file_id || null;
     const updatedAt = new Date().toISOString();
     await env.DB.prepare(`
       UPDATE reader_personalized_assets SET
@@ -76,9 +78,9 @@ export async function sendPersonalizedReaderAsset(
       WHERE asset_id=? AND user_id=?
     `).bind(
       personalized.fingerprintVersion,personalized.generatorVersion,masterSha256,personalized.sha256,
-      sent.document?.file_id || null,updatedAt,updatedAt,asset.id,userId,
+      personalizedTelegramFileId,updatedAt,updatedAt,asset.id,userId,
     ).run();
-    return sent;
+    return hidePersonalFileId(sent);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await env.DB.prepare(`
@@ -89,6 +91,11 @@ export async function sendPersonalizedReaderAsset(
     if (failClosed) throw error;
     return null;
   }
+}
+
+function hidePersonalFileId(message: TelegramMessage): TelegramMessage {
+  if (!message.document) return message;
+  return { ...message, document: { ...message.document, file_id:'' } };
 }
 
 function isEpub(asset: PersonalizableAsset): boolean {
