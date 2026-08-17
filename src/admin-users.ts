@@ -1,3 +1,4 @@
+import { adminUserAvatarResponse } from './admin-user-avatar';
 import { FREE_MONTHLY_REQUEST_LIMIT, SUBSCRIBER_MONTHLY_REQUEST_LIMIT } from './domain';
 import { currentMonthKey, errorText } from './db';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
@@ -24,6 +25,11 @@ export async function handleAdminUsersRequest(
 
   if (request.method === 'GET' && url.pathname === '/api/app/admin/users') {
     return listUsers(url, env);
+  }
+
+  const avatarMatch = /^\/api\/app\/admin\/users\/(\d+)\/avatar$/.exec(url.pathname);
+  if (request.method === 'GET' && avatarMatch) {
+    return adminUserAvatarResponse(Number(avatarMatch[1]), env, telegram);
   }
 
   const detailMatch = /^\/api\/app\/admin\/users\/(\d+)$/.exec(url.pathname);
