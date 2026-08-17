@@ -4,6 +4,7 @@
   if (!app?.api || !runtime?.locale) throw new Error('Title release history requires DTL app/runtime.');
 
   const cache = new Map();
+  let refreshEpoch = 0;
   const COPY = {
     en:{title:'Latest releases',sub:'Published chapter batches for this title.',current:'In translation',published:'Published',open:'Open in Telegram',empty:'No linked releases yet.',loading:'Loading release history…',failed:'Release history is temporarily unavailable.',chapter:'Chapter',chapters:'Chapters',latest:'Latest release'},
     es:{title:'Últimos lanzamientos',sub:'Lotes de capítulos publicados para este título.',current:'En traducción',published:'Publicado',open:'Abrir en Telegram',empty:'Aún no hay lanzamientos vinculados.',loading:'Cargando historial…',failed:'El historial no está disponible temporalmente.',chapter:'Capítulo',chapters:'Capítulos',latest:'Último lanzamiento'},
@@ -57,15 +58,27 @@
 
   async function load(id) {
     if (cache.get(id)?.status === 'loading') return;
+    const epoch = refreshEpoch;
     cache.set(id, { status:'loading', releases:[] });
     mount();
     try {
       const data = await app.api(`/api/app/releases?submission_id=${encodeURIComponent(id)}&limit=12`);
+      if (epoch !== refreshEpoch) return;
       cache.set(id, { status:'ready', releases:Array.isArray(data?.releases) ? data.releases : [] });
     } catch (error) {
-      cache.set(id, { status:'error', releases:[], error:error?.message || String(error) });
+      if (epoch === refreshEpoch) cache.set(id, { status:'error', releases:[], error:error?.message || String(error) });
     }
-    if (Number(currentNovel()?.id) === id) mount();
+    if (epoch === refreshEpoch && Number(currentNovel()?.id) === id) mount();
+  }
+
+  function refresh() {
+    refreshEpoch += 1;
+    cache.clear();
+    const novel = currentNovel();
+    if (app.state?.view === 'detail' && novel) {
+      mount();
+      if (!app.state.preview) void load(Number(novel.id));
+    }
   }
 
   function render(host, novel, entry) {
@@ -142,6 +155,7 @@
   document.addEventListener('dtl:viewchange', event => {
     if (event.detail?.view === 'detail') queueMicrotask(mount);
   });
+  document.addEventListener('dtl:datarefresh', refresh);
 
-  window.DTL_TITLE_RELEASE_HISTORY = Object.freeze({ mount, cache });
+  window.DTL_TITLE_RELEASE_HISTORY = Object.freeze({ mount, cache, refresh });
 })();
