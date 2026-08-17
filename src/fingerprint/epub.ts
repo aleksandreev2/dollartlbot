@@ -106,7 +106,8 @@ export function extractEpubFingerprint(source: ArrayBuffer | Uint8Array): string
 
 export async function sha256Hex(source: ArrayBuffer | Uint8Array): Promise<string> {
   const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const payload = Uint8Array.from(bytes);
+  const digest = await crypto.subtle.digest('SHA-256', payload.buffer);
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
