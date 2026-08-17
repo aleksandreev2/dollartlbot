@@ -5,6 +5,7 @@
 
   const cache=new Map();
   let readerState=null;
+  let refreshEpoch=0;
   const COPY={
     en:{reader:'Dollar TL translation',rating:'Rating',rate:'Rate this title',download:'Download',thank:'Thank you & download',openBot:'Open private bot chat',quota:'Daily downloads',unlimited:'Boosty · Unlimited downloads',requires:'Download this title to leave a rating.',terms:'Personal use only',accept:'I understand, continue',loading:'Loading reader options…',failed:'Reader options are temporarily unavailable.',sent:'Continue in the private bot chat to receive the files.'},
     ru:{reader:'Перевод Dollar TL',rating:'Рейтинг',rate:'Оценить тайтл',download:'Скачать',thank:'Спасибо и скачать',openBot:'Открыть личный чат с ботом',quota:'Скачивания сегодня',unlimited:'Boosty · Скачивания без лимита',requires:'Скачайте этот тайтл, чтобы поставить оценку.',terms:'Только для личного использования',accept:'Понятно, продолжить',loading:'Загружаем возможности чтения…',failed:'Раздел чтения временно недоступен.',sent:'Продолжите в личном чате с ботом, чтобы получить файлы.'},
@@ -34,12 +35,14 @@
 
   async function load(id){
     if(cache.get(id)?.status==='loading')return;
+    const epoch=refreshEpoch;
     cache.set(id,{status:'loading'});mount();
     try{
       const [detail,state]=await Promise.all([app.api(`/api/app/reader/title/${id}`),readerState?Promise.resolve(readerState):app.api('/api/app/reader/state')]);
+      if(epoch!==refreshEpoch)return;
       readerState=state;cache.set(id,{status:'ready',detail});
-    }catch(error){cache.set(id,{status:'error',error});}
-    if(Number(novel()?.id)===id)mount();
+    }catch(error){if(epoch===refreshEpoch)cache.set(id,{status:'error',error});}
+    if(epoch===refreshEpoch&&Number(novel()?.id)===id)mount();
   }
 
   function mount(){
@@ -92,10 +95,19 @@
     catch(error){app.toast(error?.message||tr('failed'),'error');}
   }
 
+  function refresh(){
+    refreshEpoch+=1;
+    readerState=null;
+    cache.clear();
+    const id=Number(novel()?.id);
+    if(app.state.view==='detail'&&Number.isSafeInteger(id)&&id>0){mount();if(!app.state.preview)void load(id);}
+  }
+
   function releaseLabel(release){const a=Number(release.chapter_start),b=Number(release.chapter_end);if(a>0&&b>0)return a===b?`Chapter ${a}`:`Chapters ${a}–${b}`;return release.title||tr('download');}
   const remount=()=>queueMicrotask(mount);
   document.addEventListener('dtl:detail',remount);
   document.addEventListener('dtl:viewrender',event=>{if(event.detail?.view==='detail')remount();});
   document.addEventListener('dtl:localechange',()=>{readerState=null;cache.clear();remount();});
-  window.DTL_READER_TITLE=Object.freeze({mount,cache});
+  document.addEventListener('dtl:datarefresh',refresh);
+  window.DTL_READER_TITLE=Object.freeze({mount,cache,refresh});
 })();
