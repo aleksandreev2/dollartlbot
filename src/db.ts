@@ -37,6 +37,59 @@ export function localeFromTelegramLanguageCode(languageCode?: string | null): st
 export async function upsertUser(env: Env, user: TelegramUser): Promise<void> {
   const now = new Date().toISOString();
   const initialLanguage = localeFromTelegramLanguageCode(user.language_code);
+  const photoUrl = normalizeTelegramPhotoUrl(user.photo_url);
+
+  try {
+    await env.DB.prepare(`
+      INSERT INTO users (
+        telegram_id, username, first_name, language, language_selected,
+        created_at, updated_at, last_seen_at, telegram_photo_url, telegram_photo_updated_at
+      )
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+      ON CONFLICT(telegram_id) DO UPDATE SET
+        username = excluded.username,
+        first_name = excluded.first_name,
+        language = CASE WHEN users.language_selected = 0 THEN excluded.language ELSE users.language END,
+        updated_at = excluded.updated_at,
+        last_seen_at = excluded.last_seen_at,
+        telegram_photo_url = CASE
+          WHEN excluded.telegram_photo_url IS NOT NULL THEN excluded.telegram_photo_url
+          ELSE users.telegram_photo_url
+        END,
+        telegram_photo_updated_at = CASE
+          WHEN excluded.telegram_photo_url IS NOT NULL THEN excluded.telegram_photo_updated_at
+          ELSE users.telegram_photo_updated_at
+        END
+    `)
+      .bind(
+        user.id,
+        user.username ?? null,
+        user.first_name ?? null,
+        initialLanguage,
+        now,
+        now,
+        now,
+        photoUrl,
+        photoUrl ? now : null,
+      )
+      .run();
+    return;
+  } catch (error) {
+    if (!isTelegramPhotoSchemaMissing(error) && !isAdminEventsSchemaMissing(error)) throw error;
+  }
+
+  // Profile-photo persistence is deliberately fail-open during a migration race.
+  // The public bot/Mini App must keep working even if Worker code reaches an
+  // older D1 schema for a short period during deployment.
+  await upsertUserWithoutPhoto(env, user, initialLanguage, now);
+}
+
+async function upsertUserWithoutPhoto(
+  env: Env,
+  user: TelegramUser,
+  initialLanguage: string,
+  now: string,
+): Promise<void> {
   try {
     await env.DB.prepare(`
       INSERT INTO users (
@@ -75,6 +128,18 @@ export async function upsertUser(env: Env, user: TelegramUser): Promise<void> {
   `)
     .bind(user.id, user.username ?? null, user.first_name ?? null, initialLanguage, now, now)
     .run();
+}
+
+function normalizeTelegramPhotoUrl(value?: string | null): string | null {
+  const raw = String(value || '').trim();
+  if (!raw || raw.length > 2048) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export async function getUser(env: Env, userId: number): Promise<UserRow | null> {
@@ -200,6 +265,12 @@ export async function safeSecretEqual(left: string, right: string): Promise<bool
 
 export function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
+function isTelegramPhotoSchemaMissing(error: unknown): boolean {
+  const text = errorText(error).toLowerCase();
+  const missingSchema = text.includes('no such column') || text.includes('has no column named');
+  return missingSchema && (text.includes('telegram_photo_url') || text.includes('telegram_photo_updated_at'));
 }
 
 export function isAdminEventsSchemaMissing(error: unknown): boolean {
