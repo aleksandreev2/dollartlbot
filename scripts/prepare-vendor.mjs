@@ -85,7 +85,8 @@ function rewriteLocalAppAssets(value, buildId) {
   return value.replace(/((?:src|href)=["'])(\/app\/[^"']+)(["'])/g, (match, prefix, assetUrl, suffix) => {
     try {
       const parsed = new URL(assetUrl, 'https://dollartl.invalid');
-      parsed.searchParams.set(BUILD_PARAM, buildId);
+      parsed.searchParams.delete(BUILD_PARAM);
+      parsed.searchParams.append(BUILD_PARAM, buildId);
       return `${prefix}${parsed.pathname}${parsed.search}${parsed.hash}${suffix}`;
     } catch {
       return match;
