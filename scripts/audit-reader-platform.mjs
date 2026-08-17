@@ -1,21 +1,22 @@
-import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 
 const requiredFiles = [
   'migrations/0042_reader_library.sql',
   'migrations/0043_reader_download_policy.sql',
   'migrations/0044_distribution_fingerprints.sql',
   'migrations/0045_leak_incidents.sql',
+  'src/download-gate.ts',
   'src/reader-library.ts',
   'src/reader-quota.ts',
   'src/reader-personalization.ts',
   'src/fingerprint/identity.ts',
   'src/fingerprint/epub.ts',
   'src/leak-checker.ts',
+  'public/app/home-v2.js',
   'public/app/reader-title-ui.js',
 ];
 
-const contents = new Map();
-for (const file of requiredFiles) contents.set(file, await readFile(file, 'utf8'));
+const contents = new Map(requiredFiles.map(file => [file, readFileSync(file, 'utf8')]));
 
 assertIncludes('migrations/0043_reader_download_policy.sql', 'PRIMARY KEY (day_key, user_id, submission_id)', 'daily quota must count unique titles');
 assertIncludes('migrations/0043_reader_download_policy.sql', 'reader_daily_reservations', 'quota needs pre-delivery reservations');
@@ -34,13 +35,9 @@ assertNotIncludes('public/app/home-v2.js', 'openTelegramLink(link.href)', 'home 
 
 console.log('Reader platform audit passed.');
 
-async function source(file) {
-  if (!contents.has(file)) contents.set(file, await readFile(file, 'utf8'));
-  return contents.get(file);
-}
 function assertIncludes(file, needle, message) {
-  return source(file).then(text => { if (!text.includes(needle)) throw new Error(`${message}: ${file} missing ${needle}`); });
+  if (!contents.get(file)?.includes(needle)) throw new Error(`${message}: ${file} missing ${needle}`);
 }
 function assertNotIncludes(file, needle, message) {
-  return source(file).then(text => { if (text.includes(needle)) throw new Error(`${message}: ${file} contains ${needle}`); });
+  if (contents.get(file)?.includes(needle)) throw new Error(`${message}: ${file} contains ${needle}`);
 }
