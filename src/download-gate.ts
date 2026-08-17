@@ -2,6 +2,7 @@ import { checkBotAccess, sendAccessGate } from './access-gate';
 import { getUser, upsertUser } from './db';
 import { normalizeLocale } from './i18n/index';
 import { readerCopy } from './reader-i18n';
+import { sendPersonalizedReaderAsset } from './reader-personalization';
 import { commitDailyNovel, releaseDailyNovelReservation, reserveDailyNovel } from './reader-quota';
 import { getRuntimeSetting, runtimeFlag } from './runtime-settings';
 import { getSubscriptionState } from './subscription';
@@ -387,6 +388,8 @@ async function sendAsset(
   env: Env,
   telegram: TelegramClient,
 ): Promise<TelegramMessage> {
+  const personalized = await sendPersonalizedReaderAsset(userId, asset, env, telegram);
+  if (personalized) return personalized;
   if (asset.telegram_file_id) return telegram.sendDocument(userId, asset.telegram_file_id);
   const object = await env.COVERS.get(asset.r2_key);
   if (!object) throw new Error(`R2 object missing: ${asset.r2_key}`);
