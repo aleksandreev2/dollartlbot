@@ -5,6 +5,8 @@
   if (!runtime?.registerPatcher || !runtime?.registerResponseHandler || !admin?.activeRoute) return;
 
   const MAX_PARALLEL = 4;
+  const TRANSIENT_RETRY_MS = 15_000;
+  const AUTH_RETRY_MS = 60_000;
   const avatarCache = new Map();
   const objectUrls = new Set();
   const requestUsers = new Map();
@@ -17,10 +19,6 @@
   let contentObserver = null;
   let intersectionObserver = null;
   const queue = [];
-
-  const esc = (value = '') => String(value).replace(/[&<>"']/g, char => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
-  }[char]));
 
   runtime.registerResponseHandler(async (response, context) => {
     if (!response.ok) return response;
@@ -118,10 +116,11 @@
   async function loadInto(node) {
     const userId = positiveId(node.dataset.adminAvatarUser);
     if (!userId) return;
-    const url = await avatarUrl(userId);
+    const result = await avatarUrl(userId);
     if (!node.isConnected || positiveId(node.dataset.adminAvatarUser) !== userId) return;
-    if (!url) {
-      node.dataset.adminAvatarState = 'fallback';
+    if (!result.url) {
+      node.dataset.adminAvatarState = result.retryMs > 0 ? 'retry' : 'fallback';
+      if (result.retryMs > 0) scheduleRetry(node, userId, result.retryMs);
       return;
     }
     let image = node.querySelector(':scope > .admin-avatar-image');
@@ -133,8 +132,18 @@
       image.decoding = 'async';
       node.append(image);
     }
-    image.src = url;
+    image.src = result.url;
     node.dataset.adminAvatarState = 'loaded';
+  }
+
+  function scheduleRetry(node, userId, delayMs) {
+    setTimeout(() => {
+      if (!node?.isConnected) return;
+      if (positiveId(node.dataset.adminAvatarUser) !== userId) return;
+      if (node.dataset.adminAvatarState !== 'retry') return;
+      delete node.dataset.adminAvatarState;
+      observeAvatar(node);
+    }, delayMs);
   }
 
   function avatarUrl(userId) {
@@ -146,23 +155,40 @@
         const response = await fetch(`/api/app/admin/users/${encodeURIComponent(userId)}/avatar`, {
           method: 'GET',
           headers,
-          cache: 'force-cache',
+          cache: 'no-store',
           credentials: 'same-origin',
         });
-        if (response.status === 204 || response.status === 404) return null;
-        if (!response.ok) return null;
+        if (response.status === 204 || response.status === 404) return { url: null, retryMs: 0 };
+        if (response.status === 401 || response.status === 403) {
+          console.warn('[DTL admin] Avatar authorization needs a fresh Mini App session.', { userId, status: response.status });
+          return { url: null, retryMs: AUTH_RETRY_MS };
+        }
+        if (!response.ok) {
+          console.warn('[DTL admin] Avatar request failed and will be retried.', {
+            userId,
+            status: response.status,
+            reason: response.headers.get('x-dtl-avatar-status') || 'unknown',
+          });
+          return { url: null, retryMs: TRANSIENT_RETRY_MS };
+        }
         const type = String(response.headers.get('content-type') || '').toLowerCase();
-        if (!type.startsWith('image/')) return null;
+        if (!type.startsWith('image/')) return { url: null, retryMs: TRANSIENT_RETRY_MS };
         const blob = await response.blob();
-        if (!blob.size) return null;
+        if (!blob.size) return { url: null, retryMs: TRANSIENT_RETRY_MS };
         const url = URL.createObjectURL(blob);
         objectUrls.add(url);
-        return url;
-      } catch {
-        return null;
+        return { url, retryMs: 0 };
+      } catch (error) {
+        console.warn('[DTL admin] Avatar network request failed and will be retried.', { userId, error: String(error) });
+        return { url: null, retryMs: TRANSIENT_RETRY_MS };
       }
     })();
     avatarCache.set(userId, promise);
+    promise.then(result => {
+      if (!result.url && avatarCache.get(userId) === promise) avatarCache.delete(userId);
+    }).catch(() => {
+      if (avatarCache.get(userId) === promise) avatarCache.delete(userId);
+    });
     return promise;
   }
 
