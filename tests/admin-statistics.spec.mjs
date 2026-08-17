@@ -79,7 +79,7 @@ async function boot(page){
         if(String(path).includes('/analytics/title'))return throughHandlers(path,titlePayload);
         return throughHandlers(path,payload);
       },
-      content(html){document.querySelector('.admin-content').innerHTML=html;},
+      content(html){document.querySelector('.admin-content').innerHTML=html;for(const patch of patchers)patch();},
       setHead(title,subtitle){document.querySelector('.admin-work-head h1').textContent=title;document.querySelector('.admin-work-head p').textContent=subtitle;},
       open:async id=>{active=id;return routes.get(id)?.mount?.();},
       refresh:async()=>routes.get(active)?.refresh?.(),
