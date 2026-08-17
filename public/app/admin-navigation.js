@@ -28,6 +28,20 @@
   }
 
   function ensureStatisticsAssets() {
+    if (!document.querySelector('link[data-admin-avatars-style]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/app/admin-avatars.css?v=20260817-avatars1';
+      link.dataset.adminAvatarsStyle = '1';
+      document.head.append(link);
+    }
+    if (!document.querySelector('script[data-admin-avatars-script]')) {
+      const script = document.createElement('script');
+      script.src = '/app/admin-avatars.js?v=20260817-avatars1';
+      script.async = true;
+      script.dataset.adminAvatarsScript = '1';
+      document.head.append(script);
+    }
     if (!document.querySelector('link[data-admin-statistics-style]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
@@ -156,6 +170,14 @@
   }
 
   document.addEventListener('click', event => {
+    if (event.target.closest?.('#refreshTelegramUser')) {
+      const profileId = Number(document.querySelector('.admin-profile-avatar')?.dataset.adminAvatarUser || 0);
+      const selectedId = Number(document.querySelector('.admin-user-row.selected')?.dataset.userId || 0);
+      const userId = Number.isSafeInteger(profileId) && profileId > 0 ? profileId : selectedId;
+      if (Number.isSafeInteger(userId) && userId > 0) {
+        setTimeout(() => window.DTL_ADMIN_AVATARS?.invalidate?.(userId), 250);
+      }
+    }
     const navigated = event.target.closest?.('[data-admin-section],[data-admin-tools],[data-admin-health],[data-admin-activity]');
     if (!navigated) return;
     settle();
