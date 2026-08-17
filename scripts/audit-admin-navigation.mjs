@@ -23,9 +23,11 @@ for (const token of [
   'admin-nav-more-items',
   'data-admin-mobile-more',
   'admin-mobile-secondary',
-  "label('[data-admin-section=\"publishing\"]', 'Publishing')",
+  "label('[data-admin-section=\"publishing\"]', 'Публикация')",
   "label('[data-admin-health]', 'Система')",
-  "label('[data-admin-tools=\"analytics\"]', 'Аналитика')",
+  "label('[data-admin-tools=\"analytics\"]', 'Статистика')",
+  'admin-statistics.css?v=20260817-stats1',
+  'admin-statistics.js?v=20260817-stats1',
   'window.DTL_ADMIN_NAVIGATION',
   'runtime.registerPatcher(install)',
   'visibleRouteSelector',
@@ -38,6 +40,8 @@ for (const token of [
 ]) need(js, token, 'admin navigation runtime');
 
 for (const token of [
+  "label('[data-admin-section=\"publishing\"]', 'Publishing')",
+  "label('[data-admin-tools=\"analytics\"]', 'Аналитика')",
   'window.fetch =',
   'window.confirm(',
   'new MutationObserver',
@@ -47,7 +51,7 @@ for (const token of [
   'data-publishing-create',
   '[data-admin-tools="publications"]',
   '[data-admin-section="broadcasts"]',
-]) forbid(js, token, 'admin navigation legacy Publishing shortcut');
+]) forbid(js, token, 'admin navigation legacy or English label');
 
 for (const token of [
   '.admin-nav-more',
@@ -57,4 +61,4 @@ for (const token of [
 ]) need(css, token, 'admin navigation CSS');
 forbid(css, '.admin-publishing-shortcuts', 'dead Publishing shortcut CSS');
 
-console.log('Admin navigation audit passed: More toggles explicitly, canonical routes clear stale Activity state, and Publishing navigation stays unified.');
+console.log('Admin navigation audit passed: More toggles explicitly, canonical routes clear stale Activity state, Statistics loads lazily, and visible admin labels stay Russian.');
