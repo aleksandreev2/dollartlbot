@@ -96,5 +96,26 @@ test('если у пользователя нет фото, остаётся б�
   });
   await page.addScriptTag({content:source});
   await expect(page.locator('.admin-user-avatar')).toHaveText('Ф');
+  await expect(page.locator('.admin-user-avatar')).toHaveAttribute('data-admin-avatar-state','fallback');
   await expect(page.locator('.admin-user-avatar .admin-avatar-image')).toHaveCount(0);
+});
+
+test('временная ошибка загрузки аватара не превращается в постоянный fallback',async({page})=>{
+  let requests=0;
+  await page.route('https://dtl.test/api/app/admin/users/777/avatar',async route=>{
+    requests+=1;
+    await route.fulfill({status:502,headers:{'x-dtl-avatar-status':'telegram_lookup_failed'},body:''});
+  });
+  await page.route('https://dtl.test/',route=>route.fulfill({status:200,headers:{'content-type':'text/html; charset=utf-8'},body:'<div class="admin-v2"><main class="admin-content"><button class="admin-user-row selected" data-user-id="777"><span class="admin-user-avatar">R</span></button></main></div>'}));
+  await page.goto('https://dtl.test/');
+  await page.evaluate(()=>{
+    window.Telegram={WebApp:{initData:'signed-admin-init-data'}};
+    try{window.IntersectionObserver=undefined;}catch{}
+    window.DTL_RUNTIME={registerPatcher(fn){fn();return()=>{};},registerResponseHandler(){return()=>{};}};
+    window.DTL_ADMIN={activeRoute(){return 'tools:users';}};
+  });
+  await page.addScriptTag({content:source});
+  await expect(page.locator('.admin-user-avatar')).toHaveAttribute('data-admin-avatar-state','retry');
+  await expect(page.locator('.admin-user-avatar .admin-avatar-image')).toHaveCount(0);
+  expect(requests).toBe(1);
 });
