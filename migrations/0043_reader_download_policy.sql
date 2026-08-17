@@ -15,6 +15,20 @@ CREATE INDEX IF NOT EXISTS idx_reader_daily_titles_user_day
 CREATE INDEX IF NOT EXISTS idx_reader_daily_titles_submission
   ON reader_daily_titles(submission_id, first_delivered_at DESC);
 
+-- Short-lived reservations make the five-title limit race-safe without burning a
+-- slot before Telegram has successfully delivered the first file.
+CREATE TABLE IF NOT EXISTS reader_daily_reservations (
+  day_key TEXT NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+  submission_id INTEGER NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+  reservation_token TEXT NOT NULL UNIQUE,
+  reserved_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  PRIMARY KEY (day_key, user_id, submission_id)
+);
+CREATE INDEX IF NOT EXISTS idx_reader_daily_reservations_expiry
+  ON reader_daily_reservations(expires_at);
+
 CREATE TABLE IF NOT EXISTS reader_terms_acceptance (
   user_id INTEGER NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
   terms_version INTEGER NOT NULL CHECK (terms_version > 0),
