@@ -5,7 +5,6 @@
 
   const ico = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
   const secondarySelectors = [
-    '[data-admin-tools="analytics"]',
     '[data-admin-section="settings"]',
   ];
   const publishingRoutes = new Set(['section:publishing', 'tools:publications', 'section:broadcasts']);
@@ -22,10 +21,27 @@
   }
 
   function rename() {
-    label('[data-admin-section="publishing"]', 'Publishing');
+    label('[data-admin-section="publishing"]', 'Публикация');
     label('[data-admin-health]', 'Система');
-    label('[data-admin-tools="analytics"]', 'Аналитика');
+    label('[data-admin-tools="analytics"]', 'Статистика');
     label('[data-admin-section="settings"]', 'Настройки');
+  }
+
+  function ensureStatisticsAssets() {
+    if (!document.querySelector('link[data-admin-statistics-style]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/app/admin-statistics.css?v=20260817-stats1';
+      link.dataset.adminStatisticsStyle = '1';
+      document.head.append(link);
+    }
+    if (!document.querySelector('script[data-admin-statistics-script]')) {
+      const script = document.createElement('script');
+      script.src = '/app/admin-statistics.js?v=20260817-stats1';
+      script.async = true;
+      script.dataset.adminStatisticsScript = '1';
+      document.head.append(script);
+    }
   }
 
   function activityPageVisible() {
@@ -109,6 +125,7 @@
   function install() {
     const root = document.querySelector('.admin-v2');
     if (!root) return;
+    ensureStatisticsAssets();
     rename();
     syncActive(root);
     const side = root.querySelector('.admin-side-nav');
