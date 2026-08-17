@@ -170,6 +170,14 @@
   }
 
   document.addEventListener('click', event => {
+    if (event.target.closest?.('#refreshTelegramUser')) {
+      const profileId = Number(document.querySelector('.admin-profile-avatar')?.dataset.adminAvatarUser || 0);
+      const selectedId = Number(document.querySelector('.admin-user-row.selected')?.dataset.userId || 0);
+      const userId = Number.isSafeInteger(profileId) && profileId > 0 ? profileId : selectedId;
+      if (Number.isSafeInteger(userId) && userId > 0) {
+        setTimeout(() => window.DTL_ADMIN_AVATARS?.invalidate?.(userId), 250);
+      }
+    }
     const navigated = event.target.closest?.('[data-admin-section],[data-admin-tools],[data-admin-health],[data-admin-activity]');
     if (!navigated) return;
     settle();
