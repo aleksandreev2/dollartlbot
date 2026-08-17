@@ -5,16 +5,33 @@ const DAY_MS=86_400_000;
 const SUPPORTED_PERIODS=new Set([0,7,30,90,365]);
 
 type NumberRow=Record<string,number>;
+type TitleTarget={
+  publication_id:number;
+  submission_id:number|null;
+  title:string;
+  original_language:string|null;
+  chapter_count:number|null;
+  publication_status:string|null;
+  request_status:string|null;
+  queue_status:string|null;
+  request_created_at:string|null;
+  completed_at:string|null;
+  source_url:string|null;
+  genres_tags:string|null;
+};
 
 export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promise<Response|null>{
   const productEventResponse=await handleProductAnalyticsEventRequest(request,env);
   if(productEventResponse)return productEventResponse;
 
   const url=new URL(request.url);
-  if(request.method!=='GET'||url.pathname!=='/api/app/admin/analytics')return null;
+  const isDashboard=url.pathname==='/api/app/admin/analytics';
+  const isTitle=url.pathname==='/api/app/admin/analytics/title';
+  if(request.method!=='GET'||(!isDashboard&&!isTitle))return null;
   const auth=await authenticateMiniAppRequest(request,env);
   if(auth instanceof Response)return auth;
   if(!auth.admin)return miniAppJsonError('forbidden','Admin access required.',403);
+  if(isTitle)return titleAnalytics(url,env);
 
   const requested=Number(url.searchParams.get('days')||30);
   const days=SUPPORTED_PERIODS.has(requested)?requested:30;
@@ -133,7 +150,7 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
       SUM(CASE WHEN event_type='donate_click' THEN 1 ELSE 0 END) AS donate_clicks
       FROM publication_reader_events WHERE created_at>=?`).bind(sinceIso).first<NumberRow>(),
     env.DB.prepare(`SELECT
-      p.id,
+      p.id,p.submission_id,
       COALESCE(NULLIF(s.title,''),NULLIF(p.internal_title,''),'Публикация #'||p.id) AS title,
       p.published_at,
       COUNT(CASE WHEN e.event_type='thank_you_click' THEN 1 END) AS thank_you_clicks,
@@ -204,6 +221,121 @@ export async function handleAdminAnalyticsRequest(request:Request,env:Env):Promi
         steps:suggestSteps.results,
       },
     },
+  });
+}
+
+async function titleAnalytics(url:URL,env:Env):Promise<Response>{
+  const publicationId=Math.trunc(Number(url.searchParams.get('publication_id')||0));
+  if(!Number.isSafeInteger(publicationId)||publicationId<=0)return miniAppJsonError('bad_request','Неверная публикация.',400);
+
+  const target=await env.DB.prepare(`SELECT
+    p.id AS publication_id,p.submission_id,
+    COALESCE(NULLIF(s.title,''),NULLIF(p.internal_title,''),'Публикация #'||p.id) AS title,
+    s.original_language,s.chapter_count,s.publication_status,s.status AS request_status,s.queue_status,
+    s.created_at AS request_created_at,s.completed_at,s.source_url,s.genres_tags
+    FROM publications p LEFT JOIN submissions s ON s.id=p.submission_id
+    WHERE p.id=? LIMIT 1`).bind(publicationId).first<TitleTarget>();
+  if(!target)return miniAppJsonError('not_found','Публикация не найдена.',404);
+
+  const scope=target.submission_id?'p.submission_id=?':'p.id=?';
+  const scopeValue=target.submission_id||publicationId;
+  const requestedUser=url.searchParams.get('user_id');
+  if(requestedUser!==null){
+    const userId=Math.trunc(Number(requestedUser));
+    if(!Number.isSafeInteger(userId)||userId<=0)return miniAppJsonError('bad_request','Неверный пользователь.',400);
+    const [user,events]=await Promise.all([
+      env.DB.prepare(`SELECT
+        e.user_id,
+        MAX(NULLIF(e.username_snapshot,'')) AS username,
+        MAX(NULLIF(e.first_name_snapshot,'')) AS first_name,
+        MAX(NULLIF(e.last_name_snapshot,'')) AS last_name,
+        COUNT(*) AS actions,
+        SUM(CASE WHEN e.event_type='download_open' THEN 1 ELSE 0 END) AS download_opens,
+        SUM(CASE WHEN e.event_type='thank_you_click' THEN 1 ELSE 0 END) AS thank_you_clicks,
+        SUM(CASE WHEN e.event_type='delivery_success' THEN 1 ELSE 0 END) AS deliveries,
+        SUM(CASE WHEN e.event_type='delivery_success' AND e.metadata_json LIKE '%\"repeat\":true%' THEN 1 ELSE 0 END) AS repeat_deliveries,
+        SUM(CASE WHEN e.event_type='delivery_failed' THEN 1 ELSE 0 END) AS delivery_failures,
+        SUM(CASE WHEN e.event_type='donate_click' THEN 1 ELSE 0 END) AS donate_clicks,
+        SUM(CASE WHEN e.event_type='access_denied' THEN 1 ELSE 0 END) AS access_denied,
+        MIN(e.created_at) AS first_seen,MAX(e.created_at) AS last_seen
+        FROM publication_reader_events e JOIN publications p ON p.id=e.publication_id
+        WHERE ${scope} AND e.user_id=? GROUP BY e.user_id`).bind(scopeValue,userId).first<Record<string,unknown>>(),
+      env.DB.prepare(`SELECT
+        e.id,e.publication_id,e.asset_id,e.event_type,e.metadata_json,e.created_at,
+        p.chapter_start,p.chapter_end,p.published_at
+        FROM publication_reader_events e JOIN publications p ON p.id=e.publication_id
+        WHERE ${scope} AND e.user_id=?
+        ORDER BY e.created_at DESC,e.id DESC LIMIT 300`).bind(scopeValue,userId).all<Record<string,unknown>>(),
+    ]);
+    if(!user)return miniAppJsonError('not_found','У этого пользователя нет действий по тайтлу.',404);
+    return miniAppJson({publication_id:publicationId,submission_id:target.submission_id,title:target.title,user,events:events.results});
+  }
+
+  const [summary,publications,users]=await Promise.all([
+    env.DB.prepare(`SELECT
+      COUNT(DISTINCT p.id) AS releases,
+      COUNT(DISTINCT CASE WHEN e.event_type='delivery_success' THEN e.user_id END) AS unique_readers,
+      COUNT(DISTINCT CASE WHEN e.event_type='thank_you_click' THEN e.user_id END) AS unique_clickers,
+      SUM(CASE WHEN e.event_type='download_open' THEN 1 ELSE 0 END) AS download_opens,
+      SUM(CASE WHEN e.event_type='thank_you_click' THEN 1 ELSE 0 END) AS thank_you_clicks,
+      SUM(CASE WHEN e.event_type='delivery_success' THEN 1 ELSE 0 END) AS deliveries,
+      SUM(CASE WHEN e.event_type='delivery_success' AND e.metadata_json LIKE '%\"repeat\":true%' THEN 1 ELSE 0 END) AS repeat_deliveries,
+      SUM(CASE WHEN e.event_type='delivery_failed' THEN 1 ELSE 0 END) AS delivery_failures,
+      SUM(CASE WHEN e.event_type='donate_click' THEN 1 ELSE 0 END) AS donate_clicks,
+      SUM(CASE WHEN e.event_type='access_denied' THEN 1 ELSE 0 END) AS access_denied,
+      SUM(CASE WHEN e.event_type='rate_limited' THEN 1 ELSE 0 END) AS rate_limited
+      FROM publications p LEFT JOIN publication_reader_events e ON e.publication_id=p.id
+      WHERE ${scope}`).bind(scopeValue).first<NumberRow>(),
+    env.DB.prepare(`SELECT
+      p.id,p.status,p.published_at,p.chapter_start,p.chapter_end,p.channel_message_id,
+      COUNT(CASE WHEN e.event_type='thank_you_click' THEN 1 END) AS thank_you_clicks,
+      COUNT(DISTINCT CASE WHEN e.event_type='delivery_success' THEN e.user_id END) AS readers,
+      COUNT(CASE WHEN e.event_type='delivery_success' THEN 1 END) AS deliveries,
+      COUNT(CASE WHEN e.event_type='delivery_failed' THEN 1 END) AS delivery_failures,
+      COUNT(CASE WHEN e.event_type='donate_click' THEN 1 END) AS donate_clicks
+      FROM publications p LEFT JOIN publication_reader_events e ON e.publication_id=p.id
+      WHERE ${scope}
+      GROUP BY p.id
+      ORDER BY p.published_at DESC,p.id DESC`).bind(scopeValue).all<Record<string,unknown>>(),
+    env.DB.prepare(`SELECT
+      e.user_id,
+      MAX(NULLIF(e.username_snapshot,'')) AS username,
+      MAX(NULLIF(e.first_name_snapshot,'')) AS first_name,
+      MAX(NULLIF(e.last_name_snapshot,'')) AS last_name,
+      COUNT(*) AS actions,
+      SUM(CASE WHEN e.event_type='download_open' THEN 1 ELSE 0 END) AS download_opens,
+      SUM(CASE WHEN e.event_type='thank_you_click' THEN 1 ELSE 0 END) AS thank_you_clicks,
+      SUM(CASE WHEN e.event_type='delivery_success' THEN 1 ELSE 0 END) AS deliveries,
+      SUM(CASE WHEN e.event_type='delivery_success' AND e.metadata_json LIKE '%\"repeat\":true%' THEN 1 ELSE 0 END) AS repeat_deliveries,
+      SUM(CASE WHEN e.event_type='delivery_failed' THEN 1 ELSE 0 END) AS delivery_failures,
+      SUM(CASE WHEN e.event_type='donate_click' THEN 1 ELSE 0 END) AS donate_clicks,
+      SUM(CASE WHEN e.event_type='access_denied' THEN 1 ELSE 0 END) AS access_denied,
+      MIN(e.created_at) AS first_seen,MAX(e.created_at) AS last_seen
+      FROM publication_reader_events e JOIN publications p ON p.id=e.publication_id
+      WHERE ${scope}
+      GROUP BY e.user_id
+      ORDER BY deliveries DESC,thank_you_clicks DESC,last_seen DESC
+      LIMIT 250`).bind(scopeValue).all<Record<string,unknown>>(),
+  ]);
+
+  return miniAppJson({
+    publication_id:publicationId,
+    submission_id:target.submission_id,
+    title:{
+      name:target.title,
+      original_language:target.original_language,
+      chapter_count:target.chapter_count,
+      publication_status:target.publication_status,
+      request_status:target.request_status,
+      queue_status:target.queue_status,
+      request_created_at:target.request_created_at,
+      completed_at:target.completed_at,
+      source_url:target.source_url,
+      genres_tags:target.genres_tags,
+    },
+    summary:mapNumbers(summary),
+    publications:publications.results,
+    users:users.results,
   });
 }
 

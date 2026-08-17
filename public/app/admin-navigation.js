@@ -35,11 +35,25 @@
       link.dataset.adminStatisticsStyle = '1';
       document.head.append(link);
     }
+    if (!document.querySelector('link[data-admin-title-statistics-style]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/app/admin-title-statistics.css?v=20260817-title1';
+      link.dataset.adminTitleStatisticsStyle = '1';
+      document.head.append(link);
+    }
     if (!document.querySelector('script[data-admin-statistics-script]')) {
       const script = document.createElement('script');
       script.src = '/app/admin-statistics.js?v=20260817-stats1';
       script.async = true;
       script.dataset.adminStatisticsScript = '1';
+      document.head.append(script);
+    }
+    if (!document.querySelector('script[data-admin-title-statistics-script]')) {
+      const script = document.createElement('script');
+      script.src = '/app/admin-title-statistics.js?v=20260817-title1';
+      script.async = true;
+      script.dataset.adminTitleStatisticsScript = '1';
       document.head.append(script);
     }
   }
