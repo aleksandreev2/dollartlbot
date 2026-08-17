@@ -1,9 +1,11 @@
 import { authenticateMiniAppRequest, miniAppJson } from './miniapp-auth';
+import { handleReaderLibraryRequest } from './reader-library';
 
 type ReleaseRow = {
   id: number;
   submission_id: number | null;
   internal_title: string;
+  submission_title: string | null;
   body_html: string;
   image_key: string | null;
   channel_message_id: number | null;
@@ -11,9 +13,14 @@ type ReleaseRow = {
   file_count: number;
   chapter_start: number | null;
   chapter_end: number | null;
+  rating_average: number | null;
+  rating_count: number;
 };
 
 export async function handleHomeReleasesRequest(request: Request, env: Env): Promise<Response | null> {
+  const readerResponse = await handleReaderLibraryRequest(request, env);
+  if (readerResponse) return readerResponse;
+
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.pathname !== '/api/app/releases') return null;
 
@@ -23,6 +30,17 @@ export async function handleHomeReleasesRequest(request: Request, env: Env): Pro
   const submissionId = positiveInt(url.searchParams.get('submission_id'));
   const limit = boundedInt(url.searchParams.get('limit'), submissionId ? 12 : 8, 1, 20);
   const submissionClause = submissionId ? 'AND p.submission_id = ?' : '';
+  const latestTitleClause = submissionId ? '' : `
+    AND (
+      p.submission_id IS NULL OR p.id=(
+        SELECT p2.id FROM publications p2
+        WHERE p2.submission_id=p.submission_id
+          AND p2.status='published'
+          AND p2.telegram_deleted_at IS NULL
+          AND p2.published_at IS NOT NULL
+        ORDER BY p2.published_at DESC,p2.id DESC LIMIT 1
+      )
+    )`;
   const binds = submissionId ? [submissionId, limit] : [limit];
 
   const [rows, channel] = await Promise.all([
@@ -31,18 +49,27 @@ export async function handleHomeReleasesRequest(request: Request, env: Env): Pro
         p.id,
         p.submission_id,
         p.internal_title,
+        s.title AS submission_title,
         p.body_html,
         p.image_key,
         p.channel_message_id,
         p.published_at,
         p.chapter_start,
         p.chapter_end,
-        (SELECT COUNT(*) FROM publication_assets a WHERE a.publication_id = p.id) AS file_count
+        (SELECT COUNT(*) FROM publication_assets a WHERE a.publication_id = p.id) AS file_count,
+        CASE WHEN p.submission_id IS NULL THEN NULL ELSE
+          (SELECT ROUND(AVG(r.rating),2) FROM title_ratings r WHERE r.submission_id=p.submission_id)
+        END AS rating_average,
+        CASE WHEN p.submission_id IS NULL THEN 0 ELSE
+          (SELECT COUNT(*) FROM title_ratings r WHERE r.submission_id=p.submission_id)
+        END AS rating_count
       FROM publications p
+      LEFT JOIN submissions s ON s.id=p.submission_id
       WHERE p.status = 'published'
         AND p.telegram_deleted_at IS NULL
         AND p.published_at IS NOT NULL
         ${submissionClause}
+        ${latestTitleClause}
       ORDER BY p.published_at DESC, p.id DESC
       LIMIT ?
     `).bind(...binds).all<ReleaseRow>(),
@@ -53,7 +80,7 @@ export async function handleHomeReleasesRequest(request: Request, env: Env): Pro
   const releases = rows.results.map((row) => ({
     id: Number(row.id),
     submission_id: row.submission_id === null ? null : Number(row.submission_id),
-    title: row.internal_title,
+    title: row.submission_title?.trim() || row.internal_title,
     excerpt: compactText(row.body_html, 180),
     has_image: Boolean(row.image_key),
     image_url: row.image_key ? `/media/publications/${row.id}/image` : null,
@@ -61,12 +88,16 @@ export async function handleHomeReleasesRequest(request: Request, env: Env): Pro
     chapter_start: validChapter(row.chapter_start),
     chapter_end: validChapter(row.chapter_end),
     published_at: row.published_at,
+    rating_average: row.rating_average === null ? null : Number(row.rating_average),
+    rating_count: Number(row.rating_count || 0),
+    app_url: row.submission_id ? `/app/?title=${Number(row.submission_id)}` : null,
+    public_url: row.submission_id ? `/title/${Number(row.submission_id)}` : null,
     telegram_url: channelUsername && row.channel_message_id
       ? `https://t.me/${channelUsername}/${row.channel_message_id}`
       : null,
   }));
 
-  return miniAppJson({ releases });
+  return miniAppJson({ releases, mode: submissionId ? 'releases' : 'library' });
 }
 
 function normalizePublicChannel(value: string): string | null {
@@ -75,7 +106,7 @@ function normalizePublicChannel(value: string): string | null {
 }
 
 function compactText(value: string, max: number): string {
-  const clean = String(value || '').replace(/\s+/g, ' ').trim();
+  const clean = String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
 }
 
