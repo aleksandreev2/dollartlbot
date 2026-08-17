@@ -13,9 +13,11 @@ assert.match(navigation,/admin-avatars\.css/,'Глобальные стили а
 assert.match(route,/adminUserAvatarResponse/,'Admin users API должен маршрутизировать защищённую выдачу аватара.');
 assert.match(route,/\/avatar\$/,'Маршрут аватара должен быть отдельным endpoint пользователя.');
 
-assert.match(backend,/getUserProfilePhotos/,'Аватар должен браться из текущего профиля Telegram.');
-assert.match(backend,/getFile/,'Большой Telegram PhotoSize должен разрешаться через getFile.');
-assert.match(backend,/candidateArea > bestArea/,'Сервер должен выбирать крупнейший доступный размер аватара.');
+assert.match(backend,/getChat/,'Текущий аватар приватного Telegram-чата должен быть основным источником.');
+assert.match(backend,/big_file_id/,'Сервер должен предпочитать большой текущий ChatPhoto.');
+assert.match(backend,/getUserProfilePhotos/,'История профильных фото должна оставаться fallback для совместимости.');
+assert.match(backend,/getFile/,'Telegram file_id должен разрешаться через getFile.');
+assert.match(backend,/candidateArea > bestArea/,'Fallback должен выбирать крупнейший доступный размер аватара.');
 assert.match(backend,/TELEGRAM_BOT_TOKEN/,'Скачивание Telegram-файла должно происходить только на сервере.');
 assert.match(backend,/private, max-age=/,'Ответ с аватаром не должен становиться публичным shared-cache объектом.');
 assert.match(backend,/x-content-type-options/,'Ответ изображения должен запрещать MIME sniffing.');
@@ -37,4 +39,4 @@ assert.ok(!ui.includes('api.telegram.org/file/bot'),'Frontend никогда н�
 assert.match(css,/admin-avatar-image/,'Для реальной фотографии должен быть единый безопасный image layer.');
 assert.match(css,/object-fit:cover/,'Аватар должен полностью заполнять предусмотренную форму без деформации.');
 
-console.log('Admin avatar audit passed: authenticated full Telegram photos are lazy, bounded, cached per session and wired across all user-facing admin surfaces.');
+console.log('Admin avatar audit passed: current Telegram chat photos with safe fallback are authenticated, lazy, bounded and wired across admin surfaces.');
