@@ -41,7 +41,7 @@ const unsafe = zipSync({
   'OEBPS/content.opf':strToU8(opf),
   '../escape.txt':strToU8('nope'),
 },{level:6});
-assert.throws(()=>personalizeEpubWithHash(unsafe,{
+await assert.rejects(()=>personalizeEpubWithHash(unsafe,{
   distributionId,fingerprintVersion:1,noticeTitle:'x',noticeBody:'x',
 }),/Unsafe EPUB archive path/);
 
