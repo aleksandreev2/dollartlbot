@@ -4,6 +4,7 @@
   const app = window.DTL_APP;
   if (!runtime?.locale) throw new Error('DTL runtime core must load before home-v2.js');
 
+  loadReaderAssets();
   let releases = null;
   let loading = null;
 
@@ -20,6 +21,15 @@
     de:{title:'Bibliothek',subtitle:'Dollar-TL-Übersetzungen lesen und herunterladen.',empty:'Noch keine übersetzten Titel veröffentlicht.',open:'Titel öffnen',files:n=>`${n} Datei${n===1?'':'en'}`,chapter:'Kap.'},
     ur:{title:'لائبریری',subtitle:'Dollar TL تراجم پڑھیں اور ڈاؤن لوڈ کریں۔',empty:'ابھی کوئی ترجمہ شدہ عنوان شائع نہیں ہوا۔',open:'عنوان کھولیں',files:n=>`${n} فائل`,chapter:'باب'},
   };
+
+  function loadReaderAssets(){
+    if(!document.querySelector('link[data-reader-title-css]')){
+      const link=document.createElement('link');link.rel='stylesheet';link.href='/app/reader-title-ui.css?v=20260817-reader1';link.dataset.readerTitleCss='1';document.head.appendChild(link);
+    }
+    if(!window.DTL_READER_TITLE&&!document.querySelector('script[data-reader-title-js]')){
+      const script=document.createElement('script');script.src='/app/reader-title-ui.js?v=20260817-reader1';script.dataset.readerTitleJs='1';script.defer=true;document.head.appendChild(script);
+    }
+  }
 
   function locale(){ const value=runtime.locale(); return copy[value]?value:'en'; }
   function t(){ return copy[locale()] || copy.en; }
