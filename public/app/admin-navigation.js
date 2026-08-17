@@ -28,6 +28,20 @@
   }
 
   function ensureStatisticsAssets() {
+    if (!document.querySelector('link[data-admin-avatars-style]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/app/admin-avatars.css?v=20260817-avatars1';
+      link.dataset.adminAvatarsStyle = '1';
+      document.head.append(link);
+    }
+    if (!document.querySelector('script[data-admin-avatars-script]')) {
+      const script = document.createElement('script');
+      script.src = '/app/admin-avatars.js?v=20260817-avatars1';
+      script.async = true;
+      script.dataset.adminAvatarsScript = '1';
+      document.head.append(script);
+    }
     if (!document.querySelector('link[data-admin-statistics-style]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
