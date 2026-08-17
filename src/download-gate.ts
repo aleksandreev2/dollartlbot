@@ -1,6 +1,7 @@
 import { checkBotAccess, sendAccessGate } from './access-gate';
 import { getUser, upsertUser } from './db';
 import { normalizeLocale } from './i18n/index';
+import { activeReaderDownloadGrant, createReaderDownloadGrant, markReaderDownloadGrantUsed } from './reader-grants';
 import { readerCopy } from './reader-i18n';
 import { sendPersonalizedReaderAsset } from './reader-personalization';
 import { commitDailyNovel, releaseDailyNovelReservation, reserveDailyNovel } from './reader-quota';
@@ -159,6 +160,14 @@ async function handleGateCallback(
       await telegram.answerCallbackQuery(callback.id, 'Downloads are temporarily unavailable.').catch(() => undefined);
       return;
     }
+    if (publication.submission_id) {
+      await createReaderDownloadGrant(env, {
+        userId: callback.from.id,
+        submissionId: publication.submission_id,
+        publicationId: publication.id,
+        source: 'telegram',
+      });
+    }
     ctx.waitUntil(recordReaderEvent(env, publication.id, callback.from, 'thank_you_click', {
       sourceChatId: String(callback.message.chat.id),
       sourceMessageId: callback.message.message_id,
@@ -242,8 +251,19 @@ async function handleDownloadStart(
   const account = await getUser(env, user.id).catch(() => null);
   const locale = normalizeLocale(account?.language || user.language_code);
   const copy = readerCopy(locale);
-  const subscription = await getSubscriptionState(user.id, env, telegram);
   const submissionId = resolved.publication.submission_id;
+  const downloadGrant = submissionId
+    ? await activeReaderDownloadGrant(env, user.id, resolved.publication.id)
+    : null;
+  if (submissionId && !downloadGrant) {
+    ctx.waitUntil(recordReaderEvent(env, resolved.publication.id, user, 'thank_you_required', {
+      metadata: { submission_id: submissionId },
+    }));
+    await telegram.sendMessage(user.id, `<b>${escapeHtml(copy.thankYou)}</b>\n\n${escapeHtml(copy.thankYouRequired)}`).catch(() => undefined);
+    return;
+  }
+
+  const subscription = await getSubscriptionState(user.id, env, telegram);
   const quota = !subscription.subscriber && submissionId
     ? await reserveDailyNovel(env, user.id, submissionId)
     : null;
@@ -268,6 +288,7 @@ async function handleDownloadStart(
   let skippedCount = 0;
   let failedCount = 0;
   let quotaCommitted = false;
+  let grantMarkedUsed = false;
   for (const asset of assets.results) {
     const claim = await claimDelivery(env, resolved.publication.id, asset.id, user.id);
     if (!claim) {
@@ -291,6 +312,10 @@ async function handleDownloadStart(
         `).bind(sent.document?.file_id || null, asset.id),
       ]);
       sentCount += 1;
+      if (!grantMarkedUsed && downloadGrant?.id) {
+        await markReaderDownloadGrantUsed(env, downloadGrant.id);
+        grantMarkedUsed = true;
+      }
       if (!quotaCommitted && submissionId) {
         await commitDailyNovel(env, {
           userId:user.id,
