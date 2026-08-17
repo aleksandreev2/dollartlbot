@@ -1,5 +1,6 @@
 import { ensurePublicationGateToken, recordReaderEvent } from './download-gate';
 import { authenticateMiniAppRequest, miniAppJson, miniAppJsonError } from './miniapp-auth';
+import { createReaderDownloadGrant } from './reader-grants';
 import { readerCopy } from './reader-i18n';
 import { dailyNovelUsage } from './reader-quota';
 import { getRuntimeSetting, runtimeFlag } from './runtime-settings';
@@ -196,17 +197,17 @@ async function thankYou(request: Request, submissionId: number, user: Parameters
   `).bind(publicationId,submissionId).first<{ id:number }>();
   if (!publication) return miniAppJsonError('publication_not_found', 'Release not found.', 404);
   const token = await ensurePublicationGateToken(env, publicationId);
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + 15 * 60_000).toISOString();
-  await env.DB.prepare(`
-    INSERT INTO reader_download_grants(user_id,submission_id,publication_id,source,granted_at,expires_at)
-    VALUES (?,?,?,'miniapp',?,?)
-  `).bind(user.id,submissionId,publicationId,now.toISOString(),expiresAt).run();
+  const grant = await createReaderDownloadGrant(env, {
+    userId:user.id,
+    submissionId,
+    publicationId,
+    source:'miniapp',
+  });
   await recordReaderEvent(env, publicationId, user, 'thank_you_click', { metadata:{ source:'miniapp' } });
   const username = (await getRuntimeSetting(env,'bot_username','dollartlbot')).replace(/^@/,'') || 'dollartlbot';
   return miniAppJson({
     ok:true,
-    expires_at:expiresAt,
+    expires_at:grant.expiresAt,
     bot_url:`https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(`dl_${token}`)}`,
   });
 }
