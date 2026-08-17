@@ -1,7 +1,10 @@
 import { checkBotAccess, sendAccessGate } from './access-gate';
 import { getUser, upsertUser } from './db';
 import { normalizeLocale } from './i18n/index';
+import { readerCopy } from './reader-i18n';
+import { commitDailyNovel, releaseDailyNovelReservation, reserveDailyNovel } from './reader-quota';
 import { getRuntimeSetting, runtimeFlag } from './runtime-settings';
+import { getSubscriptionState } from './subscription';
 import { isUserAdministrativelyBlocked } from './user-controls';
 import { escapeHtml, type TelegramClient, type TelegramMessage, type TelegramUpdate, type TelegramUser } from './telegram';
 
@@ -235,9 +238,35 @@ async function handleDownloadStart(
     return;
   }
 
+  const account = await getUser(env, user.id).catch(() => null);
+  const locale = normalizeLocale(account?.language || user.language_code);
+  const copy = readerCopy(locale);
+  const subscription = await getSubscriptionState(user.id, env, telegram);
+  const submissionId = resolved.publication.submission_id;
+  const quota = !subscription.subscriber && submissionId
+    ? await reserveDailyNovel(env, user.id, submissionId)
+    : null;
+
+  if (quota?.wouldBlock) {
+    ctx.waitUntil(recordReaderEvent(env, resolved.publication.id, user,
+      quota.allowed ? 'reader_quota_would_block' : 'reader_quota_blocked', {
+        metadata: { used: quota.used, limit: quota.limit, mode: quota.mode, submission_id: submissionId },
+      },
+    ));
+  }
+  if (quota && !quota.allowed) {
+    await telegram.sendMessage(user.id,
+      `<b>${escapeHtml(copy.quotaReached)}</b>\n\n${escapeHtml(copy.quotaStatus(quota.used, quota.limit))}`,
+    ).catch(() => undefined);
+    return;
+  }
+
+  await ensureTelegramReaderTerms(env, user.id, locale, telegram);
+
   let sentCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
+  let quotaCommitted = false;
   for (const asset of assets.results) {
     const claim = await claimDelivery(env, resolved.publication.id, asset.id, user.id);
     if (!claim) {
@@ -261,9 +290,21 @@ async function handleDownloadStart(
         `).bind(sent.document?.file_id || null, asset.id),
       ]);
       sentCount += 1;
+      if (!quotaCommitted && submissionId) {
+        await commitDailyNovel(env, {
+          userId:user.id,
+          submissionId,
+          publicationId:resolved.publication.id,
+          assetId:asset.id,
+          plan:subscription.subscriber ? 'boosty' : 'free',
+          reservationToken:quota?.reservationToken,
+          deliveredAt,
+        });
+        quotaCommitted = true;
+      }
       ctx.waitUntil(recordReaderEvent(env, resolved.publication.id, user, 'delivery_success', {
         assetId: asset.id,
-        metadata: { repeat: Boolean(claim.delivered_at) },
+        metadata: { repeat: Boolean(claim.delivered_at), plan: subscription.subscriber ? 'boosty' : 'free' },
       }));
     } catch (error) {
       failedCount += 1;
@@ -280,6 +321,10 @@ async function handleDownloadStart(
     }
   }
 
+  if (!quotaCommitted && quota?.reservationToken && submissionId) {
+    await releaseDailyNovelReservation(env, user.id, submissionId, quota.reservationToken);
+  }
+
   if (sentCount === 0 && skippedCount > 0 && failedCount === 0) {
     await telegram.sendMessage(user.id, 'The files were sent recently. Check the messages above.').catch(() => undefined);
   } else if (failedCount > 0) {
@@ -294,6 +339,21 @@ async function handleDownloadStart(
       reply_markup: { inline_keyboard: [[{ text: '❤️ Donate', url: donation }]] },
     }).catch(() => undefined);
   }
+}
+
+async function ensureTelegramReaderTerms(env: Env, userId: number, locale: ReturnType<typeof normalizeLocale>, telegram: TelegramClient): Promise<void> {
+  if (!(await runtimeFlag(env, 'reader_terms_enabled', true))) return;
+  const version = Math.max(1, Number(await getRuntimeSetting(env, 'reader_terms_version', '1')) || 1);
+  const accepted = await env.DB.prepare(`
+    SELECT 1 AS ok FROM reader_terms_acceptance WHERE user_id=? AND terms_version=? LIMIT 1
+  `).bind(userId, version).first<{ ok: number }>();
+  if (accepted) return;
+  const copy = readerCopy(locale);
+  await telegram.sendMessage(userId, `<b>${escapeHtml(copy.termsTitle)}</b>\n\n${escapeHtml(copy.termsBody)}`).catch(() => undefined);
+  await env.DB.prepare(`
+    INSERT OR IGNORE INTO reader_terms_acceptance(user_id,terms_version,locale,source,accepted_at)
+    VALUES (?,?,?,'telegram',?)
+  `).bind(userId, version, locale, new Date().toISOString()).run();
 }
 
 async function handleDonateStart(
