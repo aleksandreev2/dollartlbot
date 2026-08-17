@@ -3,11 +3,11 @@ import vm from 'node:vm';
 
 const source = fs.readFileSync(new URL('../public/app/home-v2.js', import.meta.url), 'utf8');
 const startMarker = 'const copy = {';
-const endMarker = '\n\n  function loadReaderAssets';
+const endMarker = '\n  };';
 const start = source.indexOf(startMarker);
 const end = source.indexOf(endMarker, start + startMarker.length);
 if (start < 0 || end < 0) throw new Error('Could not locate home-v2 localization dictionary.');
-const objectSource = `{${source.slice(start + startMarker.length, end).trim().replace(/;$/, '')}`;
+const objectSource = `{${source.slice(start + startMarker.length, end).trim()}}`;
 const copy = vm.runInNewContext(`(${objectSource})`, Object.create(null), { timeout: 1000 });
 const expected = ['en','es','fil','hi','pt','id','vi','fr','de','ru','ur'];
 const keys = ['title','subtitle','empty','open','files','chapter'];
