@@ -256,14 +256,23 @@ async function saveMeta(request:Request,id:number,adminId:number,env:Env):Promis
 async function restorePending(id:number,adminId:number,env:Env):Promise<Response>{
   const before=await requestRow(id,env);
   if(!before)return miniAppJsonError('not_found','Заявка не найдена.',404);
-  if(before.status!=='rejected')return miniAppJsonError('invalid_state','В ожидание можно восстановить только отклонённую заявку.',409);
+  const fromRejected=before.status==='rejected';
+  const fromQueue=before.status==='accepted'&&before.queue_status==='queued';
+  if(!fromRejected&&!fromQueue)return miniAppJsonError('invalid_state','На проверку можно вернуть только отклонённую заявку или заявку, которая ещё стоит в очереди.',409);
   const now=new Date().toISOString();
   const result=await env.DB.prepare(`
-    UPDATE submissions SET status='pending',slot_returned=0,queue_status=NULL,queue_position=NULL,queued_at=NULL,started_at=NULL,completed_at=NULL,current_chapter=NULL,progress_updated_at=NULL,updated_at=?
-    WHERE id=? AND status='rejected'
-  `).bind(now,id).run();
+    UPDATE submissions
+    SET status='pending',slot_returned=0,queue_status=NULL,queue_position=NULL,queued_at=NULL,started_at=NULL,completed_at=NULL,current_chapter=NULL,progress_updated_at=NULL,updated_at=?
+    WHERE id=? AND status=? AND COALESCE(queue_status,'')=COALESCE(?,'')
+  `).bind(now,id,before.status,before.queue_status).run();
   if(Number(result.meta.changes??0)!==1)return miniAppJsonError('stale_state','Заявка уже изменилась.',409);
-  await audit(env,adminId,'submission_restore_pending',id,{previous_status:'rejected',slot_had_been_returned:Boolean(before.slot_returned)});
+  if(fromQueue)await normalizeQueuePositions(env);
+  await audit(env,adminId,'submission_restore_pending',id,{
+    previous_status:before.status,
+    previous_queue_status:before.queue_status,
+    previous_queue_position:before.queue_position,
+    slot_had_been_returned:Boolean(before.slot_returned),
+  });
   return requestDetail(id,env);
 }
 
