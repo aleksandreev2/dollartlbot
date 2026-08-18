@@ -104,6 +104,7 @@
       <div class="admin-queue-workspace-row-actions">
         <button type="button" class="start" data-qw-action="start" data-id="${id}">${ico('play')} <span>Начать</span></button>
         <button type="button" class="edit" data-qw-edit="${id}">${ico('pencil')} <span>Редактировать</span></button>
+        <button type="button" data-qw-action="review" data-id="${id}" aria-label="Вернуть заявку #${id} на проверку">${ico('rotate-ccw')} <span>В заявки</span></button>
         <button type="button" data-qw-action="up" data-id="${id}" aria-label="Поднять выше">${ico('arrow-up')} <span>Выше</span></button>
         <button type="button" data-qw-action="down" data-id="${id}" aria-label="Опустить ниже">${ico('arrow-down')} <span>Ниже</span></button>
       </div>
@@ -195,12 +196,19 @@
       const ok = window.DTL_ADMIN_STABILITY?.confirm ? await window.DTL_ADMIN_STABILITY.confirm({ title:'Завершить перевод?', body:`${row?.title || `Заявка #${id}`} будет отмечена как завершённая.`, confirm:'Завершить' }) : true;
       if (!ok) return;
     }
+    if (action === 'review') {
+      const row = state.rows.find(item => Number(item.id) === id);
+      const ok = window.DTL_ADMIN_STABILITY?.confirm ? await window.DTL_ADMIN_STABILITY.confirm({ title:'Вернуть заявку на проверку?', body:`${row?.title || `Заявка #${id}`} исчезнет из очереди и снова появится в разделе «Заявки», где её можно принять, отклонить или вернуть слот.`, confirm:'Вернуть в заявки' }) : true;
+      if (!ok) return;
+    }
     button.disabled = true;
     try {
-      const result = await api('/api/app/admin/action', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ id, action }) });
+      const result = action === 'review'
+        ? await api(`/api/app/admin/requests/${id}/restore-pending`, { method:'POST' })
+        : await api('/api/app/admin/action', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ id, action }) });
       const row = state.rows.find(item => Number(item.id) === id);
       if (action === 'complete') state.completed = { id, title: result.novel?.title || row?.title || `Заявка #${id}` };
-      toast(action === 'start' ? 'Перевод начат.' : action === 'complete' ? 'Перевод завершён.' : action === 'backqueue' ? 'Заявка возвращена в очередь.' : 'Очередь обновлена.');
+      toast(action === 'start' ? 'Перевод начат.' : action === 'complete' ? 'Перевод завершён.' : action === 'backqueue' ? 'Заявка возвращена в очередь.' : action === 'review' ? 'Заявка возвращена на проверку.' : 'Очередь обновлена.');
       if (active()) await render();
     } catch (error) {
       toast(error?.message || String(error), true);
